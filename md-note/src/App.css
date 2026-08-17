@@ -1,0 +1,897 @@
+/* ============================================================
+   设计令牌 — 对齐系统原生（Windows 11 / macOS）
+   ============================================================ */
+:root {
+  color-scheme: light;
+  --bg: #ffffff;
+  --bg-sidebar: #f3f3f3;
+  --bg-toolbar: #f9f9f9;
+  --bg-editor: #ffffff;
+  --bg-hover: rgba(0, 0, 0, 0.04);
+  --bg-active: rgba(0, 0, 0, 0.07);
+  --fg: #1a1a1a;
+  --fg-muted: #616161;
+  --fg-faint: #a0a0a0;
+  --border: #e5e5e5;
+  --border-strong: #c8c8c8;
+  --accent: #0067c0;
+  --accent-hover: #005a9e;
+  --code-bg: #f6f8fa;
+  --selection: rgba(0, 103, 192, 0.18);
+  --syntax-keyword: #cf222e;
+  --syntax-string: #0a3069;
+  --syntax-number: #0550ae;
+  --syntax-comment: #6e7781;
+  --syntax-type: #953800;
+  --syntax-function: #8250df;
+  --syntax-operator: #0550ae;
+  --syntax-meta: #8250df;
+  --font-ui: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, "Microsoft YaHei", "PingFang SC", sans-serif;
+  --font-mono: "Cascadia Code", "Cascadia Mono", ui-monospace, Consolas, "Courier New", monospace;
+  --editor-font-size: 15px;
+  --titlebar-height: 32px;
+  --statusbar-height: 22px;
+  --radius-sm: 4px;
+  --scrollbar-thumb: rgba(0, 0, 0, 0.22);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.35);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1e1e1e;
+  --bg-sidebar: #252526;
+  --bg-toolbar: #2d2d30;
+  --bg-editor: #1e1e1e;
+  --bg-hover: rgba(255, 255, 255, 0.06);
+  --bg-active: rgba(255, 255, 255, 0.1);
+  --fg: #cccccc;
+  --fg-muted: #9d9d9d;
+  --fg-faint: #6a6a6a;
+  --border: #3c3c3c;
+  --border-strong: #555555;
+  --accent: #4da3ff;
+  --accent-hover: #6eb3ff;
+  --code-bg: #2d2d30;
+  --selection: rgba(77, 163, 255, 0.28);
+  --syntax-keyword: #f47067;
+  --syntax-string: #a5d6ff;
+  --syntax-number: #79c0ff;
+  --syntax-comment: #8b949e;
+  --syntax-type: #ffa657;
+  --syntax-function: #d2a8ff;
+  --syntax-operator: #79c0ff;
+  --syntax-meta: #d2a8ff;
+  --scrollbar-thumb: rgba(255, 255, 255, 0.18);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.28);
+}
+
+/* macOS 平台微调 */
+html.platform-mac {
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, Monaco, monospace;
+  --bg-sidebar: #ececec;
+  --bg-toolbar: #ececec;
+}
+html.platform-mac[data-theme="dark"] {
+  --bg-sidebar: #2a2a2a;
+  --bg-toolbar: #2a2a2a;
+}
+
+/* Windows 平台微调 */
+html.platform-win {
+  --font-ui: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: "Cascadia Code", Consolas, monospace;
+}
+
+/* ============================================================
+   基础布局
+   ============================================================ */
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--fg);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+  user-select: none;
+}
+
+input, select, textarea, .editor-host { user-select: text; }
+
+.app { display: flex; flex-direction: column; height: 100%; }
+.app-body { display: flex; flex: 1; min-height: 0; }
+
+/* 原生滚动条 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border: 2px solid transparent;
+  border-radius: 6px;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); background-clip: padding-box; }
+
+/* ============================================================
+   顶栏 — Cursor 式一体化标题栏（菜单 + 标题 + 窗口控制）
+   ============================================================ */
+.titlebar {
+  display: flex;
+  align-items: stretch;
+  height: var(--titlebar-height);
+  flex-shrink: 0;
+  background: var(--bg-toolbar);
+  border-bottom: 1px solid var(--border);
+  padding: 0;
+  gap: 0;
+  -webkit-app-region: drag;
+}
+
+.titlebar-left,
+.titlebar-right {
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-left { padding-left: 4px; }
+.titlebar-right { padding-right: 0; }
+
+.titlebar-center {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 12px;
+  -webkit-app-region: drag;
+}
+
+.titlebar-brand {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fg-muted);
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+.titlebar-dot {
+  color: var(--fg-faint);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.file-name {
+  font-weight: 400;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 36vw;
+  color: var(--fg-muted);
+}
+.dirty-dot { color: var(--accent); font-size: 8px; flex-shrink: 0; }
+
+.titlebar-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 100%;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--fg-muted);
+  cursor: default;
+  transition: background 0.1s ease, color 0.1s ease;
+}
+.titlebar-icon-btn:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+/* ---------- 窗口控制按钮 ---------- */
+.window-controls {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  height: 100%;
+}
+.window-controls.mac {
+  gap: 8px;
+  padding: 0 10px 0 8px;
+}
+.window-controls.win .wc-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 100%;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--fg-muted);
+  cursor: default;
+  transition: background 0.1s ease, color 0.1s ease;
+}
+.window-controls.win .wc-btn:hover { background: var(--bg-hover); color: var(--fg); }
+.window-controls.win .wc-close:hover {
+  background: #c42b1c;
+  color: #fff;
+}
+
+.window-controls.mac .wc-btn {
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  cursor: default;
+  opacity: 0.9;
+  transition: opacity 0.1s ease;
+}
+.window-controls.mac .wc-btn:hover { opacity: 1; }
+.window-controls.mac .wc-close { background: #ff5f57; }
+.window-controls.mac .wc-minimize { background: #febc2e; }
+.window-controls.mac .wc-maximize { background: #28c840; }
+
+.titlebar-sep, .status-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--border);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+/* ============================================================
+   应用内菜单栏
+   ============================================================ */
+.menubar {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  height: 100%;
+}
+.menubar-group {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+.menubar-trigger {
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 9px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  color: var(--fg-muted);
+  cursor: default;
+  font-size: 12px;
+  font-family: inherit;
+  transition: background 0.1s ease, color 0.1s ease;
+}
+.menubar-trigger:hover,
+.menubar-trigger.active {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+.menubar-dropdown {
+  position: absolute;
+  top: calc(100% - 1px);
+  left: 0;
+  z-index: 200;
+  min-width: 220px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+.menubar-sep {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--border);
+}
+.menubar-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 10px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+  cursor: default;
+  font-size: 12.5px;
+  font-family: inherit;
+  text-align: left;
+}
+.menubar-item:hover:not(:disabled) { background: var(--bg-hover); }
+.menubar-item:disabled { color: var(--fg-faint); cursor: default; }
+.menubar-item-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.menubar-check {
+  display: inline-block;
+  width: 14px;
+  flex-shrink: 0;
+  color: var(--accent);
+  font-size: 11px;
+}
+.menubar-shortcut {
+  flex-shrink: 0;
+  color: var(--fg-faint);
+  font-size: 11px;
+}
+
+/* ============================================================
+   按钮 — 紧凑、无渐变、类系统控件
+   ============================================================ */
+button { font-family: inherit; }
+
+.icon-btn, .toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 8px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+  cursor: default;
+  font-size: 12.5px;
+  white-space: nowrap;
+  transition: background 0.1s ease;
+}
+.icon-btn { padding: 0 6px; min-width: 26px; }
+.icon-btn:hover, .toolbar-btn:hover { background: var(--bg-hover); }
+.icon-btn:active, .toolbar-btn:active { background: var(--bg-active); }
+.toolbar-btn.active { background: var(--bg-active); color: var(--accent); }
+.icon-btn:focus-visible, .toolbar-btn:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.text-btn {
+  display: inline-block;
+  padding: 3px 8px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--fg-muted);
+  cursor: default;
+  font-size: 12px;
+  text-align: left;
+}
+.text-btn:hover { background: var(--bg-hover); color: var(--fg); }
+
+/* ============================================================
+   侧边栏 — VS Code / Finder 风格
+   ============================================================ */
+.sidebar {
+  width: 248px;
+  flex-shrink: 0;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.sidebar-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  padding: 0 4px;
+}
+.sidebar-tabs .tab {
+  flex: 1;
+  height: 32px;
+  background: transparent;
+  border: none;
+  cursor: default;
+  color: var(--fg-muted);
+  font-size: 12px;
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.sidebar-tabs .tab:hover { color: var(--fg); }
+.sidebar-tabs .tab.active {
+  color: var(--fg);
+  border-bottom-color: var(--accent);
+}
+.sidebar-body { flex: 1; overflow-y: auto; min-height: 0; }
+
+.file-panel { padding: 6px; display: flex; flex-direction: column; gap: 4px; }
+.path-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--fg-muted);
+  padding: 2px 4px;
+}
+.path-text { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.file-list { list-style: none; margin: 0; padding: 0; }
+.file-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  cursor: default;
+  font-size: 12.5px;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.file-item:hover { background: var(--bg-hover); }
+.file-item.active {
+  background: var(--bg-active);
+  color: var(--fg);
+}
+.file-icon { color: var(--fg-muted); flex-shrink: 0; width: 14px; text-align: center; font-size: 10px; }
+.file-item .file-name { overflow: hidden; text-overflow: ellipsis; font-weight: 400; font-size: 12.5px; color: inherit; }
+
+/* File tree — Cursor/VS Code style */
+.file-tree {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 22px;
+}
+.file-tree .file-item.tree-row {
+  height: 22px;
+  align-items: center;
+}
+.file-tree .tree-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  height: 22px;
+  min-height: 22px;
+  padding-top: 0;
+  padding-bottom: 0;
+  margin-bottom: 1px;
+  padding-right: 6px;
+  font-size: 13px;
+  line-height: 22px;
+}
+.file-tree .tree-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin-right: 4px;
+  color: var(--fg-faint, var(--fg-muted));
+}
+.file-tree .tree-chevron svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+  transition: transform 0.1s cubic-bezier(0, 0, 0.2, 1);
+}
+.file-tree .tree-chevron.is-expanded svg {
+  transform: rotate(90deg);
+}
+.file-tree .tree-chevron--spacer {
+  visibility: hidden;
+  pointer-events: none;
+}
+.file-tree .tree-node-icon {
+  display: block;
+  flex-shrink: 0;
+  align-self: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 0;
+  margin-right: 4px;
+}
+.file-tree .tree-row .file-name {
+  display: flex;
+  align-items: center;
+  align-self: center;
+  margin-left: 0;
+  height: 22px;
+  line-height: 22px;
+  font-size: 13px;
+  font-weight: 400;
+  font-family: inherit;
+}
+.file-tree .tree-children {
+  margin: 0;
+  padding: 0;
+}
+.file-tree .tree-group {
+  margin-bottom: 0;
+}
+.file-tree .tree-root-row {
+  font-weight: 500;
+}
+.file-tree .tree-root-row .workspace-name {
+  flex: 1;
+  min-width: 0;
+}
+.file-tree .tree-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  margin-left: auto;
+  opacity: 0;
+  flex-shrink: 0;
+}
+.file-tree .tree-root-row:hover .tree-row-actions,
+.file-tree .tree-row-actions:focus-within {
+  opacity: 1;
+}
+.file-tree .tree-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: default;
+  flex-shrink: 0;
+}
+.file-tree .tree-action-btn:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+.file-tree .tree-action-btn svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.context-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 160px;
+  padding: 4px;
+  background: var(--bg-elevated, var(--bg));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+.context-menu-item {
+  display: block;
+  width: 100%;
+  padding: 5px 10px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--fg);
+  font-size: 12.5px;
+  text-align: left;
+  cursor: default;
+}
+.context-menu-item:hover {
+  background: var(--bg-hover);
+}
+.context-menu-item.danger {
+  color: #e5534b;
+}
+.context-menu-item.danger:hover {
+  background: rgba(229, 83, 75, 0.12);
+}
+.context-menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}
+
+.outline-panel { padding: 4px 0; }
+.outline-list { list-style: none; margin: 0; padding: 0; }
+.outline-item {
+  height: 24px;
+  line-height: 24px;
+  padding: 0 8px;
+  cursor: default;
+  font-size: 12.5px;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-radius: var(--radius-sm);
+  margin: 0 4px;
+}
+.outline-item:hover { background: var(--bg-hover); }
+.outline-item:active { background: var(--bg-active); }
+.empty { padding: 12px 16px; color: var(--fg-muted); font-size: 12px; }
+
+/* ============================================================
+   编辑器 — Typora 式居中排版
+   ============================================================ */
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg-editor); }
+.editor-host { flex: 1; min-height: 0; }
+.editor-host .cm-editor { height: 100%; background: var(--bg-editor); }
+.editor-host .cm-editor.cm-focused { outline: none; }
+.editor-host .cm-scroller {
+  font-family: var(--font-ui);
+  font-size: var(--editor-font-size);
+  line-height: 1.75;
+  overflow: auto;
+}
+.editor-host .cm-content {
+  padding: 28px 0 48px;
+  max-width: 46rem;
+  margin: 0 auto;
+  caret-color: var(--fg);
+}
+.editor-host .cm-line { padding: 0 48px; }
+.editor-host .cm-cursor, .editor-host .cm-dropCursor { border-left-color: var(--fg); border-left-width: 2px; }
+.editor-host .cm-selectionBackground,
+.editor-host .cm-content ::selection { background: var(--selection); }
+.editor-host .cm-gutters { display: none; }
+
+/* 实时预览渲染 */
+.cm-md-h1 { font-size: 1.85em; font-weight: 700; letter-spacing: -0.02em; }
+.cm-md-h2 { font-size: 1.5em; font-weight: 700; letter-spacing: -0.01em; }
+.cm-md-h3 { font-size: 1.28em; font-weight: 600; }
+.cm-md-h4 { font-size: 1.12em; font-weight: 600; }
+.cm-md-h5 { font-size: 1.02em; font-weight: 600; }
+.cm-md-h6 { font-size: 0.95em; font-weight: 600; color: var(--fg-muted); }
+.cm-md-code {
+  background: var(--code-bg);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+}
+.cm-md-link { color: var(--accent); text-decoration: none; cursor: pointer; }
+.cm-md-link:hover { text-decoration: underline; }
+
+.md-blockquote {
+  border-left: 3px solid var(--border-strong);
+  color: var(--fg-muted);
+  padding-left: 0;
+}
+.md-list .cm-line { padding-left: 44px; }
+.md-task-item .cm-line { padding-left: 44px; }
+
+.md-codeblock-editing { background: var(--code-bg); border-radius: 4px; }
+.md-hr-editing { opacity: 0.6; }
+
+/* 代码块 Widget */
+.md-codeblock-widget {
+  position: relative;
+  margin: 8px 0;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--code-bg);
+}
+.md-codeblock-widget pre {
+  margin: 0;
+  padding: 14px 16px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  line-height: 1.55;
+}
+.md-codeblock-widget code { font-family: inherit; }
+.md-codeblock-lang {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  font-size: 11px;
+  color: var(--fg-faint);
+  font-family: var(--font-ui);
+  text-transform: lowercase;
+  pointer-events: none;
+}
+
+/* highlight.js 主题（跟随应用色板） */
+.hljs { color: var(--fg); background: transparent; }
+.hljs-comment, .hljs-quote { color: var(--syntax-comment); font-style: italic; }
+.hljs-keyword, .hljs-selector-tag { color: var(--syntax-keyword); }
+.hljs-string, .hljs-addition { color: var(--syntax-string); }
+.hljs-number, .hljs-literal { color: var(--syntax-number); }
+.hljs-type, .hljs-title { color: var(--syntax-type); }
+.hljs-function, .hljs-built_in { color: var(--syntax-function); }
+.hljs-meta { color: var(--syntax-meta); }
+.hljs-operator { color: var(--syntax-operator); }
+
+/* 分割线 Widget */
+.md-hr-widget {
+  height: 1px;
+  margin: 20px 0;
+  background: var(--border-strong);
+  border: none;
+}
+
+/* ============================================================
+   状态栏 — VS Code 风格细条
+   ============================================================ */
+.statusbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: var(--statusbar-height);
+  flex-shrink: 0;
+  background: var(--accent);
+  color: #ffffff;
+  padding: 0 10px;
+  font-size: 11.5px;
+}
+html.platform-mac .statusbar { background: var(--bg-toolbar); color: var(--fg-muted); border-top: 1px solid var(--border); }
+html.platform-mac[data-theme="dark"] .statusbar { background: var(--bg-toolbar); }
+.status-spacer { flex: 1; }
+.status-path { max-width: 40vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.85; }
+
+/* ============================================================
+   设置弹窗 — 系统对话框风格
+   ============================================================ */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.32);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal {
+  width: 420px;
+  max-width: 92vw;
+  max-height: 82vh;
+  overflow-y: auto;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.18);
+}
+html.platform-win .modal { border-radius: 8px; }
+html.platform-mac .modal { border-radius: 10px; }
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-header h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.modal-body { padding: 4px 16px 16px; }
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.setting-row:last-child { border-bottom: none; }
+.setting-label { font-size: 13px; color: var(--fg); }
+.setting-control select,
+.setting-control input[type="number"] {
+  appearance: auto;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-size: 13px;
+  font-family: var(--font-ui);
+  min-width: 100px;
+}
+.setting-control input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+}
+.hint {
+  font-size: 11.5px;
+  color: var(--fg-muted);
+  max-width: 240px;
+  text-align: right;
+  line-height: 1.45;
+}
+
+/* ---------- 表格 Widget ---------- */
+.md-table-widget { margin: 12px 0; overflow-x: auto; }
+.md-table-widget table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95em;
+}
+.md-table-widget th,
+.md-table-widget td {
+  border: 1px solid var(--border-strong);
+  padding: 6px 12px;
+  text-align: left;
+}
+.md-table-widget th { background: var(--code-bg); font-weight: 600; }
+.md-table-editing { background: rgba(0, 103, 192, 0.04); }
+
+/* ---------- 数学公式 ---------- */
+.md-math-inline { padding: 0 2px; }
+.md-math-block {
+  margin: 16px 0;
+  padding: 12px 0;
+  overflow-x: auto;
+  text-align: center;
+}
+
+/* ---------- 图片 Widget ---------- */
+.md-image-widget { margin: 12px 0; text-align: center; }
+.md-image-widget img {
+  max-width: 100%;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+.md-image-widget figcaption {
+  margin-top: 6px;
+  font-size: 0.85em;
+  color: var(--fg-muted);
+}
+.md-image-error { color: var(--fg-muted); font-size: 0.85em; }
+
+/* ---------- Mermaid ---------- */
+.md-mermaid-widget {
+  margin: 12px 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--code-bg);
+  overflow-x: auto;
+}
+.md-mermaid-error { color: #cf222e; font-size: 0.85em; }
+
+/* ---------- 专注 / 打字机模式 ---------- */
+.focus-mode .editor-host .cm-content { max-width: 40rem; }
+.typewriter-mode .editor-host .cm-content { padding-top: 40vh; padding-bottom: 40vh; }
+
+/* ---------- 对话框按钮 ---------- */
+.modal-sm { width: 360px; }
+.modal-text { font-size: 13px; color: var(--fg-muted); margin: 0 0 16px; line-height: 1.5; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.btn-primary, .btn-secondary {
+  height: 28px; padding: 0 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px; font-family: inherit; cursor: default;
+}
+.btn-primary {
+  background: var(--accent); color: #fff; border: none;
+}
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-secondary {
+  background: transparent; color: var(--fg);
+  border: 1px solid var(--border-strong);
+}
+.btn-secondary:hover { background: var(--bg-hover); }
+
+.recent-panel { padding: 4px 0; }
+
