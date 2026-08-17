@@ -1,0 +1,22 @@
+# Local tooling
+.claude/
+
+# Dependencies & build output (md-note)
+md-note/node_modules/
+md-note/dist/
+md-note/dist-ssr/
+
+# Rust / Tauri
+md-note/src-tauri/target/
+
+# Logs & env
+*.log
+.env
+.env.*
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
