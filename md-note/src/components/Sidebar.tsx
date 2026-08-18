@@ -1,34 +1,39 @@
+import type { Locale } from "../lib/i18n";
+import { t } from "../lib/i18n";
 import FileTree from "./FileTree";
 
 export type SidebarTab = "files" | "outline" | "recent";
 
 interface Props {
+  locale: Locale;
   tab: SidebarTab;
   onTab: (t: SidebarTab) => void;
   folderPath: string | null;
   dirTick?: number;
   onOpenPath: (path: string) => void;
   onRefreshTree?: () => void;
-  onNewFileInDir?: (parentDir: string) => void;
-  onNewFolderInDir?: (parentDir: string) => void;
-  onRenamePath?: (path: string, isDir: boolean) => void;
+  onCreateFileInDir?: (parentDir: string, name: string) => void | Promise<void>;
+  onCreateFolderInDir?: (parentDir: string, name: string) => void | Promise<void>;
+  onRenamePath?: (path: string, newName: string, isDir: boolean) => void | Promise<void>;
   onDeletePath?: (path: string, isDir: boolean) => void;
   outline: { level: number; text: string; line: number }[];
   activeOutlineLine: number | null;
   onOutlineClick: (line: number) => void;
   currentPath: string | null;
   recentFiles: string[];
+  onRemoveRecent: (path: string) => void;
 }
 
 export default function Sidebar({
+  locale,
   tab,
   onTab,
   folderPath,
   dirTick = 0,
   onOpenPath,
   onRefreshTree,
-  onNewFileInDir,
-  onNewFolderInDir,
+  onCreateFileInDir,
+  onCreateFolderInDir,
   onRenamePath,
   onDeletePath,
   outline,
@@ -36,30 +41,40 @@ export default function Sidebar({
   onOutlineClick,
   currentPath,
   recentFiles,
+  onRemoveRecent,
 }: Props) {
+  const tr = (key: Parameters<typeof t>[1]) => t(locale, key);
+
   return (
     <aside className="sidebar">
       <div className="sidebar-tabs">
-        <button className={tab === "files" ? "tab active" : "tab"} onClick={() => onTab("files")}>文件</button>
-        <button className={tab === "outline" ? "tab active" : "tab"} onClick={() => onTab("outline")}>大纲</button>
-        <button className={tab === "recent" ? "tab active" : "tab"} onClick={() => onTab("recent")}>最近</button>
+        <button className={tab === "files" ? "tab active" : "tab"} onClick={() => onTab("files")}>
+          {tr("sidebar.files")}
+        </button>
+        <button className={tab === "outline" ? "tab active" : "tab"} onClick={() => onTab("outline")}>
+          {tr("sidebar.outline")}
+        </button>
+        <button className={tab === "recent" ? "tab active" : "tab"} onClick={() => onTab("recent")}>
+          {tr("sidebar.recent")}
+        </button>
       </div>
 
       <div className="sidebar-body">
         {tab === "files" ? (
           <div className="file-panel">
             {!folderPath ? (
-              <div className="empty">通过「文件 → 打开文件夹」浏览目录</div>
+              <div className="empty">{tr("sidebar.emptyFolder")}</div>
             ) : (
               <FileTree
+                locale={locale}
                 rootPath={folderPath}
                 currentPath={currentPath}
                 dirTick={dirTick}
                 onOpenFile={onOpenPath}
                 onRefresh={onRefreshTree ?? (() => {})}
-                onNewFile={onNewFileInDir ?? (() => {})}
-                onNewFolder={onNewFolderInDir ?? (() => {})}
-                onRename={onRenamePath ?? (() => {})}
+                onCreateFile={onCreateFileInDir ?? (async () => {})}
+                onCreateFolder={onCreateFolderInDir ?? (async () => {})}
+                onRenamePath={onRenamePath ?? (async () => {})}
                 onDelete={onDeletePath ?? (() => {})}
               />
             )}
@@ -67,7 +82,7 @@ export default function Sidebar({
         ) : tab === "outline" ? (
           <div className="outline-panel">
             {outline.length === 0 ? (
-              <div className="empty">无标题</div>
+              <div className="empty">{tr("sidebar.emptyOutline")}</div>
             ) : (
               <ul className="outline-list">
                 {outline.map((h, i) => (
@@ -86,20 +101,47 @@ export default function Sidebar({
         ) : (
           <div className="recent-panel">
             {recentFiles.length === 0 ? (
-              <div className="empty">暂无最近文件</div>
+              <div className="empty">{tr("sidebar.emptyRecent")}</div>
             ) : (
-              <ul className="file-list">
+              <ul className="recent-list">
                 {recentFiles.map((p) => {
-                  const name = p.split(/[\\/]/).pop() || p;
+                  const parts = p.split(/[\\/]/);
+                  const name = parts.pop() || p;
+                  const parent = parts.join(p.includes("\\") ? "\\" : "/");
                   const active = currentPath === p;
                   return (
                     <li
                       key={p}
-                      className={active ? "file-item active" : "file-item"}
-                      onClick={() => onOpenPath(p)}
+                      className={active ? "recent-item active" : "recent-item"}
                       title={p}
                     >
-                      <span className="file-name">{name}</span>
+                      <button
+                        type="button"
+                        className="recent-item-main"
+                        onClick={() => onOpenPath(p)}
+                      >
+                        <span className="recent-name">{name}</span>
+                        {parent ? <span className="recent-dir">{parent}</span> : null}
+                      </button>
+                      <button
+                        type="button"
+                        className="recent-remove"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRemoveRecent(p);
+                        }}
+                        title={tr("sidebar.removeRecent")}
+                        aria-label={tr("sidebar.removeRecent")}
+                      >
+                        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                          <path
+                            d="M4.5 4.5l7 7M11.5 4.5l-7 7"
+                            stroke="currentColor"
+                            strokeWidth="1.25"
+                            strokeLinecap="round"
+                          />
+                        </svg>
+                      </button>
                     </li>
                   );
                 })}

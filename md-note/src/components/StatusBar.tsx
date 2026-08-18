@@ -1,6 +1,9 @@
 import type { EditorMode } from "../editor";
+import type { Locale } from "../lib/i18n";
+import { t } from "../lib/i18n";
 
 interface Props {
+  locale: Locale;
   mode: EditorMode;
   stats: { words: number; chars: number; lines: number; readMin: number };
   path: string | null;
@@ -8,15 +11,29 @@ interface Props {
   typewriterMode: boolean;
 }
 
-export default function StatusBar({ mode, stats, path, focusMode, typewriterMode }: Props) {
+export default function StatusBar({
+  locale,
+  mode,
+  stats,
+  path,
+  focusMode,
+  typewriterMode,
+}: Props) {
+  const tr = (key: Parameters<typeof t>[1], vars?: Record<string, string | number>) =>
+    t(locale, key, vars);
+
   const flags = [
-    focusMode ? "专注" : null,
-    typewriterMode ? "打字机" : null,
-  ].filter(Boolean).join(" · ");
+    focusMode ? tr("status.focus") : null,
+    typewriterMode ? tr("status.typewriter") : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <footer className="statusbar">
-      <span className="status-item">{mode === "preview" ? "预览" : "源码"}</span>
+      <span className="status-item">
+        {mode === "preview" ? tr("status.preview") : tr("status.source")}
+      </span>
       {flags && (
         <>
           <span className="status-sep" />
@@ -24,11 +41,13 @@ export default function StatusBar({ mode, stats, path, focusMode, typewriterMode
         </>
       )}
       <span className="status-sep" />
-      <span className="status-item">{stats.words} 字</span>
-      <span className="status-item">{stats.lines} 行</span>
-      <span className="status-item">约 {stats.readMin} 分钟</span>
+      <span className="status-item">{tr("status.words", { n: stats.words })}</span>
+      <span className="status-item">{tr("status.lines", { n: stats.lines })}</span>
+      <span className="status-item">{tr("status.readMin", { n: stats.readMin })}</span>
       <span className="status-spacer" />
-      <span className="status-item status-path" title={path ?? ""}>{path ?? "未保存"}</span>
+      <span className="status-item status-path" title={path ?? ""}>
+        {path ?? tr("status.unsaved")}
+      </span>
     </footer>
   );
 }

@@ -5,12 +5,15 @@ import {
   keymap,
   drawSelection,
   dropCursor,
+  lineNumbers,
   type ViewUpdate,
   type DecorationSet,
 } from "@codemirror/view";
 import {
   EditorState,
   Compartment,
+  StateEffect,
+  StateField,
   type Extension,
   type Range,
 } from "@codemirror/state";
@@ -22,12 +25,22 @@ import { tags as t } from "@lezer/highlight";
 import type { SyntaxNodeRef } from "@lezer/common";
 import { CodeBlockWidget, HrWidget } from "./editor/widgets/codeBlock";
 import { BlockMathWidget, InlineMathWidget, scanMath } from "./editor/widgets/math";
-import { TableWidget, parseTable } from "./editor/widgets/table";
+import {
+  TableWidget,
+  insertTableAtCursor,
+  parseTable,
+  tableAtomicRanges,
+  tableBackspace,
+  tableDeleteKey,
+  tableEditingHandlers,
+  tableSelectionSnap,
+} from "./editor/widgets/table";
 import { ImageWidget, parseImage } from "./editor/widgets/image";
 import { MermaidWidget } from "./editor/widgets/mermaid";
 import { FrontMatterWidget } from "./editor/widgets/frontmatter";
 import { tableTab, tableShiftTab } from "./editor/commands/table";
 import { bracketExtensions } from "./editor/commands/brackets";
+import { editorActionKeymap, runEditorAction, type EditorAction } from "./editor/commands/format";
 import { parseFrontMatter } from "./lib/frontmatter";
 import { dirOf, relativePath, resolveAssetPath } from "./lib/paths";
 import * as api from "./lib/tauri";
@@ -103,9 +116,8 @@ function isInCode(tree: ReturnType<typeof syntaxTree>, from: number, to: number)
   return inside;
 }
 
-function buildDecorations(view: EditorView, filePath: string | null): DecorationSet {
+function buildDecorations(state: EditorState, filePath: string | null): DecorationSet {
   const decos: Range<Decoration>[] = [];
-  const { state } = view;
   const sel = state.selection.main;
   const selFrom = sel.from;
   const selTo = sel.to;
@@ -114,12 +126,27 @@ function buildDecorations(view: EditorView, filePath: string | null): Decoration
 
   const overlaps = (from: number, to: number) => from <= selTo && selFrom <= to;
 
-  const lineDeco = (from: number, to: number, cls: string) => {
+  const lineDeco = (
+    from: number,
+    to: number,
+    cls: string,
+    attributes?: Record<string, string>,
+  ) => {
     const s = doc.lineAt(from).number;
     const e = doc.lineAt(to).number;
     for (let i = s; i <= e; i++) {
-      decos.push(Decoration.line({ class: cls }).range(doc.line(i).from));
+      decos.push(
+        Decoration.line({ class: cls, attributes }).range(doc.line(i).from),
+      );
     }
+  };
+
+  const listDepth = (node: SyntaxNodeRef): number => {
+    let depth = 0;
+    for (let p = node.node.parent; p; p = p.parent) {
+      if (p.name === "BulletList" || p.name === "OrderedList") depth++;
+    }
+    return depth;
   };
 
   tree.iterate({
@@ -161,14 +188,28 @@ function buildDecorations(view: EditorView, filePath: string | null): Decoration
       }
 
       if (n === "ListMark" || n === "TaskMarker") {
-        if (!overlaps(from, to)) {
-          decos.push(Decoration.replace({}).range(from, to));
-        }
+        decos.push(Decoration.replace({}).range(from, to));
         return;
       }
 
       if (n === "Task") {
         lineDeco(from, to, "md-task-item");
+        return;
+      }
+
+      if (n === "ListItem") {
+        const depth = listDepth(node);
+        const classes = ["md-list-item"];
+        const parent = node.node.parent;
+        if (parent?.name === "OrderedList") classes.push("md-ordered-list");
+        else if (parent?.name === "BulletList") classes.push("md-bullet-list");
+        const attributes =
+          depth > 1
+            ? {
+                style: `padding-left: calc(var(--editor-padding-x) + ${(depth - 1) * 24}px)`,
+              }
+            : undefined;
+        lineDeco(from, to, classes.join(" "), attributes);
         return;
       }
 
@@ -182,16 +223,14 @@ function buildDecorations(view: EditorView, filePath: string | null): Decoration
       }
 
       if (n === "Image") {
-        if (!overlaps(from, to)) {
-          const { alt, url } = parseImage(node, doc);
-          const resolved = resolveAssetPath(filePath, url);
-          decos.push(
-            Decoration.replace({
-              widget: new ImageWidget(url, alt, resolved),
-              block: true,
-            }).range(from, to),
-          );
-        }
+        const { alt, url } = parseImage(node, doc);
+        const resolved = resolveAssetPath(filePath, url);
+        decos.push(
+          Decoration.replace({
+            widget: new ImageWidget(url, alt, resolved),
+            block: true,
+          }).range(from, to),
+        );
         return;
       }
 
@@ -203,65 +242,47 @@ function buildDecorations(view: EditorView, filePath: string | null): Decoration
       }
 
       if (n === "HorizontalRule") {
-        if (!overlaps(from, to)) {
-          decos.push(
-            Decoration.replace({ widget: new HrWidget(), block: true }).range(from, to),
-          );
-        } else {
-          lineDeco(from, to, "md-hr-editing");
-        }
+        decos.push(
+          Decoration.replace({ widget: new HrWidget(), block: true }).range(from, to),
+        );
         return;
       }
 
       if (n === "Table") {
-        if (!overlaps(from, to)) {
-          const { header, rows } = parseTable(node, doc);
-          decos.push(
-            Decoration.replace({
-              widget: new TableWidget(header, rows),
-              block: true,
-            }).range(from, to),
-          );
-        } else {
-          lineDeco(from, to, "md-table-editing");
-        }
+        const { header, rows, aligns } = parseTable(node, doc);
+        decos.push(
+          Decoration.replace({
+            widget: new TableWidget(from, to, header, rows, aligns),
+            block: true,
+          }).range(from, to),
+        );
         return;
       }
 
       if (n === "TableDelimiter") {
-        if (!overlaps(from, to)) {
-          decos.push(Decoration.replace({}).range(from, to));
-        }
+        decos.push(Decoration.replace({}).range(from, to));
         return;
       }
 
       if (n === "FencedCode") {
-        if (!overlaps(from, to)) {
-          const lang = fencedCodeInfo(node, doc).trim().toLowerCase();
-          const code = fencedCodeText(node, doc);
-          if (lang === "mermaid") {
-            decos.push(
-              Decoration.replace({
-                widget: new MermaidWidget(code),
-                block: true,
-              }).range(from, to),
-            );
-          } else {
-            decos.push(
-              Decoration.replace({
-                widget: new CodeBlockWidget(code, lang),
-                block: true,
-              }).range(from, to),
-            );
-          }
+        const lang = fencedCodeInfo(node, doc).trim().toLowerCase();
+        const code = fencedCodeText(node, doc);
+        if (lang === "mermaid") {
+          decos.push(
+            Decoration.replace({
+              widget: new MermaidWidget(code),
+              block: true,
+            }).range(from, to),
+          );
         } else {
-          lineDeco(from, to, "md-codeblock-editing");
+          decos.push(
+            Decoration.replace({
+              widget: new CodeBlockWidget(code, lang),
+              block: true,
+            }).range(from, to),
+          );
         }
         return;
-      }
-
-      if (n === "BulletList" || n === "OrderedList") {
-        lineDeco(from, to, "md-list");
       }
     },
   });
@@ -269,7 +290,7 @@ function buildDecorations(view: EditorView, filePath: string | null): Decoration
   // 数学公式（$...$ / $$...$$）
   const inCode = (from: number, to: number) => isInCode(tree, from, to);
   for (const math of scanMath(doc, inCode)) {
-    if (!overlaps(math.from, math.to)) {
+    if (math.block || !overlaps(math.from, math.to)) {
       decos.push(
         Decoration.replace({
           widget: math.block
@@ -283,7 +304,7 @@ function buildDecorations(view: EditorView, filePath: string | null): Decoration
 
   // YAML Front Matter
   const fm = parseFrontMatter(doc.toString());
-  if (fm && !overlaps(fm.from, fm.to)) {
+  if (fm) {
     const summary = Object.entries(fm.data)
       .slice(0, 3)
       .map(([k, v]) => `${k}: ${v}`)
@@ -313,28 +334,46 @@ function buildDecorations(view: EditorView, filePath: string | null): Decoration
   return Decoration.set(decos, true);
 }
 
-function livePreview(filePath: string | null) {
-  return ViewPlugin.fromClass(
-    class {
-      decorations: DecorationSet;
-      constructor(view: EditorView) {
-        this.decorations = buildDecorations(view, filePath);
-      }
-      update(u: ViewUpdate) {
-        if (u.docChanged || u.selectionSet || u.viewportChanged) {
-          this.decorations = buildDecorations(u.view, filePath);
-        }
-      }
+const rebuildPreviewEffect = StateEffect.define<void>();
+
+function livePreview(ctx: { filePath: string | null }): Extension {
+  return StateField.define<DecorationSet>({
+    create(state) {
+      return buildDecorations(state, ctx.filePath);
     },
-    { decorations: (v) => v.decorations },
-  );
+    update(deco, tr) {
+      if (
+        tr.docChanged ||
+        tr.selection ||
+        tr.effects.some((e) => e.is(rebuildPreviewEffect))
+      ) {
+        return buildDecorations(tr.state, ctx.filePath);
+      }
+      return deco.map(tr.changes);
+    },
+    provide: (f) => [
+      EditorView.decorations.from(f),
+      EditorView.atomicRanges.of((view) => {
+        const deco = view.state.field(f, false);
+        return deco ? tableAtomicRanges(deco) : Decoration.none;
+      }),
+    ],
+  });
 }
 
 const previewCompartment = new Compartment();
 const typewriterCompartment = new Compartment();
+const lineNumbersCompartment = new Compartment();
+const wrapCompartment = new Compartment();
+const tabSizeCompartment = new Compartment();
+const spellCheckCompartment = new Compartment();
 
-function previewExt(mode: EditorMode, filePath: string | null): Extension {
-  return mode === "preview" ? livePreview(filePath) : [];
+function spellCheckExt(enabled: boolean): Extension {
+  return EditorView.contentAttributes.of({ spellcheck: enabled ? "true" : "false" });
+}
+
+function previewExt(mode: EditorMode, ctx: { filePath: string | null }): Extension {
+  return mode === "preview" ? [livePreview(ctx), tableSelectionSnap()] : [];
 }
 
 function typewriterExt(enabled: boolean): Extension {
@@ -362,19 +401,48 @@ async function insertImage(
   const dir = filePath ? dirOf(filePath) : ".";
   const name = `image-${Date.now()}.${ext}`;
   const absPath = `${dir}/${name}`.replace(/\\/g, "/");
-  await api.writeBinary(absPath, Array.from(bytes));
+  try {
+    await api.writeBinary(absPath, Array.from(bytes));
+  } catch (e) {
+    console.error("Failed to save pasted image:", e);
+    return;
+  }
   const rel = filePath ? relativePath(dir, absPath) : name;
   const insert = `![](${rel})`;
   const pos = view.state.selection.main.head;
+  const line = view.state.doc.lineAt(pos);
+  const atLineStart = pos === line.from;
+  const lineEmpty = line.text.trim().length === 0;
+  const block = atLineStart && lineEmpty ? `${insert}\n` : `\n${insert}\n`;
+  const endPos = pos + block.length;
   view.dispatch({
-    changes: { from: pos, insert: `\n${insert}\n` },
-    selection: { anchor: pos + insert.length + 2 },
+    changes: { from: pos, insert: block },
+    selection: { anchor: endPos },
+    scrollIntoView: true,
   });
 }
 
-function mediaHandlers(filePath: string | null): Extension {
+function shouldHandleImagePaste(event: ClipboardEvent): boolean {
+  const items = event.clipboardData?.items;
+  if (!items?.length) return false;
+
+  let imageItem: DataTransferItem | null = null;
+  for (const item of items) {
+    if (item.type.startsWith("image/")) imageItem = item;
+  }
+  if (!imageItem) return false;
+
+  const text = event.clipboardData?.getData("text/plain")?.trim() ?? "";
+  const html = event.clipboardData?.getData("text/html")?.trim() ?? "";
+  // 剪贴板同时含文本时优先走普通粘贴（截图通常只有图片）
+  if (text || html) return false;
+  return true;
+}
+
+function mediaHandlers(ctx: { filePath: string | null }): Extension {
   return EditorView.domEventHandlers({
     paste(event, view) {
+      if (!shouldHandleImagePaste(event)) return false;
       const items = event.clipboardData?.items;
       if (!items) return false;
       for (const item of items) {
@@ -384,7 +452,7 @@ function mediaHandlers(filePath: string | null): Extension {
           if (!file) return true;
           void file.arrayBuffer().then((buf) => {
             const ext = file.type.split("/")[1] || "png";
-            void insertImage(view, filePath, new Uint8Array(buf), ext);
+            void insertImage(view, ctx.filePath, new Uint8Array(buf), ext);
           });
           return true;
         }
@@ -401,7 +469,7 @@ function mediaHandlers(filePath: string | null): Extension {
       event.preventDefault();
       void file.arrayBuffer().then((buf) => {
         const ext = file.name.split(".").pop() || "png";
-        void insertImage(view, filePath, new Uint8Array(buf), ext);
+        void insertImage(view, ctx.filePath, new Uint8Array(buf), ext);
       });
       return true;
     },
@@ -424,34 +492,49 @@ function mediaHandlers(filePath: string | null): Extension {
   });
 }
 
+export type { EditorAction };
+
 export interface EditorHandle {
   view: EditorView;
   setMode: (m: EditorMode) => void;
+  setFilePath: (path: string | null) => void;
   setTypewriter: (on: boolean) => void;
+  setLineNumbers: (on: boolean) => void;
+  setWordWrap: (on: boolean) => void;
+  setTabSize: (n: number) => void;
+  setSpellCheck: (on: boolean) => void;
   scrollToLine: (line: number) => void;
+  runAction: (action: EditorAction) => boolean;
+  insertTable: (rows: number, cols: number) => boolean;
   destroy: () => void;
+}
+
+export interface EditorOptions {
+  mode: EditorMode;
+  filePath: string | null;
+  typewriter: boolean;
+  lineNumbers: boolean;
+  wordWrap: boolean;
+  tabSize: number;
+  spellCheck: boolean;
+  onChange: (doc: string) => void;
+  onModeChange: (m: EditorMode) => void;
+  onCursorLine?: (line: number) => void;
 }
 
 export function createEditor(
   parent: HTMLElement,
   initialDoc: string,
-  opts: {
-    mode: EditorMode;
-    filePath: string | null;
-    typewriter: boolean;
-    onChange: (doc: string) => void;
-    onModeChange: (m: EditorMode) => void;
-    onCursorLine?: (line: number) => void;
-  },
+  opts: EditorOptions,
 ): EditorHandle {
   let mode = opts.mode;
   let typewriter = opts.typewriter;
-  const filePath = opts.filePath;
+  const assetContext = { filePath: opts.filePath };
 
   function toggleMode() {
     mode = mode === "preview" ? "source" : "preview";
     view.dispatch({
-      effects: previewCompartment.reconfigure(previewExt(mode, filePath)),
+      effects: previewCompartment.reconfigure(previewExt(mode, assetContext)),
     });
     opts.onModeChange(mode);
   }
@@ -462,7 +545,10 @@ export function createEditor(
       history(),
       drawSelection(),
       dropCursor(),
-      EditorView.lineWrapping,
+      lineNumbersCompartment.of(opts.lineNumbers ? lineNumbers() : []),
+      wrapCompartment.of(opts.wordWrap ? EditorView.lineWrapping : []),
+      tabSizeCompartment.of(EditorState.tabSize.of(opts.tabSize)),
+      spellCheckCompartment.of(spellCheckExt(opts.spellCheck)),
       markdown({ base: markdownLanguage }),
       syntaxHighlighting(markdownHighlight),
       keymap.of([
@@ -470,17 +556,23 @@ export function createEditor(
         ...historyKeymap,
         ...markdownKeymap,
         ...searchKeymap,
+        ...editorActionKeymap(),
         indentWithTab,
         { key: "Tab", run: tableTab },
         { key: "Shift-Tab", run: tableShiftTab },
+      ]),
+      keymap.of([
+        { key: "Backspace", run: tableBackspace },
+        { key: "Delete", run: tableDeleteKey },
       ]),
       search({ top: true }),
       highlightSelectionMatches(),
       bracketExtensions(),
       keymap.of([{ key: "Mod-/", run: () => { toggleMode(); return true; } }]),
-      previewCompartment.of(previewExt(mode, filePath)),
+      previewCompartment.of(previewExt(mode, assetContext)),
       typewriterCompartment.of(typewriterExt(typewriter)),
-      mediaHandlers(filePath),
+      mediaHandlers(assetContext),
+      tableEditingHandlers(),
       EditorView.updateListener.of((u) => {
         if (u.docChanged) opts.onChange(u.state.doc.toString());
         if (u.selectionSet || u.viewportChanged) {
@@ -498,11 +590,38 @@ export function createEditor(
     setMode: (m: EditorMode) => {
       if (m !== mode) toggleMode();
     },
+    setFilePath: (path: string | null) => {
+      if (assetContext.filePath === path) return;
+      assetContext.filePath = path;
+      if (mode === "preview") {
+        view.dispatch({ effects: rebuildPreviewEffect.of() });
+      }
+    },
     setTypewriter: (on: boolean) => {
       if (on === typewriter) return;
       typewriter = on;
       view.dispatch({
         effects: typewriterCompartment.reconfigure(typewriterExt(typewriter)),
+      });
+    },
+    setLineNumbers: (on: boolean) => {
+      view.dispatch({
+        effects: lineNumbersCompartment.reconfigure(on ? lineNumbers() : []),
+      });
+    },
+    setWordWrap: (on: boolean) => {
+      view.dispatch({
+        effects: wrapCompartment.reconfigure(on ? EditorView.lineWrapping : []),
+      });
+    },
+    setTabSize: (n: number) => {
+      view.dispatch({
+        effects: tabSizeCompartment.reconfigure(EditorState.tabSize.of(n)),
+      });
+    },
+    setSpellCheck: (on: boolean) => {
+      view.dispatch({
+        effects: spellCheckCompartment.reconfigure(spellCheckExt(on)),
       });
     },
     scrollToLine: (line: number) => {
@@ -514,6 +633,8 @@ export function createEditor(
       });
       view.focus();
     },
+    runAction: (action: EditorAction) => runEditorAction(view, action),
+    insertTable: (rows: number, cols: number) => insertTableAtCursor(view, rows, cols),
     destroy: () => view.destroy(),
   };
 }

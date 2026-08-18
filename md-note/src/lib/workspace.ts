@@ -16,7 +16,7 @@ export function clearLastFolder() {
 export type SavedSidebarTab = "files" | "outline" | "recent";
 
 export function getSidebarTab(): SavedSidebarTab {
-  const v = localStorage.getItem(SIDEBAR_TAB_KEY);
+  const v = localStorage.getItem(SIDEBAR_TAB_KEY) ?? localStorage.getItem("mdnote.defaultSidebarTab");
   return v === "outline" || v === "recent" ? v : "files";
 }
 
