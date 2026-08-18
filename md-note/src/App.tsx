@@ -53,6 +53,7 @@ export default function App() {
   const [dirTick, setDirTick] = useState(0);
   const [recentFiles, setRecentFiles] = useState(getRecentFiles);
   const [reloadPrompt, setReloadPrompt] = useState(false);
+  const [cursorLine, setCursorLine] = useState(1);
   const [prompt, setPrompt] = useState<{
     title: string;
     label: string;
@@ -73,8 +74,15 @@ export default function App() {
     getCurrentWindow().setTitle(`${name} — MDNote`);
   }, []);
 
+  const confirmDiscard = useCallback(() => {
+    const tab = getActive();
+    if (!tab?.dirty) return true;
+    return window.confirm("当前文件有未保存的更改，确定放弃？");
+  }, [getActive]);
+
   const loadFile = useCallback(
     async (path: string) => {
+      if (!confirmDiscard()) return;
       try {
         const text = await api.readFile(path);
         openTab(path, text);
@@ -86,13 +94,14 @@ export default function App() {
         console.error("打开文件失败:", e);
       }
     },
-    [openTab, markSaved, setTitle],
+    [openTab, setTitle, confirmDiscard],
   );
 
   const openFile = useCallback(async () => {
+    if (!confirmDiscard()) return;
     const p = await api.openFileDialog();
     if (p) await loadFile(p);
-  }, [loadFile]);
+  }, [loadFile, confirmDiscard]);
 
   const openFolder = useCallback(async () => {
     const p = await api.openFolderDialog();
@@ -161,17 +170,17 @@ export default function App() {
   }, [getActive]);
 
   const handleNewFile = useCallback(() => {
+    if (!confirmDiscard()) return;
     newTab();
     setTitle(null);
-  }, [newTab, setTitle]);
+  }, [newTab, setTitle, confirmDiscard]);
 
-  const handleCloseTab = useCallback(() => {
+  const handleCloseFile = useCallback(() => {
     const tab = getActive();
     if (!tab) return;
-    if (tab.dirty && !window.confirm("当前标签有未保存的更改，确定关闭？")) return;
+    if (tab.dirty && !window.confirm("当前文件有未保存的更改，确定关闭？")) return;
     closeTab(tab.id);
-    const next = useTabsStore.getState().getActive();
-    setTitle(next?.path ?? null);
+    setTitle(null);
   }, [getActive, closeTab, setTitle]);
 
   const handleRenamePath = useCallback(
@@ -369,12 +378,12 @@ export default function App() {
       else if (k === "s") { e.preventDefault(); saveTab(); }
       else if (k === "o") { e.preventDefault(); openFile(); }
       else if (k === "n") { e.preventDefault(); handleNewFile(); }
-      else if (k === "w") { e.preventDefault(); handleCloseTab(); }
+      else if (k === "w") { e.preventDefault(); handleCloseFile(); }
       else if (k === ",") { e.preventDefault(); setSettingsOpen(true); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [saveTab, saveAs, openFile, handleNewFile, handleCloseTab]);
+  }, [saveTab, saveAs, openFile, handleNewFile, handleCloseFile]);
 
   useEffect(() => {
     const tab = getActive();
@@ -422,6 +431,16 @@ export default function App() {
     return items;
   }, [active?.content]);
 
+  const activeOutlineLine = useMemo(() => {
+    if (!outline.length) return null;
+    let best = outline[0].line;
+    for (const h of outline) {
+      if (h.line <= cursorLine) best = h.line;
+      else break;
+    }
+    return best;
+  }, [outline, cursorLine]);
+
   const scrollToHeading = useCallback((line: number) => {
     editorRef.current?.scrollToLine(line);
   }, []);
@@ -443,7 +462,7 @@ export default function App() {
         onOpen={openFile}
         onOpenFolder={openFolder}
         onNewFile={handleNewFile}
-        onCloseTab={handleCloseTab}
+        onCloseFile={handleCloseFile}
         onSave={() => saveTab()}
         onSaveAs={saveAs}
         onExportHtml={exportHtml}
@@ -470,6 +489,7 @@ export default function App() {
             onRenamePath={folderPath ? handleRenamePath : undefined}
             onDeletePath={folderPath ? handleDeletePath : undefined}
             outline={outline}
+            activeOutlineLine={activeOutlineLine}
             onOutlineClick={scrollToHeading}
             currentPath={active?.path ?? null}
             recentFiles={recentFiles}
@@ -479,13 +499,14 @@ export default function App() {
           {active && (
             <Editor
               ref={editorRef}
-              key={active.id}
+              key={active.path ?? active.id}
               value={active.content}
               mode={active.mode}
               filePath={active.path}
               typewriter={typewriterMode}
               onChange={handleChange}
               onModeChange={handleModeChange}
+              onCursorLine={setCursorLine}
             />
           )}
         </main>

@@ -441,6 +441,7 @@ export function createEditor(
     typewriter: boolean;
     onChange: (doc: string) => void;
     onModeChange: (m: EditorMode) => void;
+    onCursorLine?: (line: number) => void;
   },
 ): EditorHandle {
   let mode = opts.mode;
@@ -482,6 +483,10 @@ export function createEditor(
       mediaHandlers(filePath),
       EditorView.updateListener.of((u) => {
         if (u.docChanged) opts.onChange(u.state.doc.toString());
+        if (u.selectionSet || u.viewportChanged) {
+          const line = u.state.doc.lineAt(u.state.selection.main.head).number;
+          opts.onCursorLine?.(line);
+        }
       }),
     ],
   });
