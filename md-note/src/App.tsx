@@ -8,6 +8,7 @@ import StatusBar from "./components/StatusBar";
 import Settings from "./components/Settings";
 import ReloadDialog from "./components/ReloadDialog";
 import TableSizePicker from "./components/TableSizePicker";
+import Toast from "./components/Toast";
 import * as api from "./lib/tauri";
 import { initPlatform } from "./lib/platform";
 import { addRecentFile, clearRecentFiles, getRecentFiles, removeRecentFile, trimRecentFiles } from "./lib/recent";
@@ -71,9 +72,12 @@ import { dirOf, joinPath, basename } from "./lib/paths";
 import { useTabsStore } from "./store/useTabsStore";
 import type { EditorAction } from "./editor";
 import { setTableInsertRequestHandler } from "./editor/tableInsertBridge";
+import { useToast } from "./lib/useToast";
+import { countWords, estimateReadMinutes } from "./lib/wordCount";
 
 export default function App() {
   const editorRef = useRef<EditorRef>(null);
+  const { message: toastMessage, showError } = useToast();
   const {
     tabs,
     activeId,
@@ -154,10 +158,10 @@ export default function App() {
         setTitle(path);
         await api.watchFile(path);
       } catch (e) {
-        console.error("打开文件失败:", e);
+        showError(e);
       }
     },
-    [openTab, setTitle, confirmDiscardIfNeeded],
+    [openTab, setTitle, confirmDiscardIfNeeded, showError],
   );
 
   const openFile = useCallback(async () => {
@@ -193,10 +197,10 @@ export default function App() {
         setTitle(path);
         await api.watchFile(path);
       } catch (e) {
-        console.error("保存失败:", e);
+        showError(e);
       }
     },
-    [tabs, getActive, markSaved, setTitle],
+    [tabs, getActive, markSaved, setTitle, showError],
   );
 
   const saveAs = useCallback(async () => {
@@ -212,18 +216,22 @@ export default function App() {
       setTitle(p);
       await api.watchFile(p);
     } catch (e) {
-      console.error("保存失败:", e);
+      showError(e);
     }
-  }, [getActive, markSaved, setTitle]);
+  }, [getActive, markSaved, setTitle, showError]);
 
   const exportHtml = useCallback(async () => {
     const tab = getActive();
     if (!tab) return;
     const path = await api.saveHtmlDialog();
     if (!path) return;
-    const html = await markdownToHtml(tab.content, resolveTheme());
-    await api.writeFile(path, html);
-  }, [getActive]);
+    try {
+      const html = await markdownToHtml(tab.content, resolveTheme());
+      await api.writeFile(path, html);
+    } catch (e) {
+      showError(e);
+    }
+  }, [getActive, showError]);
 
   const exportPdf = useCallback(async () => {
     const tab = getActive();
@@ -264,10 +272,10 @@ export default function App() {
         setDirTick((t) => t + 1);
         setRecentFiles(getRecentFiles());
       } catch (e) {
-        console.error(e);
+        showError(e);
       }
     },
-    [active, markSaved],
+    [active, markSaved, showError],
   );
 
   const handleDeletePath = useCallback(
@@ -288,27 +296,38 @@ export default function App() {
         setDirTick((t) => t + 1);
         setRecentFiles(getRecentFiles());
       } catch (e) {
-        console.error(e);
+        showError(e);
       }
     },
-    [active, handleNewFile, confirmDelete, locale],
+    [active, handleNewFile, confirmDelete, locale, showError],
   );
 
   const handleCreateFileInFolder = useCallback(
     async (parentDir: string, name: string) => {
       const path = joinPath(parentDir, name);
-      await api.createFile(path, "");
-      setDirTick((t) => t + 1);
-      await loadFile(path);
+      try {
+        await api.createFile(path, "");
+        setDirTick((t) => t + 1);
+        await loadFile(path);
+      } catch (e) {
+        showError(e);
+      }
     },
-    [loadFile],
+    [loadFile, showError],
   );
 
-  const handleCreateFolderInDir = useCallback(async (parentDir: string, name: string) => {
-    const path = joinPath(parentDir, name);
-    await api.createDir(path);
-    setDirTick((t) => t + 1);
-  }, []);
+  const handleCreateFolderInDir = useCallback(
+    async (parentDir: string, name: string) => {
+      const path = joinPath(parentDir, name);
+      try {
+        await api.createDir(path);
+        setDirTick((t) => t + 1);
+      } catch (e) {
+        showError(e);
+      }
+    },
+    [showError],
+  );
 
   const frontMatterData = useMemo(() => {
     if (!active?.content) return {};
@@ -473,10 +492,45 @@ export default function App() {
     const t = setTimeout(() => {
       api.writeFile(tab.path!, tab.content)
         .then(() => markSaved(tab.id, tab.path!, tab.content))
-        .catch(console.error);
+        .catch(showError);
     }, autosaveDelay);
     return () => clearTimeout(t);
-  }, [tabs, autosave, autosaveDelay, getActive, markSaved]);
+  }, [tabs, autosave, autosaveDelay, getActive, markSaved, showError]);
+
+  useEffect(() => {
+    if (!autosave) return;
+    const onBlur = () => {
+      const tab = getActive();
+      if (!tab?.dirty || !tab.path) return;
+      api.writeFile(tab.path, tab.content)
+        .then(() => markSaved(tab.id, tab.path!, tab.content))
+        .catch(showError);
+    };
+    window.addEventListener("blur", onBlur);
+    return () => window.removeEventListener("blur", onBlur);
+  }, [autosave, getActive, markSaved, showError]);
+
+  useEffect(() => {
+    if (!folderPath) {
+      api.unwatchDir().catch(() => {});
+      return;
+    }
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+
+    api.watchDir(folderPath).catch(showError);
+    api.onDirChanged(() => {
+      if (!disposed) setDirTick((t) => t + 1);
+    }).then((fn) => {
+      unlisten = fn;
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+      api.unwatchDir().catch(() => {});
+    };
+  }, [folderPath, showError]);
 
   useEffect(() => {
     persistFontSize(fontSize);
@@ -543,20 +597,20 @@ export default function App() {
 
   useEffect(() => {
     setTitle(active?.path ?? null);
-    if (active?.path) api.watchFile(active.path).catch(console.error);
+    if (active?.path) api.watchFile(active.path).catch(showError);
     else api.unwatchFile();
-  }, [active?.path, setTitle]);
+  }, [active?.path, setTitle, showError]);
 
   const stats = useMemo(() => {
     const text = active?.content ?? "";
-    const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+    const words = countWords(text);
     return {
       words,
       chars: text.length,
       lines: text.split("\n").length,
-      readMin: Math.max(1, Math.ceil(words / 300)),
+      readMin: estimateReadMinutes(words, locale),
     };
-  }, [active?.content]);
+  }, [active?.content, locale]);
 
   const outline = useMemo(() => {
     const items: { level: number; text: string; line: number }[] = [];
@@ -761,6 +815,7 @@ export default function App() {
         onSelect={handleTableSizeSelect}
         onCancel={() => setTablePickerOpen(false)}
       />
+      <Toast message={toastMessage} />
     </div>
   );
 }

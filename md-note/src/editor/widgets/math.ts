@@ -1,18 +1,28 @@
 import { WidgetType } from "@codemirror/view";
+import { bindBlockClickEdit } from "./blockRange";
 import katex from "katex";
 
 export class InlineMathWidget extends WidgetType {
-  constructor(readonly tex: string) {
+  constructor(
+    readonly from: number,
+    readonly to: number,
+    readonly tex: string,
+  ) {
     super();
   }
 
   eq(other: InlineMathWidget) {
-    return other.tex === this.tex;
+    return (
+      other.from === this.from &&
+      other.to === this.to &&
+      other.tex === this.tex
+    );
   }
 
   toDOM() {
     const span = document.createElement("span");
     span.className = "md-math-inline";
+    bindBlockClickEdit(span, this.from, this.to);
     try {
       katex.render(this.tex, span, { throwOnError: false, displayMode: false });
     } catch {
@@ -22,22 +32,27 @@ export class InlineMathWidget extends WidgetType {
   }
 
   ignoreEvent() {
-    return false;
+    return true;
   }
 }
 
 export class BlockMathWidget extends WidgetType {
-  constructor(readonly tex: string) {
+  constructor(
+    readonly from: number,
+    readonly to: number,
+    readonly tex: string,
+  ) {
     super();
   }
 
   eq(other: BlockMathWidget) {
-    return other.tex === this.tex;
+    return other.from === this.from && other.to === this.to && other.tex === this.tex;
   }
 
   toDOM() {
     const div = document.createElement("div");
     div.className = "md-math-block";
+    bindBlockClickEdit(div, this.from, this.to);
     try {
       katex.render(this.tex, div, { throwOnError: false, displayMode: true });
     } catch {
@@ -47,7 +62,7 @@ export class BlockMathWidget extends WidgetType {
   }
 
   ignoreEvent() {
-    return false;
+    return true;
   }
 }
 

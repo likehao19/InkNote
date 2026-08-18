@@ -1,9 +1,12 @@
 import { WidgetType } from "@codemirror/view";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { SyntaxNodeRef } from "@lezer/common";
+import { bindBlockClickEdit } from "./blockRange";
 
 export class ImageWidget extends WidgetType {
   constructor(
+    readonly from: number,
+    readonly to: number,
     readonly src: string,
     readonly alt: string,
     readonly resolved: string,
@@ -12,12 +15,19 @@ export class ImageWidget extends WidgetType {
   }
 
   eq(other: ImageWidget) {
-    return other.src === this.src && other.alt === this.alt && other.resolved === this.resolved;
+    return (
+      other.from === this.from &&
+      other.to === this.to &&
+      other.src === this.src &&
+      other.alt === this.alt &&
+      other.resolved === this.resolved
+    );
   }
 
   toDOM() {
     const figure = document.createElement("figure");
     figure.className = "md-image-widget";
+    bindBlockClickEdit(figure, this.from, this.to);
 
     const img = document.createElement("img");
     img.alt = this.alt;
@@ -53,7 +63,7 @@ export class ImageWidget extends WidgetType {
   }
 
   ignoreEvent() {
-    return false;
+    return true;
   }
 }
 

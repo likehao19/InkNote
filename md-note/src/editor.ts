@@ -84,7 +84,9 @@ function hideMarkers(
 ) {
   for (const c of node.node.getChildren(name)) {
     if (!overlaps(c.from, c.to)) {
-      decos.push(Decoration.replace({}).range(c.from, c.to));
+      decos.push(
+        Decoration.mark({ class: "cm-md-syntax-hidden" }).range(c.from, c.to),
+      );
     }
   }
 }
@@ -124,7 +126,7 @@ function buildDecorations(state: EditorState, filePath: string | null): Decorati
   const doc = state.doc;
   const tree = syntaxTree(state);
 
-  const overlaps = (from: number, to: number) => from <= selTo && selFrom <= to;
+  const overlaps = (from: number, to: number) => selFrom < to && selTo >= from;
 
   const lineDeco = (
     from: number,
@@ -160,7 +162,9 @@ function buildDecorations(state: EditorState, filePath: string | null): Decorati
           if (!overlaps(c.from, c.to)) {
             let end = c.to;
             if (end < to && doc.sliceString(end, end + 1) === " ") end++;
-            decos.push(Decoration.replace({}).range(c.from, end));
+            decos.push(
+              Decoration.mark({ class: "cm-md-syntax-hidden cm-md-syntax-hidden--collapse" }).range(c.from, end),
+            );
           }
         }
         return;
@@ -188,7 +192,11 @@ function buildDecorations(state: EditorState, filePath: string | null): Decorati
       }
 
       if (n === "ListMark" || n === "TaskMarker") {
-        decos.push(Decoration.replace({}).range(from, to));
+        if (!overlaps(from, to)) {
+          decos.push(
+            Decoration.mark({ class: "cm-md-syntax-hidden cm-md-syntax-hidden--collapse" }).range(from, to),
+          );
+        }
         return;
       }
 
@@ -203,10 +211,11 @@ function buildDecorations(state: EditorState, filePath: string | null): Decorati
         const parent = node.node.parent;
         if (parent?.name === "OrderedList") classes.push("md-ordered-list");
         else if (parent?.name === "BulletList") classes.push("md-bullet-list");
+        const indentExtra = depth > 1 ? (depth - 1) * 24 : 0;
         const attributes =
-          depth > 1
+          indentExtra > 0
             ? {
-                style: `padding-left: calc(var(--editor-padding-x) + ${(depth - 1) * 24}px)`,
+                style: `--md-list-marker-left: calc(var(--editor-padding-x) + ${indentExtra}px); padding-left: calc(var(--editor-padding-x) + var(--editor-list-marker-offset) + ${indentExtra}px);`,
               }
             : undefined;
         lineDeco(from, to, classes.join(" "), attributes);
@@ -225,9 +234,10 @@ function buildDecorations(state: EditorState, filePath: string | null): Decorati
       if (n === "Image") {
         const { alt, url } = parseImage(node, doc);
         const resolved = resolveAssetPath(filePath, url);
+        if (overlaps(from, to)) return;
         decos.push(
           Decoration.replace({
-            widget: new ImageWidget(url, alt, resolved),
+            widget: new ImageWidget(from, to, url, alt, resolved),
             block: true,
           }).range(from, to),
         );
@@ -242,13 +252,15 @@ function buildDecorations(state: EditorState, filePath: string | null): Decorati
       }
 
       if (n === "HorizontalRule") {
+        if (overlaps(from, to)) return;
         decos.push(
-          Decoration.replace({ widget: new HrWidget(), block: true }).range(from, to),
+          Decoration.replace({ widget: new HrWidget(from, to), block: true }).range(from, to),
         );
         return;
       }
 
       if (n === "Table") {
+        if (overlaps(from, to)) return;
         const { header, rows, aligns } = parseTable(node, doc);
         decos.push(
           Decoration.replace({
@@ -260,24 +272,32 @@ function buildDecorations(state: EditorState, filePath: string | null): Decorati
       }
 
       if (n === "TableDelimiter") {
-        decos.push(Decoration.replace({}).range(from, to));
+        if (!overlaps(from, to)) {
+          decos.push(
+            Decoration.mark({ class: "cm-md-syntax-hidden cm-md-syntax-hidden--collapse" }).range(from, to),
+          );
+        }
         return;
       }
 
       if (n === "FencedCode") {
         const lang = fencedCodeInfo(node, doc).trim().toLowerCase();
         const code = fencedCodeText(node, doc);
+        if (overlaps(from, to)) {
+          hideMarkers(node, "CodeMark", decos, overlaps);
+          return;
+        }
         if (lang === "mermaid") {
           decos.push(
             Decoration.replace({
-              widget: new MermaidWidget(code),
+              widget: new MermaidWidget(from, to, code),
               block: true,
             }).range(from, to),
           );
         } else {
           decos.push(
             Decoration.replace({
-              widget: new CodeBlockWidget(code, lang),
+              widget: new CodeBlockWidget(from, to, code, lang),
               block: true,
             }).range(from, to),
           );
@@ -290,12 +310,12 @@ function buildDecorations(state: EditorState, filePath: string | null): Decorati
   // 数学公式（$...$ / $$...$$）
   const inCode = (from: number, to: number) => isInCode(tree, from, to);
   for (const math of scanMath(doc, inCode)) {
-    if (math.block || !overlaps(math.from, math.to)) {
+    if (!overlaps(math.from, math.to)) {
       decos.push(
         Decoration.replace({
           widget: math.block
-            ? new BlockMathWidget(math.tex)
-            : new InlineMathWidget(math.tex),
+            ? new BlockMathWidget(math.from, math.to, math.tex)
+            : new InlineMathWidget(math.from, math.to, math.tex),
           block: math.block,
         }).range(math.from, math.to),
       );
@@ -304,14 +324,14 @@ function buildDecorations(state: EditorState, filePath: string | null): Decorati
 
   // YAML Front Matter
   const fm = parseFrontMatter(doc.toString());
-  if (fm) {
+  if (fm && !overlaps(fm.from, fm.to)) {
     const summary = Object.entries(fm.data)
       .slice(0, 3)
       .map(([k, v]) => `${k}: ${v}`)
       .join(" · ");
     decos.push(
       Decoration.replace({
-        widget: new FrontMatterWidget(summary),
+        widget: new FrontMatterWidget(fm.from, fm.to, summary),
         block: true,
       }).range(fm.from, fm.to),
     );
@@ -344,7 +364,7 @@ function livePreview(ctx: { filePath: string | null }): Extension {
     update(deco, tr) {
       if (
         tr.docChanged ||
-        tr.selection ||
+        !tr.startState.selection.eq(tr.state.selection) ||
         tr.effects.some((e) => e.is(rebuildPreviewEffect))
       ) {
         return buildDecorations(tr.state, ctx.filePath);
@@ -373,7 +393,9 @@ function spellCheckExt(enabled: boolean): Extension {
 }
 
 function previewExt(mode: EditorMode, ctx: { filePath: string | null }): Extension {
-  return mode === "preview" ? [livePreview(ctx), tableSelectionSnap()] : [];
+  return mode === "preview"
+    ? [livePreview(ctx), tableSelectionSnap()]
+    : [];
 }
 
 function typewriterExt(enabled: boolean): Extension {
@@ -474,13 +496,33 @@ function mediaHandlers(ctx: { filePath: string | null }): Extension {
       return true;
     },
     mousedown(event, view) {
-      const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+      if (event.button !== 0) return false;
+
+      const taskLine = (event.target as HTMLElement).closest(".cm-line.md-task-item");
+      if (!taskLine) return false;
+
+      let pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+      if (pos == null && taskLine) {
+        pos = view.posAtDOM(taskLine, 0);
+      }
       if (pos == null) return false;
+
       const line = view.state.doc.lineAt(pos);
       const m = /^(\s*[-*+]\s+)\[([ xX])\](\s)/.exec(line.text);
       if (!m) return false;
+
       const bracketPos = line.from + m[1].length;
-      if (pos < bracketPos || pos > bracketPos + 3) return false;
+      const onBrackets = pos >= bracketPos && pos <= bracketPos + 3;
+
+      let onCheckboxVisual = false;
+      if (taskLine) {
+        const rect = taskLine.getBoundingClientRect();
+        const padLeft = parseFloat(getComputedStyle(taskLine).paddingLeft) || 62;
+        onCheckboxVisual = event.clientX - rect.left < padLeft;
+      }
+
+      if (!onBrackets && !onCheckboxVisual) return false;
+
       const checked = m[2].toLowerCase() === "x";
       const newMark = checked ? " " : "x";
       view.dispatch({

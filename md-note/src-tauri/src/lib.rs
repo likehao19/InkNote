@@ -7,6 +7,8 @@ struct AppState {
     startup_file: Mutex<Option<String>>,
     watcher: Mutex<Option<RecommendedWatcher>>,
     watched_path: Mutex<Option<String>>,
+    dir_watcher: Mutex<Option<RecommendedWatcher>>,
+    watched_dir: Mutex<Option<String>>,
 }
 
 #[derive(serde::Serialize)]
@@ -119,6 +121,58 @@ fn unwatch_file(state: tauri::State<AppState>) {
 }
 
 #[tauri::command]
+fn watch_dir(
+    app: tauri::AppHandle,
+    state: tauri::State<AppState>,
+    path: String,
+) -> Result<(), String> {
+    {
+        let watched = state.watched_dir.lock().unwrap();
+        if watched.as_deref() == Some(path.as_str()) {
+            return Ok(());
+        }
+    }
+
+    let mut watcher_guard = state.dir_watcher.lock().unwrap();
+    *watcher_guard = None;
+
+    let emit_path = path.clone();
+    let app_handle = app.clone();
+    let mut watcher = RecommendedWatcher::new(
+        move |res: Result<notify::Event, notify::Error>| {
+            if let Ok(event) = res {
+                let relevant = matches!(
+                    event.kind,
+                    EventKind::Modify(_)
+                        | EventKind::Create(_)
+                        | EventKind::Remove(_)
+                        | EventKind::Any
+                );
+                if relevant {
+                    let _ = app_handle.emit("dir-changed", emit_path.clone());
+                }
+            }
+        },
+        notify::Config::default(),
+    )
+    .map_err(|e| e.to_string())?;
+
+    watcher
+        .watch(Path::new(&path), RecursiveMode::Recursive)
+        .map_err(|e| e.to_string())?;
+
+    *watcher_guard = Some(watcher);
+    *state.watched_dir.lock().unwrap() = Some(path);
+    Ok(())
+}
+
+#[tauri::command]
+fn unwatch_dir(state: tauri::State<AppState>) {
+    *state.dir_watcher.lock().unwrap() = None;
+    *state.watched_dir.lock().unwrap() = None;
+}
+
+#[tauri::command]
 fn copy_file_to_dir(src: String, dest_dir: String) -> Result<String, String> {
     let src_path = Path::new(&src);
     let name = src_path
@@ -189,6 +243,8 @@ pub fn run() {
             startup_file: Mutex::new(startup_file),
             watcher: Mutex::new(None),
             watched_path: Mutex::new(None),
+            dir_watcher: Mutex::new(None),
+            watched_dir: Mutex::new(None),
         })
         .invoke_handler(tauri::generate_handler![
             read_file,
@@ -198,6 +254,8 @@ pub fn run() {
             get_startup_file,
             watch_file,
             unwatch_file,
+            watch_dir,
+            unwatch_dir,
             copy_file_to_dir,
             create_dir,
             create_file,

@@ -2,7 +2,7 @@ import { EditorView } from "@codemirror/view";
 import { undo, redo, selectAll } from "@codemirror/commands";
 import { openSearchPanel } from "@codemirror/search";
 import { requestTableInsert } from "../tableInsertBridge";
-import { insertTableAtCursor } from "../widgets/table";
+import { insertTableAtCursor, mutateTableInView } from "../widgets/table";
 
 export type EditorAction =
   | "undo"
@@ -33,6 +33,16 @@ export type EditorAction =
   | "hr"
   | "codeBlock"
   | "table"
+  | "tableRowBelow"
+  | "tableRowAbove"
+  | "tableRowDelete"
+  | "tableColLeft"
+  | "tableColRight"
+  | "tableColDelete"
+  | "tableAlignLeft"
+  | "tableAlignCenter"
+  | "tableAlignRight"
+  | "tableDelete"
   | "mathBlock"
   | "mermaid";
 
@@ -246,6 +256,26 @@ export function runEditorAction(view: EditorView, action: EditorAction): boolean
       return insertBlock(view, "```\n\n```", -4);
     case "table":
       return requestTableInsert() || insertTableAtCursor(view, 2, 2);
+    case "tableRowBelow":
+      return mutateTableInView(view, "row-below");
+    case "tableRowAbove":
+      return mutateTableInView(view, "row-above");
+    case "tableRowDelete":
+      return mutateTableInView(view, "row-delete");
+    case "tableColLeft":
+      return mutateTableInView(view, "col-left");
+    case "tableColRight":
+      return mutateTableInView(view, "col-right");
+    case "tableColDelete":
+      return mutateTableInView(view, "col-delete");
+    case "tableAlignLeft":
+      return mutateTableInView(view, "align-left");
+    case "tableAlignCenter":
+      return mutateTableInView(view, "align-center");
+    case "tableAlignRight":
+      return mutateTableInView(view, "align-right");
+    case "tableDelete":
+      return mutateTableInView(view, "delete");
     case "mathBlock":
       return insertBlock(view, "$$\n\n$$", -3);
     case "mermaid":

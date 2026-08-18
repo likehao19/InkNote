@@ -1,5 +1,6 @@
 import { WidgetType } from "@codemirror/view";
 import mermaid from "mermaid";
+import { bindBlockClickEdit } from "./blockRange";
 
 let mermaidReady = false;
 
@@ -18,17 +19,22 @@ let idCounter = 0;
 export class MermaidWidget extends WidgetType {
   readonly id = `mmd-${++idCounter}`;
 
-  constructor(readonly code: string) {
+  constructor(
+    readonly from: number,
+    readonly to: number,
+    readonly code: string,
+  ) {
     super();
   }
 
   eq(other: MermaidWidget) {
-    return other.code === this.code;
+    return other.from === this.from && other.to === this.to && other.code === this.code;
   }
 
   toDOM() {
     const wrap = document.createElement("div");
     wrap.className = "md-mermaid-widget";
+    bindBlockClickEdit(wrap, this.from, this.to);
     const inner = document.createElement("div");
     inner.className = "md-mermaid-inner";
     wrap.appendChild(inner);
@@ -48,6 +54,6 @@ export class MermaidWidget extends WidgetType {
   }
 
   ignoreEvent() {
-    return false;
+    return true;
   }
 }

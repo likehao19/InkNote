@@ -1,4 +1,5 @@
 import { WidgetType } from "@codemirror/view";
+import { bindBlockClickEdit } from "./blockRange";
 import hljs from "highlight.js/lib/core";
 import bash from "highlight.js/lib/languages/bash";
 import css from "highlight.js/lib/languages/css";
@@ -44,6 +45,8 @@ function normalizeLang(info: string): string {
 
 export class CodeBlockWidget extends WidgetType {
   constructor(
+    readonly from: number,
+    readonly to: number,
     readonly code: string,
     readonly lang: string,
   ) {
@@ -51,12 +54,18 @@ export class CodeBlockWidget extends WidgetType {
   }
 
   eq(other: CodeBlockWidget) {
-    return other.code === this.code && other.lang === this.lang;
+    return (
+      other.from === this.from &&
+      other.to === this.to &&
+      other.code === this.code &&
+      other.lang === this.lang
+    );
   }
 
   toDOM() {
     const wrap = document.createElement("div");
     wrap.className = "md-codeblock-widget";
+    bindBlockClickEdit(wrap, this.from, this.to);
 
     const pre = document.createElement("pre");
     const codeEl = document.createElement("code");
@@ -83,23 +92,31 @@ export class CodeBlockWidget extends WidgetType {
   }
 
   ignoreEvent() {
-    return false;
+    return true;
   }
 }
 
 export class HrWidget extends WidgetType {
-  eq() {
-    return true;
+  constructor(
+    readonly from: number,
+    readonly to: number,
+  ) {
+    super();
+  }
+
+  eq(other: HrWidget) {
+    return other.from === this.from && other.to === this.to;
   }
 
   toDOM() {
     const hr = document.createElement("div");
     hr.className = "md-hr-widget";
     hr.setAttribute("role", "separator");
+    bindBlockClickEdit(hr, this.from, this.to);
     return hr;
   }
 
   ignoreEvent() {
-    return false;
+    return true;
   }
 }
