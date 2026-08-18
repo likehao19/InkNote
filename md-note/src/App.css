@@ -394,6 +394,161 @@ input, select, textarea, .editor-host { user-select: text; }
   font-size: 11px;
   letter-spacing: 0.01em;
 }
+.menubar-submenu-row {
+  position: relative;
+}
+.menubar-item--submenu {
+  padding-right: 6px;
+}
+.menubar-item--submenu .menubar-item-label {
+  flex: 1;
+}
+.menubar-submenu-arrow {
+  flex-shrink: 0;
+  margin-left: 12px;
+  color: var(--fg-faint);
+  opacity: 0.85;
+}
+.menubar-submenu-row:hover > .menubar-item--submenu,
+.menubar-submenu-row.is-open > .menubar-item--submenu {
+  background: var(--bg-hover);
+}
+.menubar-submenu {
+  position: absolute;
+  top: -4px;
+  left: calc(100% - 4px);
+  z-index: 210;
+  min-width: 220px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+/* ============================================================
+   编辑器 — 查找面板（Cursor 风格浮动条）
+   ============================================================ */
+.editor-host .cm-panels-top {
+  background: transparent !important;
+  border: none !important;
+  padding: 10px 16px 0;
+  display: flex;
+  justify-content: flex-end;
+  pointer-events: none;
+}
+.editor-host .cm-panel.cm-search {
+  pointer-events: auto;
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  width: min(100%, 680px);
+  margin: 0 0 0 auto;
+  padding: 8px 36px 8px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.04),
+    0 8px 28px rgba(0, 0, 0, 0.14);
+  color: var(--fg);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.editor-host .cm-panel.cm-search .cm-textfield {
+  flex: 1 1 180px;
+  min-width: 140px;
+  height: 28px;
+  margin: 0;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-editor);
+  color: var(--fg);
+  font: inherit;
+  outline: none;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.editor-host .cm-panel.cm-search .cm-textfield:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.editor-host .cm-panel.cm-search .cm-textfield::placeholder {
+  color: var(--fg-faint);
+}
+.editor-host .cm-panel.cm-search .cm-button {
+  height: 28px;
+  margin: 0;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: default;
+  transition: background 0.1s ease, color 0.1s ease;
+}
+.editor-host .cm-panel.cm-search .cm-button:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+.editor-host .cm-panel.cm-search .cm-button[name="next"],
+.editor-host .cm-panel.cm-search .cm-button[name="prev"] {
+  min-width: 28px;
+  padding: 0 8px;
+  font-weight: 600;
+}
+.editor-host .cm-panel.cm-search label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0 4px;
+  color: var(--fg-muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+  user-select: none;
+}
+.editor-host .cm-panel.cm-search input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.editor-host .cm-panel.cm-search br {
+  display: none;
+}
+.editor-host .cm-panel.cm-search .cm-textfield[name="replace"] {
+  flex-basis: 100%;
+}
+.editor-host .cm-panel.cm-search .cm-button[name="close"] {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 5px;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--fg-faint);
+}
+.editor-host .cm-panel.cm-search .cm-button[name="close"]:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+.editor-host .cm-searchMatch {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  border-radius: 2px;
+}
+.editor-host .cm-searchMatch-selected {
+  background: color-mix(in srgb, var(--accent) 48%, transparent);
+}
 
 /* ============================================================
    按钮 — 紧凑、无渐变、类系统控件
