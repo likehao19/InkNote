@@ -893,6 +893,15 @@ body.sidebar-resizing * {
   --editor-block-indent: 16px;
   --editor-quote-bar: 3px;
   --editor-list-marker-offset: 1.35em;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.editor-host .cm-editor,
+.editor-host .cm-scroller,
+.editor-host .cm-content,
+.editor-host .cm-line {
+  user-select: text;
+  -webkit-user-select: text;
 }
 .editor-host .cm-editor { height: 100%; background: var(--bg-editor); }
 .editor-host .cm-editor.cm-focused { outline: none; }
@@ -908,12 +917,16 @@ body.sidebar-resizing * {
   margin: 0 auto;
   color: var(--fg);
   caret-color: var(--fg);
+  user-select: text;
 }
 .editor-host .cm-line {
   position: relative;
   padding: 0 var(--editor-padding-x);
 }
-.editor-host .cm-cursor, .editor-host .cm-dropCursor { border-left-color: var(--fg); border-left-width: 2px; }
+.editor-host .cm-cursor, .editor-host .cm-dropCursor {
+  border-left-color: color-mix(in srgb, var(--fg) 42%, transparent);
+  border-left-width: 1.5px;
+}
 .editor-host .cm-selectionBackground,
 .editor-host .cm-content ::selection { background: var(--selection); }
 .editor-host .cm-gutters { display: none; }
@@ -930,7 +943,17 @@ body.sidebar-resizing * {
   padding: 0 8px 0 4px;
 }
 
-/* 实时预览渲染 */
+/* 实时预览渲染 — 仅透明隐藏，不阻断鼠标命中 */
+.cm-md-syntax-hidden {
+  color: transparent !important;
+}
+.cm-md-syntax-hidden--collapse {
+  font-size: 0;
+  width: 0;
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: baseline;
+}
 .cm-md-h1 { font-size: 1.85em; font-weight: 700; letter-spacing: -0.02em; }
 .cm-md-h2 { font-size: 1.5em; font-weight: 700; letter-spacing: -0.01em; }
 .cm-md-h3 { font-size: 1.28em; font-weight: 600; }
@@ -961,20 +984,22 @@ body.sidebar-resizing * {
   width: var(--editor-quote-bar);
   background: var(--border-strong);
   border-radius: 2px;
+  pointer-events: none;
 }
 
-/* 列表：正文与段落左对齐，标记在左侧边距区 */
+/* 列表：标记左缘与段落/引用竖线左缘对齐，正文向右缩进 */
 .cm-line.md-list-item {
-  padding-left: var(--editor-padding-x);
+  padding-left: calc(var(--editor-padding-x) + var(--editor-list-marker-offset));
 }
 .cm-line.md-list-item.md-bullet-list:not(.md-task-item)::before {
   content: "•";
   position: absolute;
-  left: calc(var(--editor-padding-x) - var(--editor-list-marker-offset));
+  left: var(--md-list-marker-left, var(--editor-padding-x));
   width: var(--editor-list-marker-offset);
-  text-align: center;
+  text-align: left;
   color: var(--fg-muted);
   font-weight: 600;
+  pointer-events: none;
 }
 .editor-host .cm-content { counter-reset: md-olist; }
 .cm-line.md-list-item.md-ordered-list:not(.md-task-item) {
@@ -983,23 +1008,28 @@ body.sidebar-resizing * {
 .cm-line.md-list-item.md-ordered-list:not(.md-task-item)::before {
   content: counter(md-olist) ".";
   position: absolute;
-  left: calc(var(--editor-padding-x) - var(--editor-list-marker-offset));
+  left: var(--md-list-marker-left, var(--editor-padding-x));
   width: var(--editor-list-marker-offset);
-  text-align: right;
+  text-align: left;
   color: var(--fg-muted);
   font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.cm-line.md-task-item {
+  padding-left: calc(var(--editor-padding-x) + var(--editor-list-marker-offset));
 }
 .cm-line.md-task-item::before {
   content: "";
   position: absolute;
-  left: calc(var(--editor-padding-x) - 22px);
-  top: 0.42em;
+  left: var(--md-list-marker-left, var(--editor-padding-x));
+  top: 0.45em;
   width: 14px;
   height: 14px;
   border: 1.5px solid var(--border-strong);
   border-radius: 3px;
   background: var(--bg-editor);
   box-sizing: border-box;
+  pointer-events: none;
 }
 
 /* 块级 Widget 与正文左缘对齐 */
@@ -1022,6 +1052,7 @@ body.sidebar-resizing * {
   margin-top: 12px;
   margin-bottom: 12px;
   text-align: center;
+  cursor: text;
 }
 .md-image-widget img {
   max-width: 100%;
@@ -1063,6 +1094,7 @@ body.sidebar-resizing * {
   overflow: hidden;
   border: 1px solid var(--border);
   background: var(--code-bg);
+  cursor: text;
 }
 .md-codeblock-widget pre {
   margin: 0;
@@ -1102,6 +1134,7 @@ body.sidebar-resizing * {
   margin-bottom: 20px;
   background: var(--border-strong);
   border: none;
+  cursor: text;
 }
 
 /* ============================================================
@@ -1377,6 +1410,31 @@ html.platform-mac .settings-panel { border-radius: 12px; }
 /* ============================================================
    设置弹窗（旧）/ 通用对话框
    ============================================================ */
+/* ---------- Toast 提示 ---------- */
+.toast {
+  position: fixed;
+  bottom: calc(var(--statusbar-height) + 16px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 300;
+  max-width: min(480px, 92vw);
+  padding: 10px 16px;
+  background: #c42b1c;
+  color: #fff;
+  font-size: 12.5px;
+  line-height: 1.45;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+  pointer-events: none;
+  animation: toast-in 0.2s ease;
+}
+html.platform-mac .toast { bottom: calc(var(--statusbar-height) + 20px); }
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ---------- 设置弹窗 ---------- */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -1471,23 +1529,41 @@ html.platform-mac .modal { border-radius: 10px; }
 }
 .md-table-widget th { background: var(--code-bg); font-weight: 600; }
 
+/* 工具栏占位槽：始终保留高度，避免聚焦时布局跳动 */
+.md-table-toolbar-slot {
+  min-height: 30px;
+  margin-bottom: 2px;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
 .md-table-toolbar {
-  display: none;
+  display: flex;
   align-items: center;
-  gap: 2px;
-  margin-bottom: 6px;
-  padding: 2px 4px;
+  gap: 4px;
+  height: 30px;
+  padding: 0;
   width: fit-content;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  box-shadow: 0 2px 8px color-mix(in srgb, #000 10%, transparent);
+  background: transparent;
+  border: none;
+  box-shadow: none;
   user-select: none;
-  pointer-events: auto;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
 }
 .md-table-widget--focused .md-table-toolbar,
 .md-table-widget:focus-within .md-table-toolbar {
-  display: flex;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+.md-table-widget th.md-table-col-active,
+.md-table-widget td.md-table-col-active {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 .md-table-toolbar-btn {
   display: inline-flex;
@@ -1503,22 +1579,21 @@ html.platform-mac .modal { border-radius: 10px; }
   cursor: pointer;
 }
 .md-table-toolbar-btn:hover {
-  background: var(--bg-hover);
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
   color: var(--fg);
+}
+.md-table-toolbar-delete {
+  margin-left: 2px;
 }
 .md-table-toolbar-delete:hover {
   color: #e5484d;
-}
-.md-table-toolbar-sep {
-  width: 1px;
-  height: 16px;
-  margin: 0 4px;
-  background: var(--border);
+  background: color-mix(in srgb, #e5484d 10%, transparent);
 }
 .md-table-toolbar-group {
   display: flex;
   align-items: center;
   gap: 2px;
+  margin-left: 2px;
 }
 .md-table-toolbar-dropdown {
   position: relative;
@@ -1555,15 +1630,22 @@ html.platform-mac .modal { border-radius: 10px; }
 .md-table-toolbar-menu button:hover {
   background: var(--bg-hover);
 }
+.md-table-toolbar-menu-danger {
+  color: #e5484d;
+}
+.md-table-toolbar-menu-danger:hover {
+  background: color-mix(in srgb, #e5484d 12%, transparent);
+}
 
 /* ---------- 数学公式 ---------- */
-.md-math-inline { padding: 0 2px; }
+.md-math-inline { padding: 0 2px; cursor: text; }
 .md-math-block {
   margin-top: 16px;
   margin-bottom: 16px;
   padding: 12px 0;
   overflow-x: auto;
   text-align: center;
+  cursor: text;
 }
 
 /* ---------- Mermaid ---------- */
@@ -1575,6 +1657,7 @@ html.platform-mac .modal { border-radius: 10px; }
   border-radius: 6px;
   background: var(--code-bg);
   overflow-x: auto;
+  cursor: text;
 }
 .md-mermaid-error { color: #cf222e; font-size: 0.85em; }
 
@@ -1587,6 +1670,7 @@ html.platform-mac .modal { border-radius: 10px; }
   color: var(--fg-muted);
   font-size: 0.85em;
   font-family: var(--font-mono);
+  cursor: text;
 }
 
 /* ---------- 专注 / 打字机模式 ---------- */
@@ -1646,6 +1730,60 @@ html.platform-mac .table-size-picker { border-radius: 10px; }
   text-align: center;
   font-size: 12px;
   color: var(--fg-muted);
+}
+.table-size-custom {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.table-size-custom-label {
+  font-size: 11px;
+  color: var(--fg-muted);
+  width: 100%;
+  text-align: center;
+  margin-bottom: 2px;
+}
+.table-size-custom-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+.table-size-custom-field input {
+  width: 44px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-editor);
+  color: var(--fg);
+  font-size: 12px;
+  text-align: center;
+}
+.table-size-custom-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.table-size-custom-x {
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+.table-size-confirm {
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+.table-size-confirm:hover {
+  filter: brightness(1.05);
 }
 .btn-primary, .btn-secondary {
   height: 28px; padding: 0 14px;

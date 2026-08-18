@@ -4,6 +4,8 @@ import { EditorSelection, EditorState, type Range } from "@codemirror/state";
 import { syntaxTree } from "@codemirror/language";
 import type { SyntaxNodeRef } from "@lezer/common";
 import { getLocale, t } from "../../lib/i18n";
+import { getConfirmDelete } from "../../lib/preferences";
+import { bindBlockClickEdit } from "./blockRange";
 
 export type TableAlign = "left" | "center" | "right";
 
@@ -18,11 +20,31 @@ export interface TableData {
   aligns: TableAlign[];
 }
 
-function parseRow(line: string): string[] {
+/** 按未转义的 | 拆分单元格，支持 \| */
+function splitTableCells(line: string): string[] {
   let inner = line.trim();
   if (inner.startsWith("|")) inner = inner.slice(1);
   if (inner.endsWith("|")) inner = inner.slice(0, -1);
-  return inner.split("|").map((cell) => cell.trim());
+
+  const cells: string[] = [];
+  let current = "";
+  for (let i = 0; i < inner.length; i++) {
+    if (inner[i] === "\\" && inner[i + 1] === "|") {
+      current += "|";
+      i++;
+    } else if (inner[i] === "|") {
+      cells.push(current.trim());
+      current = "";
+    } else {
+      current += inner[i];
+    }
+  }
+  cells.push(current.trim());
+  return cells;
+}
+
+function parseRow(line: string): string[] {
+  return splitTableCells(line);
 }
 
 function isDelimiterLine(line: string): boolean {
@@ -42,7 +64,7 @@ function parseAlignments(line: string): TableAlign[] {
 }
 
 export function parseTable(
-  node: SyntaxNodeRef,
+  node: SyntaxNodeRef | TableRange,
   doc: EditorState["doc"],
 ): TableData {
   const text = doc.sliceString(node.from, node.to);
@@ -110,12 +132,18 @@ export function insertTableAtCursor(
   const prefix = line.text.length > 0 ? "\n\n" : "";
   const insert = `${prefix}${text}`;
   const at = line.to;
+  const tableFrom = at + prefix.length;
+  const tableTo = at + insert.length;
   view.dispatch({
     changes: { from: at, insert },
-    selection: { anchor: at + insert.length },
+    selection: { anchor: tableTo },
     scrollIntoView: true,
   });
-  view.focus();
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      focusTableCellAt(view, { from: tableFrom, to: tableTo }, 0, 0);
+    });
+  });
   return true;
 }
 
@@ -158,6 +186,221 @@ export function iterTables(state: EditorState): TableRange[] {
   return tables;
 }
 
+export function cellColAtPos(lineText: string, lineFrom: number, pos: number): number {
+  let col = 0;
+  let i = 0;
+  while (i < lineText.length && lineText[i] === " ") i++;
+  if (lineText[i] === "|") i++;
+  let cellStart = i;
+
+  for (; i < lineText.length; ) {
+    if (lineText[i] === "\\" && lineText[i + 1] === "|") {
+      i += 2;
+      continue;
+    }
+    if (lineText[i] === "|") {
+      const cellFrom = lineFrom + cellStart;
+      const cellTo = lineFrom + i;
+      if (pos >= cellFrom && pos <= cellTo) return col;
+      col++;
+      i++;
+      while (i < lineText.length && lineText[i] === " ") i++;
+      cellStart = i;
+      continue;
+    }
+    i++;
+  }
+  if (pos >= lineFrom + cellStart) return col;
+  return 0;
+}
+
+function tableRowAtLine(state: EditorState, tableFrom: number, lineNumber: number): number | null {
+  const startLine = state.doc.lineAt(tableFrom).number;
+  const rel = lineNumber - startLine;
+  if (rel === 0) return 0;
+  if (rel === 1) {
+    const delim = state.doc.line(startLine + 1);
+    if (delim && isDelimiterLine(delim.text)) return null;
+  }
+  const hasDelim = (() => {
+    const l = state.doc.line(startLine + 1);
+    return l && isDelimiterLine(l.text);
+  })();
+  if (hasDelim) return rel - 1;
+  return rel;
+}
+
+export interface TableCursorContext {
+  range: TableRange;
+  data: TableData;
+  row: number;
+  col: number;
+}
+
+export function getTableAtCursor(state: EditorState, pos: number): TableCursorContext | null {
+  let from = -1;
+  let to = -1;
+  syntaxTree(state).iterate({
+    enter(node) {
+      if (node.name === "Table" && node.from <= pos && node.to >= pos) {
+        from = node.from;
+        to = node.to;
+        return false;
+      }
+    },
+  });
+  if (from < 0) return null;
+
+  const range = { from, to };
+  const line = state.doc.lineAt(pos);
+  if (isDelimiterLine(line.text)) return null;
+
+  const row = tableRowAtLine(state, from, line.number);
+  if (row === null) return null;
+
+  const data = parseTable(range, state.doc);
+  const col = cellColAtPos(line.text, line.from, pos);
+  return { range, data, row, col };
+}
+
+export type TableEditAction =
+  | "row-below"
+  | "row-above"
+  | "row-delete"
+  | "col-left"
+  | "col-right"
+  | "col-delete"
+  | "align-left"
+  | "align-center"
+  | "align-right"
+  | "delete";
+
+interface CellPosition {
+  row: number;
+  col: number;
+}
+
+export function mutateTableData(
+  data: TableData,
+  row: number,
+  col: number,
+  action: TableEditAction,
+): { data: TableData; focus: CellPosition } | null {
+  const next: TableData = {
+    header: [...data.header],
+    rows: data.rows.map((r) => [...r]),
+    aligns: [...data.aligns],
+  };
+  const cols = colCount(next);
+  const empty = emptyRow(cols);
+  const isHeader = row === 0;
+
+  switch (action) {
+    case "row-above": {
+      let focusRow = row;
+      if (isHeader) {
+        next.rows.unshift([...next.header]);
+        next.header = empty;
+        focusRow = 0;
+      } else {
+        next.rows.splice(row - 1, 0, empty);
+        focusRow = row;
+      }
+      return { data: next, focus: { row: focusRow, col } };
+    }
+    case "row-below": {
+      let focusRow = 1;
+      if (isHeader) {
+        next.rows.splice(0, 0, empty);
+        focusRow = 1;
+      } else {
+        next.rows.splice(row, 0, empty);
+        focusRow = row + 1;
+      }
+      return { data: next, focus: { row: focusRow, col } };
+    }
+    case "row-delete": {
+      if (isHeader) {
+        if (next.rows.length === 0) return null;
+        next.header = [...next.rows[0]];
+        next.rows.shift();
+        return { data: next, focus: { row: 0, col } };
+      }
+      next.rows.splice(row - 1, 1);
+      return { data: next, focus: { row: Math.min(row, next.rows.length), col } };
+    }
+    case "col-left": {
+      const at = col;
+      next.header.splice(at, 0, "");
+      next.aligns.splice(at, 0, "left");
+      for (const r of next.rows) r.splice(at, 0, "");
+      return { data: next, focus: { row, col: at } };
+    }
+    case "col-right": {
+      const at = col + 1;
+      next.header.splice(at, 0, "");
+      next.aligns.splice(at, 0, "left");
+      for (const r of next.rows) r.splice(at, 0, "");
+      return { data: next, focus: { row, col: at } };
+    }
+    case "col-delete": {
+      if (cols <= 1) return null;
+      next.header.splice(col, 1);
+      next.aligns.splice(col, 1);
+      for (const r of next.rows) r.splice(col, 1);
+      return { data: next, focus: { row, col: Math.min(col, colCount(next) - 1) } };
+    }
+    case "align-left":
+    case "align-center":
+    case "align-right": {
+      const align = action.slice("align-".length) as TableAlign;
+      while (next.aligns.length <= col) next.aligns.push("left");
+      next.aligns[col] = align;
+      return { data: next, focus: { row, col } };
+    }
+    case "delete":
+      return null;
+    default:
+      return null;
+  }
+}
+
+export function mutateTableInView(view: EditorView, action: TableEditAction): boolean {
+  if (action === "delete") {
+    const ctx = getTableAtCursor(view.state, view.state.selection.main.head);
+    if (!ctx) return false;
+    if (getConfirmDelete()) {
+      const locale = getLocale();
+      if (!window.confirm(t(locale, "confirm.deleteTable"))) return false;
+    }
+    let end = ctx.range.to;
+    if (end < view.state.doc.length && view.state.doc.sliceString(end, end + 1) === "\n") {
+      end += 1;
+    }
+    view.dispatch({
+      changes: { from: ctx.range.from, to: end, insert: "" },
+      selection: { anchor: ctx.range.from },
+      scrollIntoView: true,
+    });
+    view.focus();
+    return true;
+  }
+
+  const ctx = getTableAtCursor(view.state, view.state.selection.main.head);
+  if (!ctx) return false;
+  const result = mutateTableData(ctx.data, ctx.row, ctx.col, action);
+  if (!result) return false;
+
+  const insert = serializeTable(result.data.header, result.data.rows, result.data.aligns);
+  view.dispatch({
+    changes: { from: ctx.range.from, to: ctx.range.to, insert },
+    selection: { anchor: ctx.range.from },
+    scrollIntoView: true,
+  });
+  view.focus();
+  return true;
+}
+
 export function positionAfterTable(state: EditorState, tableTo: number): number {
   if (tableTo < state.doc.length && state.doc.sliceString(tableTo, tableTo + 1) === "\n") {
     return tableTo + 1;
@@ -165,21 +408,34 @@ export function positionAfterTable(state: EditorState, tableTo: number): number 
   return tableTo;
 }
 
+function tablesEndingAtLine(state: EditorState): Map<number, TableRange> {
+  const map = new Map<number, TableRange>();
+  for (const table of iterTables(state)) {
+    map.set(state.doc.lineAt(table.to).number, table);
+  }
+  return map;
+}
+
+function tablesStartingAtLine(state: EditorState): Map<number, TableRange> {
+  const map = new Map<number, TableRange>();
+  for (const table of iterTables(state)) {
+    map.set(state.doc.lineAt(table.from).number, table);
+  }
+  return map;
+}
+
 export function tableEndingBefore(state: EditorState, pos: number): TableRange | null {
   const line = state.doc.lineAt(pos);
   if (pos !== line.from) return null;
 
+  const byEndLine = tablesEndingAtLine(state);
   let scanFrom = line.from - 1;
   if (scanFrom < 0) return null;
 
   while (scanFrom >= 0) {
     const scanLine = state.doc.lineAt(scanFrom);
     if (scanLine.text.trim().length > 0) {
-      for (const table of iterTables(state)) {
-        const tableEndLine = state.doc.lineAt(table.to);
-        if (tableEndLine.number === scanLine.number) return table;
-      }
-      return null;
+      return byEndLine.get(scanLine.number) ?? null;
     }
     scanFrom = scanLine.from - 1;
   }
@@ -190,17 +446,14 @@ export function tableStartingAfter(state: EditorState, pos: number): TableRange 
   const line = state.doc.lineAt(pos);
   if (pos !== line.to) return null;
 
+  const byStartLine = tablesStartingAtLine(state);
   let scanFrom = line.to + 1;
   if (scanFrom > state.doc.length) return null;
 
   while (scanFrom <= state.doc.length) {
     const scanLine = state.doc.lineAt(scanFrom);
     if (scanLine.text.trim().length > 0) {
-      for (const table of iterTables(state)) {
-        const tableStartLine = state.doc.lineAt(table.from);
-        if (tableStartLine.number === scanLine.number) return table;
-      }
-      return null;
+      return byStartLine.get(scanLine.number) ?? null;
     }
     scanFrom = scanLine.to + 1;
   }
@@ -331,6 +584,58 @@ function focusAdjacentCell(cell: HTMLElement, backward: boolean) {
   placeCaret(next, !backward);
 }
 
+function cellIndexFromRowCol(wrap: HTMLElement, row: number, col: number): number {
+  const rowLen =
+    wrap.querySelectorAll("thead tr th").length ||
+    wrap.querySelectorAll("tbody tr:first-child td").length ||
+    1;
+  if (row === 0) return col;
+  return rowLen + (row - 1) * rowLen + col;
+}
+
+function updateActiveColumn(wrap: HTMLElement, col: number) {
+  wrap.querySelectorAll<HTMLElement>(".md-table-col-active").forEach((el) => {
+    el.classList.remove("md-table-col-active");
+  });
+  wrap.querySelectorAll<HTMLElement>(`[data-col="${col}"]`).forEach((el) => {
+    el.classList.add("md-table-col-active");
+  });
+}
+
+function focusCellOnWrap(wrap: HTMLElement, row: number, col: number, atEnd = false) {
+  const cells = getEditableCells(wrap);
+  const idx = cellIndexFromRowCol(wrap, row, col);
+  const cell = cells[idx];
+  if (!cell) return;
+  wrap.classList.add("md-table-widget--focused");
+  updateActiveColumn(wrap, col);
+  cell.focus();
+  placeCaret(cell, atEnd);
+}
+
+const pendingFocusByTable = new Map<number, CellPosition>();
+
+export function focusTableCellAt(
+  view: EditorView,
+  table: TableRange,
+  row: number,
+  col: number,
+  atEnd = false,
+): boolean {
+  view.dispatch({
+    selection: { anchor: positionAfterTable(view.state, table.to) },
+  });
+
+  requestAnimationFrame(() => {
+    const wrap = view.dom.querySelector(
+      `.md-table-widget[data-table-from="${table.from}"]`,
+    ) as HTMLElement | null;
+    if (!wrap) return;
+    focusCellOnWrap(wrap, row, col, atEnd);
+  });
+  return true;
+}
+
 export function focusTableCell(
   view: EditorView,
   table: TableRange,
@@ -346,17 +651,33 @@ export function focusTableCell(
     ) as HTMLElement | null;
     if (!wrap) return;
     const cells = getEditableCells(wrap);
-    const cell = last ? cells[cells.length - 1] : cells[0];
-    if (!cell) return;
-    cell.focus();
-    placeCaret(cell, last);
+    if (!cells.length) return;
+    if (last) {
+      const rowLen =
+        wrap.querySelectorAll("thead tr th").length ||
+        wrap.querySelectorAll("tbody tr:first-child td").length ||
+        1;
+      const idx = cells.length - 1;
+      focusCellOnWrap(wrap, Math.floor(idx / rowLen), idx % rowLen, true);
+    } else {
+      focusCellOnWrap(wrap, 0, 0, false);
+    }
   });
   return true;
 }
 
-function snapOutsideTable(state: EditorState, pos: number): number {
+function snapOutsideTable(
+  state: EditorState,
+  pos: number,
+  selFrom: number,
+  selTo: number,
+): number {
   for (const table of iterTables(state)) {
     if (pos > table.from && pos < table.to) {
+      // 光标已在表格源码内（预览 Widget 已隐藏）时允许精确定位
+      const editingSource = table.from <= selTo && selFrom < table.to;
+      if (editingSource) return pos;
+
       const mid = (table.from + table.to) / 2;
       return pos >= mid
         ? positionAfterTable(state, table.to)
@@ -367,15 +688,24 @@ function snapOutsideTable(state: EditorState, pos: number): number {
 }
 
 let tableSyncing = false;
-let syncFrame = 0;
+const syncFrames = new Map<HTMLElement, number>();
 
-function applyTableData(wrap: HTMLElement, view: EditorView, data: TableData) {
+function applyTableData(
+  wrap: HTMLElement,
+  view: EditorView,
+  data: TableData,
+  focusAt?: CellPosition,
+) {
   const cols = colCount(data);
   while (data.header.length < cols) data.header.push("");
   while (data.aligns.length < cols) data.aligns.push("left");
   for (const row of data.rows) while (row.length < cols) row.push("");
 
   writeAligns(wrap, data.aligns);
+  if (focusAt) {
+    const from = Number(wrap.dataset.tableFrom);
+    if (!Number.isNaN(from)) pendingFocusByTable.set(from, focusAt);
+  }
   syncTableFromDom(wrap, view, data);
 }
 
@@ -400,11 +730,13 @@ function syncTableFromDom(wrap: HTMLElement, view: EditorView, data?: TableData)
 }
 
 function scheduleSync(wrap: HTMLElement, view: EditorView) {
-  if (syncFrame) cancelAnimationFrame(syncFrame);
-  syncFrame = requestAnimationFrame(() => {
-    syncFrame = 0;
+  const existing = syncFrames.get(wrap);
+  if (existing) cancelAnimationFrame(existing);
+  const id = requestAnimationFrame(() => {
+    syncFrames.delete(wrap);
     syncTableFromDom(wrap, view);
   });
+  syncFrames.set(wrap, id);
 }
 
 function exitTableToLineAbove(view: EditorView, wrap: HTMLElement) {
@@ -430,52 +762,46 @@ function exitTableToLineBelow(view: EditorView, wrap: HTMLElement) {
 }
 
 function insertRowAbove(wrap: HTMLElement, view: EditorView) {
-  const info = getFocusedCellInfo(wrap);
-  const data = readTableFromDom(wrap);
-  const cols = colCount(data);
-  const empty = emptyRow(cols);
-  if (!info || info.isHeader) {
-    data.rows.unshift([...data.header]);
-    data.header = empty;
-  } else {
-    data.rows.splice(info.row - 1, 0, empty);
-  }
-  applyTableData(wrap, view, data);
+  applyTableEdit(wrap, view, "row-above");
 }
 
 function insertRowBelow(wrap: HTMLElement, view: EditorView) {
-  const info = getFocusedCellInfo(wrap);
-  const data = readTableFromDom(wrap);
-  const cols = colCount(data);
-  const empty = emptyRow(cols);
-  if (!info || info.isHeader) {
-    data.rows.splice(0, 0, empty);
-  } else {
-    data.rows.splice(info.row, 0, empty);
-  }
-  applyTableData(wrap, view, data);
+  applyTableEdit(wrap, view, "row-below");
 }
 
 function insertCol(wrap: HTMLElement, view: EditorView, side: "left" | "right") {
-  const info = getFocusedCellInfo(wrap);
-  const data = readTableFromDom(wrap);
-  const at = (info?.col ?? 0) + (side === "right" ? 1 : 0);
-  data.header.splice(at, 0, "");
-  data.aligns.splice(at, 0, "left");
-  for (const row of data.rows) row.splice(at, 0, "");
-  applyTableData(wrap, view, data);
+  applyTableEdit(wrap, view, side === "left" ? "col-left" : "col-right");
+}
+
+function deleteRow(wrap: HTMLElement, view: EditorView) {
+  applyTableEdit(wrap, view, "row-delete");
+}
+
+function deleteCol(wrap: HTMLElement, view: EditorView) {
+  applyTableEdit(wrap, view, "col-delete");
 }
 
 function setColumnAlign(wrap: HTMLElement, view: EditorView, align: TableAlign) {
+  const action =
+    align === "center" ? "align-center" : align === "right" ? "align-right" : "align-left";
+  applyTableEdit(wrap, view, action);
+}
+
+function applyTableEdit(wrap: HTMLElement, view: EditorView, action: TableEditAction) {
   const info = getFocusedCellInfo(wrap);
   const data = readTableFromDom(wrap);
+  const row = info?.row ?? 0;
   const col = info?.col ?? 0;
-  while (data.aligns.length <= col) data.aligns.push("left");
-  data.aligns[col] = align;
-  applyTableData(wrap, view, data);
+  const result = mutateTableData(data, row, col, action);
+  if (!result) return;
+  applyTableData(wrap, view, result.data, result.focus);
 }
 
 function deleteTable(wrap: HTMLElement, view: EditorView) {
+  if (getConfirmDelete()) {
+    const locale = getLocale();
+    if (!window.confirm(t(locale, "confirm.deleteTable"))) return;
+  }
   const from = Number(wrap.dataset.tableFrom);
   const to = Number(wrap.dataset.tableTo);
   if (Number.isNaN(from) || Number.isNaN(to)) return;
@@ -498,11 +824,17 @@ function handleToolbarAction(wrap: HTMLElement, view: EditorView, action: string
     case "row-above":
       insertRowAbove(wrap, view);
       break;
+    case "row-delete":
+      deleteRow(wrap, view);
+      break;
     case "col-left":
       insertCol(wrap, view, "left");
       break;
     case "col-right":
       insertCol(wrap, view, "right");
+      break;
+    case "col-delete":
+      deleteCol(wrap, view);
       break;
     case "align-left":
       setColumnAlign(wrap, view, "left");
@@ -561,8 +893,10 @@ export function tableSelectionSnap(): Extension {
 
     let changed = false;
     const ranges = tr.selection.ranges.map((range) => {
-      const anchor = snapOutsideTable(tr.startState, range.anchor);
-      const head = snapOutsideTable(tr.startState, range.head);
+      const selFrom = Math.min(range.anchor, range.head);
+      const selTo = Math.max(range.anchor, range.head);
+      const anchor = snapOutsideTable(tr.startState, range.anchor, selFrom, selTo);
+      const head = snapOutsideTable(tr.startState, range.head, selFrom, selTo);
       if (anchor === range.anchor && head === range.head) return range;
       changed = true;
       return EditorSelection.range(anchor, head);
@@ -582,7 +916,9 @@ function closeAllTableMenus(except?: Element) {
 /** 表格单元格 contenteditable 与 Markdown 源码同步 */
 export function tableEditingHandlers(): Extension {
   return EditorView.domEventHandlers({
-    mousedown(event, view) {
+    mousedown(event, _view) {
+      if (event.button !== 0) return false;
+
       const wrap = (event.target as HTMLElement).closest(".md-table-widget") as
         | HTMLElement
         | null;
@@ -596,33 +932,17 @@ export function tableEditingHandlers(): Extension {
         "th[contenteditable], td[contenteditable]",
       ) as HTMLElement | null;
 
-      const from = Number(wrap.dataset.tableFrom);
-      const to = Number(wrap.dataset.tableTo);
-      if (Number.isNaN(from) || Number.isNaN(to)) return false;
-
       if (cell) {
         wrap.classList.add("md-table-widget--focused");
-        view.dispatch({
-          selection: { anchor: positionAfterTable(view.state, to) },
-        });
-        requestAnimationFrame(() => {
-          if (!wrap.contains(document.activeElement)) cell.focus();
-        });
-        return false;
+        const col = Array.from(cell.parentElement?.children ?? []).indexOf(cell);
+        if (col >= 0) updateActiveColumn(wrap, col);
+        event.preventDefault();
+        event.stopPropagation();
+        cell.focus();
+        return true;
       }
 
-      event.preventDefault();
-      const rect = wrap.getBoundingClientRect();
-      if (event.clientY < rect.top + rect.height / 2) {
-        const line = view.state.doc.lineAt(from);
-        const pos = line.number > 1 ? view.state.doc.line(line.number - 1).to : 0;
-        view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
-      } else {
-        const pos = positionAfterTable(view.state, to);
-        view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
-      }
-      view.focus();
-      return true;
+      return false;
     },
     focusin(event) {
       const wrap = (event.target as HTMLElement).closest(".md-table-widget");
@@ -662,6 +982,31 @@ export function tableEditingHandlers(): Extension {
       if (!wrap) return false;
       syncTableFromDom(wrap, view);
       return false;
+    },
+    paste(event, view) {
+      const target = event.target as HTMLElement;
+      const cell = target.closest(
+        ".md-table-widget th[contenteditable], .md-table-widget td[contenteditable]",
+      ) as HTMLElement | null;
+      if (!cell) return false;
+
+      event.preventDefault();
+      const text = event.clipboardData?.getData("text/plain") ?? "";
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        const range = sel.getRangeAt(0);
+        range.deleteContents();
+        range.insertNode(document.createTextNode(text));
+        range.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      } else {
+        cell.textContent = (cell.textContent ?? "") + text;
+      }
+
+      const wrap = cell.closest(".md-table-widget") as HTMLElement | null;
+      if (wrap) scheduleSync(wrap, view);
+      return true;
     },
     keydown(event, view) {
       const target = event.target as HTMLElement;
@@ -781,6 +1126,7 @@ function appendEditableRow(
     const el = document.createElement(tag);
     el.contentEditable = "true";
     el.spellcheck = false;
+    el.dataset.col = String(i);
     el.textContent = cell;
     el.style.textAlign = cellAlignStyle(aligns[i] ?? "left");
     tr.appendChild(el);
@@ -817,6 +1163,25 @@ function attachToolbarEvents(wrap: HTMLElement) {
   });
 }
 
+function refreshToolbarI18n(toolbar: HTMLElement) {
+  const locale = getLocale();
+  const menuBtn = toolbar.querySelector<HTMLElement>('[data-action="menu-toggle"]');
+  if (menuBtn) menuBtn.title = t(locale, "table.toolbar.rows");
+
+  toolbar.querySelectorAll<HTMLElement>("[data-i18n]").forEach((el) => {
+    const key = el.dataset.i18n as Parameters<typeof t>[1];
+    if (!key) return;
+    if (el.dataset.i18nTitle === "true") {
+      el.title = t(locale, key);
+    } else {
+      el.textContent = t(locale, key);
+    }
+  });
+
+  const deleteBtn = toolbar.querySelector<HTMLElement>('[data-action="delete"]');
+  if (deleteBtn) deleteBtn.title = t(locale, "table.toolbar.delete");
+}
+
 function createToolbar(): HTMLElement {
   const locale = getLocale();
   const bar = document.createElement("div");
@@ -839,24 +1204,26 @@ function createToolbar(): HTMLElement {
   const menuItems: Array<{ action: string; key: Parameters<typeof t>[1] }> = [
     { action: "row-below", key: "table.toolbar.insertRowBelow" },
     { action: "row-above", key: "table.toolbar.insertRowAbove" },
+    { action: "row-delete", key: "table.toolbar.deleteRow" },
     { action: "col-left", key: "table.toolbar.insertColLeft" },
     { action: "col-right", key: "table.toolbar.insertColRight" },
+    { action: "col-delete", key: "table.toolbar.deleteCol" },
   ];
   for (const item of menuItems) {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.dataset.action = item.action;
+    btn.dataset.i18n = item.key;
     btn.textContent = t(locale, item.key);
+    if (item.action === "row-delete" || item.action === "col-delete") {
+      btn.classList.add("md-table-toolbar-menu-danger");
+    }
     menu.appendChild(btn);
   }
 
   dropdown.appendChild(menuBtn);
   dropdown.appendChild(menu);
   bar.appendChild(dropdown);
-
-  const sep = document.createElement("span");
-  sep.className = "md-table-toolbar-sep";
-  bar.appendChild(sep);
 
   const alignGroup = document.createElement("div");
   alignGroup.className = "md-table-toolbar-group";
@@ -882,6 +1249,8 @@ function createToolbar(): HTMLElement {
     btn.type = "button";
     btn.className = "md-table-toolbar-btn";
     btn.dataset.action = item.action;
+    btn.dataset.i18n = item.key;
+    btn.dataset.i18nTitle = "true";
     btn.title = t(locale, item.key);
     btn.innerHTML = item.icon;
     alignGroup.appendChild(btn);
@@ -897,7 +1266,17 @@ function createToolbar(): HTMLElement {
     '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M5 2V1h6v1h4v1.5H1V2h4zm1 4h1.5v7H6V6zm3 0H10.5v7H9V6zM3.5 6H5v9.5c0 .8.7 1.5 1.5 1.5h3c.8 0 1.5-.7 1.5-1.5V6h1.5v9.5c0 1.7-1.3 3-3 3h-3c-1.7 0-3-1.3-3-3V6z"/></svg>';
   bar.appendChild(deleteBtn);
 
-  return bar;
+  const slot = document.createElement("div");
+  slot.className = "md-table-toolbar-slot";
+  slot.appendChild(bar);
+  return slot;
+}
+
+function restorePendingFocusOnWrap(wrap: HTMLElement, tableFrom: number) {
+  const pending = pendingFocusByTable.get(tableFrom);
+  if (!pending) return;
+  pendingFocusByTable.delete(tableFrom);
+  requestAnimationFrame(() => focusCellOnWrap(wrap, pending.row, pending.col));
 }
 
 export class TableWidget extends WidgetType {
@@ -925,6 +1304,14 @@ export class TableWidget extends WidgetType {
     wrap.className = "md-table-widget";
     wrap.dataset.tableFrom = String(this.from);
     wrap.dataset.tableTo = String(this.to);
+    bindBlockClickEdit(wrap, this.from, this.to, {
+      shouldHandle: (event) => {
+        const target = event.target as HTMLElement;
+        if (target.closest(".md-table-toolbar")) return false;
+        if (target.closest("th[contenteditable], td[contenteditable]")) return false;
+        return true;
+      },
+    });
     writeAligns(wrap, this.aligns);
 
     wrap.appendChild(createToolbar());
@@ -969,6 +1356,8 @@ export class TableWidget extends WidgetType {
 
     attachToolbarEvents(wrap);
 
+    restorePendingFocusOnWrap(wrap, this.from);
+
     return wrap;
   }
 
@@ -976,6 +1365,9 @@ export class TableWidget extends WidgetType {
     dom.dataset.tableFrom = String(this.from);
     dom.dataset.tableTo = String(this.to);
     writeAligns(dom, this.aligns);
+
+    const toolbar = dom.querySelector(".md-table-toolbar");
+    if (toolbar) refreshToolbarI18n(toolbar as HTMLElement);
 
     const focused =
       dom.classList.contains("md-table-widget--focused") ||

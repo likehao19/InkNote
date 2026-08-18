@@ -7,6 +7,7 @@ import remarkRehype from "remark-rehype";
 import rehypeKatex from "rehype-katex";
 import rehypeHighlight from "rehype-highlight";
 import rehypeStringify from "rehype-stringify";
+import katexCss from "katex/dist/katex.min.css?inline";
 import type { ResolvedTheme } from "../lib/theme";
 
 const BASE_CSS = `
@@ -49,7 +50,7 @@ export async function markdownToHtml(md: string, theme: ResolvedTheme): Promise<
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Export</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+  <style>${katexCss}</style>
   <style>${BASE_CSS}${themeCss}</style>
 </head>
 <body>

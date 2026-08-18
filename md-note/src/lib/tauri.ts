@@ -33,6 +33,12 @@ export function watchFile(path: string): Promise<void> {
 export function unwatchFile(): Promise<void> {
   return invoke("unwatch_file");
 }
+export function watchDir(path: string): Promise<void> {
+  return invoke("watch_dir", { path });
+}
+export function unwatchDir(): Promise<void> {
+  return invoke("unwatch_dir");
+}
 export function copyFileToDir(src: string, destDir: string): Promise<string> {
   return invoke("copy_file_to_dir", { src, destDir });
 }
@@ -79,6 +85,10 @@ export function onOpenFile(cb: (path: string) => void): Promise<UnlistenFn> {
 
 export function onFileChanged(cb: (path: string) => void): Promise<UnlistenFn> {
   return listen<string>("file-changed", (e) => cb(e.payload));
+}
+
+export function onDirChanged(cb: (path: string) => void): Promise<UnlistenFn> {
+  return listen<string>("dir-changed", (e) => cb(e.payload));
 }
 
 export type MenuAction =
