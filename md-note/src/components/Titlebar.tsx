@@ -1,15 +1,23 @@
 import { useMemo } from "react";
 import { isMac } from "../lib/tauri";
-import { modShortcut } from "../lib/shortcuts";
-import MenuBar, { type MenuGroupDef } from "./MenuBar";
+import MenuBar from "./MenuBar";
+import { buildMenuGroups } from "./menus";
 import WindowControls from "./WindowControls";
+import appIcon from "../assets/app-icon.svg";
+import type { SidebarTab } from "./Sidebar";
+import type { EditorAction, EditorMode } from "../editor";
+import type { Locale } from "../lib/i18n";
+import { t } from "../lib/i18n";
 
 interface Props {
+  locale: Locale;
   fileName: string;
   dirty: boolean;
   focusMode: boolean;
   typewriterMode: boolean;
   sidebarVisible: boolean;
+  sidebarTab: SidebarTab;
+  editorMode: EditorMode;
   onOpen: () => void;
   onOpenFolder: () => void;
   onNewFile: () => void;
@@ -18,18 +26,25 @@ interface Props {
   onSaveAs: () => void;
   onExportHtml: () => void;
   onExportPdf: () => void;
+  onEditorAction: (action: EditorAction) => void;
   onToggleSidebar: () => void;
+  onSidebarTab: (tab: SidebarTab) => void;
+  onSetEditorMode: (mode: EditorMode) => void;
+  onToggleEditorMode: () => void;
   onToggleFocus: () => void;
   onToggleTypewriter: () => void;
   onOpenSettings: () => void;
 }
 
 export default function Titlebar({
+  locale,
   fileName,
   dirty,
   focusMode,
   typewriterMode,
   sidebarVisible,
+  sidebarTab,
+  editorMode,
   onOpen,
   onOpenFolder,
   onNewFile,
@@ -38,54 +53,66 @@ export default function Titlebar({
   onSaveAs,
   onExportHtml,
   onExportPdf,
+  onEditorAction,
   onToggleSidebar,
+  onSidebarTab,
+  onSetEditorMode,
+  onToggleEditorMode,
   onToggleFocus,
   onToggleTypewriter,
   onOpenSettings,
 }: Props) {
-  const menuGroups = useMemo<MenuGroupDef[]>(
-    () => [
-      {
-        label: "文件",
-        items: [
-          { label: "新建", shortcut: modShortcut("N"), action: onNewFile },
-          { label: "打开文件…", shortcut: modShortcut("O"), action: onOpen },
-          { label: "打开文件夹…", action: onOpenFolder },
-          { separator: true, label: "" },
-          { label: "关闭文件", shortcut: modShortcut("W"), action: onCloseFile },
-          { separator: true, label: "" },
-          { label: "保存", shortcut: modShortcut("S"), action: onSave },
-          { label: "另存为…", shortcut: `${modShortcut("Shift+S")}`, action: onSaveAs },
-          { separator: true, label: "" },
-          { label: "导出 HTML…", action: onExportHtml },
-          { label: "导出 PDF…", action: onExportPdf },
-          { separator: true, label: "" },
-          { label: "设置…", shortcut: modShortcut(","), action: onOpenSettings },
-        ],
-      },
-      {
-        label: "视图",
-        items: [
-          { label: "切换侧边栏", action: onToggleSidebar, checked: sidebarVisible },
-          { label: "专注模式", action: onToggleFocus, checked: focusMode },
-          { label: "打字机模式", action: onToggleTypewriter, checked: typewriterMode },
-        ],
-      },
-    ],
+  const menuGroups = useMemo(
+    () =>
+      buildMenuGroups(
+        {
+          onNewFile,
+          onOpen,
+          onOpenFolder,
+          onCloseFile,
+          onSave,
+          onSaveAs,
+          onExportHtml,
+          onExportPdf,
+          onOpenSettings,
+          onEditorAction,
+          onToggleSidebar,
+          onSidebarTab,
+          onSetEditorMode,
+          onToggleEditorMode,
+          onToggleFocus,
+          onToggleTypewriter,
+        },
+        {
+          sidebarVisible,
+          sidebarTab,
+          editorMode,
+          focusMode,
+          typewriterMode,
+        },
+        locale,
+      ),
     [
+      locale,
+      onNewFile,
       onOpen,
       onOpenFolder,
-      onNewFile,
       onCloseFile,
       onSave,
       onSaveAs,
       onExportHtml,
       onExportPdf,
       onOpenSettings,
+      onEditorAction,
       onToggleSidebar,
+      onSidebarTab,
+      onSetEditorMode,
+      onToggleEditorMode,
       onToggleFocus,
       onToggleTypewriter,
       sidebarVisible,
+      sidebarTab,
+      editorMode,
       focusMode,
       typewriterMode,
     ],
@@ -95,6 +122,9 @@ export default function Titlebar({
     <header className="titlebar">
       <div className="titlebar-left">
         {isMac && <WindowControls />}
+        <div className="titlebar-app-icon" aria-hidden="true">
+          <img src={appIcon} alt="" width={16} height={16} draggable={false} />
+        </div>
         <MenuBar groups={menuGroups} />
       </div>
 
@@ -105,31 +135,13 @@ export default function Titlebar({
           {fileName}
         </span>
         {dirty && (
-          <span className="dirty-dot" title="未保存">
+          <span className="dirty-dot" title={t(locale, "title.unsaved")}>
             ●
           </span>
         )}
       </div>
 
       <div className="titlebar-right">
-        <button
-          className="titlebar-icon-btn"
-          onClick={onOpenSettings}
-          title={`设置 (${modShortcut(",")})`}
-          aria-label="设置"
-          data-tauri-drag-region={false}
-        >
-          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-            <path
-              d="M6.5 1h3l.4 1.6c.3.1.6.3.9.5l1.5-.7 1.5 2.6-.9 1.2c0 .3 0 .6 0 .8l.9 1.2-1.5 2.6-1.5-.7c-.3.2-.6.4-.9.5L9.5 15h-3l-.4-1.6c-.3-.1-.6-.3-.9-.5l-1.5.7-1.5-2.6.9-1.2c0-.3 0-.6 0-.8l-.9-1.2 1.5-2.6 1.5.7c.3-.2.6-.4.9-.5L6.5 1z"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.2"
-              strokeLinejoin="round"
-            />
-            <circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" strokeWidth="1.2" />
-          </svg>
-        </button>
         {!isMac && <WindowControls />}
       </div>
     </header>

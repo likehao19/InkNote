@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { EditorMode } from "../editor";
+import { getDefaultEditorMode } from "../lib/preferences";
 
 export interface TabDoc {
   id: string;
@@ -33,7 +34,14 @@ function newId() {
 
 function emptyTab(): TabDoc {
   const id = newId();
-  return { id, path: null, content: "", diskContent: "", dirty: false, mode: "preview" };
+  return {
+    id,
+    path: null,
+    content: "",
+    diskContent: "",
+    dirty: false,
+    mode: getDefaultEditorMode(),
+  };
 }
 
 /** 单文档编辑：始终只保留一个活动文档槽位 */

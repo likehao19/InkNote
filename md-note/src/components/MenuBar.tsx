@@ -5,8 +5,19 @@ export interface MenuItemDef {
   shortcut?: string;
   action?: () => void;
   separator?: boolean;
+  /** When defined, reserves a leading check gutter (VS Code / Cursor style). */
   checked?: boolean;
   disabled?: boolean;
+}
+
+function MenuCheck({ checked }: { checked: boolean }) {
+  return (
+    <span className={`menubar-check${checked ? " is-checked" : ""}`} aria-hidden="true">
+      <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor">
+        <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0z" />
+      </svg>
+    </span>
+  );
 }
 
 export interface MenuGroupDef {
@@ -67,8 +78,13 @@ export default function MenuBar({ groups }: Props) {
                   <li key={item.label} role="none">
                     <button
                       type="button"
-                      className="menubar-item"
+                      className={
+                        item.checked !== undefined
+                          ? "menubar-item menubar-item--toggle"
+                          : "menubar-item"
+                      }
                       role="menuitem"
+                      aria-checked={item.checked !== undefined ? item.checked : undefined}
                       disabled={item.disabled}
                       onClick={() => {
                         item.action?.();
@@ -76,10 +92,10 @@ export default function MenuBar({ groups }: Props) {
                       }}
                       data-tauri-drag-region={false}
                     >
-                      <span className="menubar-item-label">
-                        {item.checked && <span className="menubar-check">✓</span>}
-                        {item.label}
-                      </span>
+                      {item.checked !== undefined && (
+                        <MenuCheck checked={item.checked} />
+                      )}
+                      <span className="menubar-item-label">{item.label}</span>
                       {item.shortcut && (
                         <span className="menubar-shortcut">{item.shortcut}</span>
                       )}

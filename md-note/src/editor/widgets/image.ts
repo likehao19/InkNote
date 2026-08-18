@@ -12,15 +12,17 @@ export class ImageWidget extends WidgetType {
   }
 
   eq(other: ImageWidget) {
-    return other.src === this.src && other.alt === this.alt;
+    return other.src === this.src && other.alt === this.alt && other.resolved === this.resolved;
   }
 
   toDOM() {
     const figure = document.createElement("figure");
     figure.className = "md-image-widget";
+
     const img = document.createElement("img");
     img.alt = this.alt;
     img.loading = "lazy";
+    img.draggable = false;
 
     if (/^https?:\/\//i.test(this.resolved) || /^data:/i.test(this.resolved)) {
       img.src = this.resolved;
@@ -40,12 +42,13 @@ export class ImageWidget extends WidgetType {
       figure.appendChild(err);
     };
 
+    const pathHint = document.createElement("span");
+    pathHint.className = "md-image-path-hint";
+    pathHint.textContent = this.src;
+    pathHint.setAttribute("aria-hidden", "true");
+
     figure.appendChild(img);
-    if (this.alt) {
-      const cap = document.createElement("figcaption");
-      cap.textContent = this.alt;
-      figure.appendChild(cap);
-    }
+    figure.appendChild(pathHint);
     return figure;
   }
 
