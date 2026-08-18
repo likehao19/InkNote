@@ -10,7 +10,7 @@ export interface TabDoc {
   mode: EditorMode;
 }
 
-interface TabsState {
+interface DocState {
   tabs: TabDoc[];
   activeId: string;
   focusMode: boolean;
@@ -18,7 +18,6 @@ interface TabsState {
   newTab: () => string;
   openTab: (path: string, content: string) => string;
   closeTab: (id: string) => void;
-  setActive: (id: string) => void;
   updateContent: (id: string, content: string) => void;
   setMode: (id: string, mode: EditorMode) => void;
   markSaved: (id: string, path?: string, content?: string) => void;
@@ -29,7 +28,7 @@ interface TabsState {
 
 let tabCounter = 0;
 function newId() {
-  return `tab-${++tabCounter}-${Date.now()}`;
+  return `doc-${++tabCounter}-${Date.now()}`;
 }
 
 function emptyTab(): TabDoc {
@@ -37,7 +36,8 @@ function emptyTab(): TabDoc {
   return { id, path: null, content: "", diskContent: "", dirty: false, mode: "preview" };
 }
 
-export const useTabsStore = create<TabsState>((set, get) => ({
+/** 单文档编辑：始终只保留一个活动文档槽位 */
+export const useTabsStore = create<DocState>((set, get) => ({
   tabs: [emptyTab()],
   activeId: "",
   focusMode: false,
@@ -45,55 +45,29 @@ export const useTabsStore = create<TabsState>((set, get) => ({
 
   newTab: () => {
     const tab = emptyTab();
-    set((s) => ({ tabs: [...s.tabs, tab], activeId: tab.id }));
+    set({ tabs: [tab], activeId: tab.id });
     return tab.id;
   },
 
   openTab: (path, content) => {
-    const s = get();
-    const existing = s.tabs.find((t) => t.path === path);
-    if (existing) {
-      set({ activeId: existing.id });
-      return existing.id;
-    }
-    const emptyIdx = s.tabs.findIndex((t) => !t.path && !t.dirty && !t.content);
-    const tab: TabDoc = {
-      id: emptyIdx >= 0 ? s.tabs[emptyIdx].id : newId(),
-      path,
-      content,
-      diskContent: content,
-      dirty: false,
-      mode: "preview",
-    };
-    if (emptyIdx >= 0) {
-      set({
-        tabs: s.tabs.map((t, i) => (i === emptyIdx ? tab : t)),
-        activeId: tab.id,
-      });
-    } else {
-      set({ tabs: [...s.tabs, tab], activeId: tab.id });
-    }
-    return tab.id;
-  },
-
-  closeTab: (id) => {
     set((s) => {
-      const idx = s.tabs.findIndex((t) => t.id === id);
-      if (idx < 0) return s;
-      const tabs = s.tabs.filter((t) => t.id !== id);
-      if (tabs.length === 0) {
-        const t = emptyTab();
-        return { tabs: [t], activeId: t.id };
-      }
-      let activeId = s.activeId;
-      if (activeId === id) {
-        activeId = tabs[Math.min(idx, tabs.length - 1)].id;
-      }
-      return { tabs, activeId };
+      const cur = s.tabs.find((t) => t.id === s.activeId) ?? s.tabs[0] ?? emptyTab();
+      const tab: TabDoc = {
+        ...cur,
+        path,
+        content,
+        diskContent: content,
+        dirty: false,
+      };
+      return { tabs: [tab], activeId: tab.id };
     });
+    return get().activeId;
   },
 
-  setActive: (id) => set({ activeId: id }),
+  closeTab: (_id) => {
+    const tab = emptyTab();
+    set({ tabs: [tab], activeId: tab.id });
+  },
 
   updateContent: (id, content) => {
     set((s) => ({
@@ -135,7 +109,6 @@ export const useTabsStore = create<TabsState>((set, get) => ({
   toggleTypewriterMode: () => set((s) => ({ typewriterMode: !s.typewriterMode })),
 }));
 
-// 初始化 activeId
 const init = useTabsStore.getState();
 if (!init.activeId && init.tabs[0]) {
   useTabsStore.setState({ activeId: init.tabs[0].id });

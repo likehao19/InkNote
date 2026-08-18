@@ -13,7 +13,7 @@ interface Props {
   onOpen: () => void;
   onOpenFolder: () => void;
   onNewFile: () => void;
-  onCloseTab: () => void;
+  onCloseFile: () => void;
   onSave: () => void;
   onSaveAs: () => void;
   onExportHtml: () => void;
@@ -33,7 +33,7 @@ export default function Titlebar({
   onOpen,
   onOpenFolder,
   onNewFile,
-  onCloseTab,
+  onCloseFile,
   onSave,
   onSaveAs,
   onExportHtml,
@@ -52,7 +52,7 @@ export default function Titlebar({
           { label: "打开文件…", shortcut: modShortcut("O"), action: onOpen },
           { label: "打开文件夹…", action: onOpenFolder },
           { separator: true, label: "" },
-          { label: "关闭标签", shortcut: modShortcut("W"), action: onCloseTab },
+          { label: "关闭文件", shortcut: modShortcut("W"), action: onCloseFile },
           { separator: true, label: "" },
           { label: "保存", shortcut: modShortcut("S"), action: onSave },
           { label: "另存为…", shortcut: `${modShortcut("Shift+S")}`, action: onSaveAs },
@@ -76,7 +76,7 @@ export default function Titlebar({
       onOpen,
       onOpenFolder,
       onNewFile,
-      onCloseTab,
+      onCloseFile,
       onSave,
       onSaveAs,
       onExportHtml,

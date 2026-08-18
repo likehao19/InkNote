@@ -12,18 +12,21 @@ interface Props {
   typewriter: boolean;
   onChange: (doc: string) => void;
   onModeChange: (m: EditorMode) => void;
+  onCursorLine?: (line: number) => void;
 }
 
 const Editor = forwardRef<EditorRef, Props>(function Editor(
-  { value, mode, filePath, typewriter, onChange, onModeChange },
+  { value, mode, filePath, typewriter, onChange, onModeChange, onCursorLine },
   ref,
 ) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const handleRef = useRef<ReturnType<typeof createEditor> | null>(null);
   const onChangeRef = useRef(onChange);
   const onModeRef = useRef(onModeChange);
+  const onCursorLineRef = useRef(onCursorLine);
   onChangeRef.current = onChange;
   onModeRef.current = onModeChange;
+  onCursorLineRef.current = onCursorLine;
 
   useImperativeHandle(ref, () => ({
     scrollToLine: (line) => handleRef.current?.scrollToLine(line),
@@ -38,6 +41,7 @@ const Editor = forwardRef<EditorRef, Props>(function Editor(
       typewriter,
       onChange: (d) => onChangeRef.current(d),
       onModeChange: (m) => onModeRef.current(m),
+      onCursorLine: (line) => onCursorLineRef.current?.(line),
     });
     handleRef.current = handle;
     return () => {

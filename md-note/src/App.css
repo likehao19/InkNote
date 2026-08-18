@@ -627,6 +627,7 @@ button { font-family: inherit; }
   margin: 0 4px;
 }
 .outline-item:hover { background: var(--bg-hover); }
+.outline-item.active { background: var(--bg-active); color: var(--accent); }
 .outline-item:active { background: var(--bg-active); }
 .empty { padding: 12px 16px; color: var(--fg-muted); font-size: 12px; }
 

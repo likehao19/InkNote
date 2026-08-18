@@ -14,6 +14,7 @@ interface Props {
   onRenamePath?: (path: string, isDir: boolean) => void;
   onDeletePath?: (path: string, isDir: boolean) => void;
   outline: { level: number; text: string; line: number }[];
+  activeOutlineLine: number | null;
   onOutlineClick: (line: number) => void;
   currentPath: string | null;
   recentFiles: string[];
@@ -31,6 +32,7 @@ export default function Sidebar({
   onRenamePath,
   onDeletePath,
   outline,
+  activeOutlineLine,
   onOutlineClick,
   currentPath,
   recentFiles,
@@ -71,7 +73,7 @@ export default function Sidebar({
                 {outline.map((h, i) => (
                   <li
                     key={i}
-                    className="outline-item"
+                    className={h.line === activeOutlineLine ? "outline-item active" : "outline-item"}
                     style={{ paddingLeft: `${8 + (h.level - 1) * 12}px` }}
                     onClick={() => onOutlineClick(h.line)}
                   >
