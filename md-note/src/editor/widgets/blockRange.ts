@@ -1,9 +1,41 @@
 import { EditorView } from "@codemirror/view";
 
-/** 在预览块级 Widget DOM 上标记源码区间 */
+/**
+ * 在预览块级 Widget DOM 上标记源码区间。
+ *
+ * 注意：CodeMirror 在 `eq()` 判定相等时会直接复用旧 DOM（既不调用 `toDOM`
+ * 也不调用 `updateDOM`），所以这里写入的绝对位置会在文档上方发生编辑后过期。
+ * 真正取位置请用 `currentBlockRange()`，它以 `posAtDOM` 为准，只把长度当缓存。
+ */
 export function stampBlockRange(el: HTMLElement, from: number, to: number) {
   el.dataset.blockFrom = String(from);
   el.dataset.blockTo = String(to);
+  el.dataset.blockLen = String(to - from);
+}
+
+/** 以 DOM 当前挂载位置反查源码区间（对复用的 DOM 依然正确） */
+export function currentBlockRange(
+  view: EditorView,
+  el: HTMLElement,
+): { from: number; to: number } | null {
+  // 已经脱离编辑器的节点必须直接放弃：posAtDOM 对游离节点会退化成
+  // 0 或 doc.length，拿去 dispatch 会覆盖掉文档头尾
+  if (!el.isConnected || !view.dom.contains(el)) return null;
+
+  const len = Number(el.dataset.blockLen);
+  if (!Number.isFinite(len) || len < 0) return null;
+
+  let from: number;
+  try {
+    from = view.posAtDOM(el);
+  } catch {
+    return null;
+  }
+  if (!Number.isFinite(from)) return null;
+
+  const docLen = view.state.doc.length;
+  const start = Math.min(Math.max(from, 0), docLen);
+  return { from: start, to: Math.min(start + len, docLen) };
 }
 
 /** 将块级 Widget 上的点击映射到源码字符位置（含横向估算） */
@@ -53,16 +85,19 @@ export function bindBlockClickEdit(
     const view = EditorView.findFromDOM(el);
     if (!view) return;
 
+    const range = currentBlockRange(view, el);
+    if (!range) return;
+
     const sel = view.state.selection.main;
-    if (sel.from >= from && sel.from < to) return;
+    if (sel.from >= range.from && sel.from < range.to) return;
 
     event.preventDefault();
     event.stopPropagation();
 
     const pos = mapClickToBlockPos(
       view,
-      from,
-      to,
+      range.from,
+      range.to,
       event.clientX,
       event.clientY,
       el,

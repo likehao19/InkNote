@@ -3,6 +3,9 @@ import { undo, redo, selectAll } from "@codemirror/commands";
 import { openSearchPanel } from "@codemirror/search";
 import { requestTableInsert } from "../tableInsertBridge";
 import { insertTableAtCursor, mutateTableInView } from "../widgets/table";
+import { editorPickLink, editorPickImage, editorShowError, editorShowMessage } from "../../lib/editorBridge";
+import { markdownToBodyHtml } from "../../render/export";
+import { getLocale, t } from "../../lib/i18n";
 
 export type EditorAction =
   | "undo"
@@ -12,11 +15,16 @@ export type EditorAction =
   | "paste"
   | "selectAll"
   | "find"
+  | "findReplace"
   | "bold"
   | "italic"
   | "strikethrough"
   | "inlineCode"
   | "highlight"
+  | "underline"
+  | "superscript"
+  | "subscript"
+  | "copyHtml"
   | "link"
   | "image"
   | "paragraph"
@@ -46,10 +54,10 @@ export type EditorAction =
   | "mathBlock"
   | "mermaid";
 
-const HEADING_RE = /^(#{1,6})\s+(.*)$/;
+const HEADING_RE = /^#{1,6}\s+/;
 const BULLET_RE = /^[-*+]\s+/;
-const ORDERED_RE = /^\d+\.\s+/;
-const TASK_RE = /^[-*+]\s+\[[ xX]\]\s+/;
+const ORDERED_RE = /^\d+[.)]\s+/;
+const TASK_RE = /^(?:[-*+]|\d+[.)])\s+\[[ xX]\]\s+/;
 const QUOTE_RE = /^>\s?/;
 
 function focusView(view: EditorView) {
@@ -57,8 +65,11 @@ function focusView(view: EditorView) {
 }
 
 function wrapInline(view: EditorView, before: string, after: string): boolean {
-  const { from, to } = view.state.selection.main;
-  const selected = view.state.sliceDoc(from, to);
+  const { state } = view;
+  const { from, to } = state.selection.main;
+  const selected = state.sliceDoc(from, to);
+
+  // 选区自身带标记：**词** → 词
   if (
     selected.length >= before.length + after.length &&
     selected.startsWith(before) &&
@@ -68,62 +79,159 @@ function wrapInline(view: EditorView, before: string, after: string): boolean {
     view.dispatch({
       changes: { from, to, insert: inner },
       selection: { anchor: from, head: from + inner.length },
+      userEvent: "input.format",
     });
-  } else {
-    const insert = `${before}${selected}${after}`;
-    view.dispatch({
-      changes: { from, to, insert },
-      selection: { anchor: from + before.length, head: from + before.length + selected.length },
-    });
+    focusView(view);
+    return true;
   }
+
+  // 标记在选区外侧：选中 **词** 中间的「词」时也应能取消
+  const outerFrom = from - before.length;
+  const outerTo = to + after.length;
+  if (
+    outerFrom >= 0 &&
+    outerTo <= state.doc.length &&
+    state.sliceDoc(outerFrom, from) === before &&
+    state.sliceDoc(to, outerTo) === after
+  ) {
+    view.dispatch({
+      changes: [
+        { from: outerFrom, to: from, insert: "" },
+        { from: to, to: outerTo, insert: "" },
+      ],
+      selection: { anchor: outerFrom, head: outerFrom + selected.length },
+      userEvent: "input.format",
+    });
+    focusView(view);
+    return true;
+  }
+
+  const insert = `${before}${selected}${after}`;
+  view.dispatch({
+    changes: { from, to, insert },
+    selection: { anchor: from + before.length, head: from + before.length + selected.length },
+    userEvent: "input.format",
+  });
   focusView(view);
   return true;
 }
 
-function stripBlockPrefix(text: string): string {
-  return text
-    .replace(HEADING_RE, "$2")
-    .replace(TASK_RE, "")
-    .replace(BULLET_RE, "")
-    .replace(ORDERED_RE, "")
-    .replace(QUOTE_RE, "")
-    .trimStart();
+/** 拆出缩进与正文：缩进必须保留，否则嵌套列表会被拉平到顶层 */
+function stripBlockPrefix(text: string): { indent: string; content: string } {
+  const indent = /^\s*/.exec(text)?.[0] ?? "";
+  let rest = text.slice(indent.length);
+  rest = rest.replace(QUOTE_RE, "");
+  rest = rest.replace(HEADING_RE, "");
+  rest = rest.replace(TASK_RE, "");
+  rest = rest.replace(BULLET_RE, "");
+  rest = rest.replace(ORDERED_RE, "");
+  return { indent, content: rest };
 }
 
-function setLineText(view: EditorView, lineFrom: number, lineTo: number, text: string) {
-  view.dispatch({
-    changes: { from: lineFrom, to: lineTo, insert: text },
-  });
+/** 选区覆盖的所有行（块级命令应作用于整个选区，而不是首行） */
+function selectedLines(state: EditorView["state"]) {
+  const { from, to } = state.selection.main;
+  const first = state.doc.lineAt(from).number;
+  const last = state.doc.lineAt(to).number;
+  const lines = [];
+  for (let n = first; n <= last; n++) lines.push(state.doc.line(n));
+  return lines;
 }
 
-function toggleLinePrefix(view: EditorView, prefix: string, active: RegExp): boolean {
+function toggleLinePrefix(
+  view: EditorView,
+  prefix: string,
+  active: RegExp,
+  numbered = false,
+): boolean {
   const { state } = view;
-  const line = state.doc.lineAt(state.selection.main.from);
-  const text = line.text;
-  const content = stripBlockPrefix(text);
-  const newText = active.test(text) ? content : `${prefix}${content}`;
-  setLineText(view, line.from, line.to, newText);
+  const lines = selectedLines(state).filter((l) => l.text.trim().length > 0);
+  if (!lines.length) {
+    const line = state.doc.lineAt(state.selection.main.from);
+    view.dispatch({
+      changes: { from: line.from, to: line.to, insert: `${prefix}` },
+      selection: { anchor: line.from + prefix.length },
+      userEvent: "input.format",
+    });
+    focusView(view);
+    return true;
+  }
+
+  const allActive = lines.every((l) => active.test(l.text.trimStart()));
+  const changes: Array<{ from: number; to: number; insert: string }> = [];
+
+  lines.forEach((line, i) => {
+    const { indent, content } = stripBlockPrefix(line.text);
+    const marker = numbered ? `${i + 1}. ` : prefix;
+    const next = allActive ? `${indent}${content}` : `${indent}${marker}${content}`;
+    if (next !== line.text) changes.push({ from: line.from, to: line.to, insert: next });
+  });
+
+  if (changes.length) view.dispatch({ changes, userEvent: "input.format" });
   focusView(view);
   return true;
 }
 
 function setHeading(view: EditorView, level: number): boolean {
   const { state } = view;
-  const line = state.doc.lineAt(state.selection.main.from);
-  const text = line.text;
-  const m = text.match(HEADING_RE);
-  const content = stripBlockPrefix(text);
+  const lines = selectedLines(state).filter((l) => l.text.trim().length > 0);
+  if (!lines.length) return true;
 
-  let newText: string;
-  if (level === 0) {
-    newText = content;
-  } else if (m && m[1].length === level) {
-    newText = content;
-  } else {
-    newText = `${"#".repeat(level)} ${content}`;
+  const marker = level > 0 ? `${"#".repeat(level)} ` : "";
+  const allSame =
+    level > 0 && lines.every((l) => new RegExp(`^#{${level}}\\s+`).test(l.text.trimStart()));
+
+  const changes: Array<{ from: number; to: number; insert: string }> = [];
+  for (const line of lines) {
+    const { indent, content } = stripBlockPrefix(line.text);
+    const next = allSame || level === 0 ? `${indent}${content}` : `${indent}${marker}${content}`;
+    if (next !== line.text) changes.push({ from: line.from, to: line.to, insert: next });
   }
 
-  setLineText(view, line.from, line.to, newText);
+  if (changes.length) view.dispatch({ changes, userEvent: "input.format" });
+  focusView(view);
+  return true;
+}
+
+function openReplacePanel(view: EditorView): boolean {
+  openSearchPanel(view);
+  requestAnimationFrame(() => {
+    const panel = view.dom.querySelector(".cm-panel.cm-search");
+    const replaceBtn = panel?.querySelector("button[name=replace]") as HTMLButtonElement | null;
+    if (replaceBtn) replaceBtn.click();
+    const replaceInput = panel?.querySelector("input[name=replace]") as HTMLInputElement | null;
+    if (replaceInput) replaceInput.focus();
+  });
+  focusView(view);
+  return true;
+}
+
+async function insertLink(view: EditorView): Promise<boolean> {
+  const { from, to } = view.state.selection.main;
+  const selected = view.state.sliceDoc(from, to);
+  const result = await editorPickLink(selected);
+  if (!result || !result.url.trim()) return false;
+  const text = result.text.trim() || result.url.trim();
+  const url = result.url.trim();
+  const insert = `[${text}](${url})`;
+  view.dispatch({
+    changes: { from, to, insert },
+    selection: { anchor: from + insert.length },
+  });
+  focusView(view);
+  return true;
+}
+
+async function insertImage(view: EditorView): Promise<boolean> {
+  const { from, to } = view.state.selection.main;
+  const selected = view.state.sliceDoc(from, to);
+  const result = await editorPickImage(selected);
+  if (!result || !result.path.trim()) return false;
+  const insert = `![${result.alt}](${result.path.trim()})`;
+  view.dispatch({
+    changes: { from, to, insert },
+    selection: { anchor: from + insert.length },
+  });
   focusView(view);
   return true;
 }
@@ -178,6 +286,24 @@ function clipboardAction(view: EditorView, action: "cut" | "copy" | "paste"): bo
   return true;
 }
 
+async function copyHtmlFromView(view: EditorView) {
+  const { from, to } = view.state.selection.main;
+  const md = from === to ? view.state.doc.toString() : view.state.sliceDoc(from, to);
+  try {
+    const html = await markdownToBodyHtml(md);
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        "text/html": new Blob([html], { type: "text/html" }),
+        "text/plain": new Blob([md], { type: "text/plain" }),
+      }),
+    ]);
+    editorShowMessage(t(getLocale(), "toast.copiedHtml"));
+  } catch (e) {
+    editorShowError(e);
+  }
+  focusView(view);
+}
+
 export function runEditorAction(view: EditorView, action: EditorAction): boolean {
   switch (action) {
     case "undo":
@@ -196,6 +322,8 @@ export function runEditorAction(view: EditorView, action: EditorAction): boolean
       openSearchPanel(view);
       focusView(view);
       return true;
+    case "findReplace":
+      return openReplacePanel(view);
     case "bold":
       return wrapInline(view, "**", "**");
     case "italic":
@@ -206,28 +334,21 @@ export function runEditorAction(view: EditorView, action: EditorAction): boolean
       return wrapInline(view, "`", "`");
     case "highlight":
       return wrapInline(view, "==", "==");
-    case "link": {
-      const { from, to } = view.state.selection.main;
-      const selected = view.state.sliceDoc(from, to);
-      const insert = `[${selected}](url)`;
-      view.dispatch({
-        changes: { from, to, insert },
-        selection: { anchor: from + selected.length + 3, head: from + selected.length + 6 },
-      });
-      focusView(view);
+    case "underline":
+      return wrapInline(view, "<u>", "</u>");
+    case "superscript":
+      return wrapInline(view, "<sup>", "</sup>");
+    case "subscript":
+      return wrapInline(view, "<sub>", "</sub>");
+    case "copyHtml":
+      void copyHtmlFromView(view);
       return true;
-    }
-    case "image": {
-      const { from, to } = view.state.selection.main;
-      const selected = view.state.sliceDoc(from, to);
-      const insert = `![${selected}](path)`;
-      view.dispatch({
-        changes: { from, to, insert },
-        selection: { anchor: from + selected.length + 4, head: from + selected.length + 8 },
-      });
-      focusView(view);
+    case "link":
+      void insertLink(view);
       return true;
-    }
+    case "image":
+      void insertImage(view);
+      return true;
     case "paragraph":
       return setHeading(view, 0);
     case "heading1":
@@ -245,7 +366,7 @@ export function runEditorAction(view: EditorView, action: EditorAction): boolean
     case "bulletList":
       return toggleLinePrefix(view, "- ", BULLET_RE);
     case "orderedList":
-      return toggleLinePrefix(view, "1. ", ORDERED_RE);
+      return toggleLinePrefix(view, "1. ", ORDERED_RE, true);
     case "taskList":
       return toggleLinePrefix(view, "- [ ] ", TASK_RE);
     case "blockquote":
@@ -257,25 +378,35 @@ export function runEditorAction(view: EditorView, action: EditorAction): boolean
     case "table":
       return requestTableInsert() || insertTableAtCursor(view, 2, 2);
     case "tableRowBelow":
-      return mutateTableInView(view, "row-below");
+      void mutateTableInView(view, "row-below");
+      return true;
     case "tableRowAbove":
-      return mutateTableInView(view, "row-above");
+      void mutateTableInView(view, "row-above");
+      return true;
     case "tableRowDelete":
-      return mutateTableInView(view, "row-delete");
+      void mutateTableInView(view, "row-delete");
+      return true;
     case "tableColLeft":
-      return mutateTableInView(view, "col-left");
+      void mutateTableInView(view, "col-left");
+      return true;
     case "tableColRight":
-      return mutateTableInView(view, "col-right");
+      void mutateTableInView(view, "col-right");
+      return true;
     case "tableColDelete":
-      return mutateTableInView(view, "col-delete");
+      void mutateTableInView(view, "col-delete");
+      return true;
     case "tableAlignLeft":
-      return mutateTableInView(view, "align-left");
+      void mutateTableInView(view, "align-left");
+      return true;
     case "tableAlignCenter":
-      return mutateTableInView(view, "align-center");
+      void mutateTableInView(view, "align-center");
+      return true;
     case "tableAlignRight":
-      return mutateTableInView(view, "align-right");
+      void mutateTableInView(view, "align-right");
+      return true;
     case "tableDelete":
-      return mutateTableInView(view, "delete");
+      void mutateTableInView(view, "delete");
+      return true;
     case "mathBlock":
       return insertBlock(view, "$$\n\n$$", -3);
     case "mermaid":
@@ -294,6 +425,7 @@ export function editorActionKeymap(): Array<{ key: string; run: (view: EditorVie
     { key: "Mod-i", run: (v) => runEditorAction(v, "italic") },
     { key: "Mod-k", run: (v) => runEditorAction(v, "link") },
     { key: "Mod-f", run: (v) => runEditorAction(v, "find") },
+    { key: "Mod-h", run: (v) => runEditorAction(v, "findReplace") },
     { key: "Mod-1", run: (v) => runEditorAction(v, "heading1") },
     { key: "Mod-2", run: (v) => runEditorAction(v, "heading2") },
     { key: "Mod-3", run: (v) => runEditorAction(v, "heading3") },

@@ -1,31 +1,37 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatError } from "./errors";
 
+export type ToastKind = "info" | "success" | "error";
+
+export type ToastState = {
+  message: string;
+  kind: ToastKind;
+} | null;
+
 const DISMISS_MS = 4200;
 
 export function useToast() {
-  const [message, setMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const dismiss = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = null;
-    setMessage(null);
+    setToast(null);
   }, []);
 
   const show = useCallback(
-    (text: string) => {
-      setMessage(text);
+    (message: string, kind: ToastKind = "info") => {
+      setToast({ message, kind });
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(dismiss, DISMISS_MS);
     },
     [dismiss],
   );
 
+  const showSuccess = useCallback((message: string) => show(message, "success"), [show]);
   const showError = useCallback(
-    (e: unknown) => {
-      show(formatError(e));
-    },
+    (e: unknown) => show(formatError(e), "error"),
     [show],
   );
 
@@ -33,5 +39,12 @@ export function useToast() {
     if (timerRef.current) clearTimeout(timerRef.current);
   }, []);
 
-  return { message, show, showError, dismiss };
+  return {
+    message: toast?.message ?? null,
+    toastKind: toast?.kind ?? "info",
+    show,
+    showSuccess,
+    showError,
+    dismiss,
+  };
 }

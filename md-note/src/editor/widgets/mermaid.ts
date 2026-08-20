@@ -1,24 +1,62 @@
-import { WidgetType } from "@codemirror/view";
+import { WidgetType, EditorView } from "@codemirror/view";
 import mermaid from "mermaid";
-import { bindBlockClickEdit } from "./blockRange";
+import { stampBlockRange } from "./blockRange";
+import {
+  attachSourceEditing,
+  beginSourceEditing,
+  clickedOnBlockPadding,
+  makePlainTextEditable,
+} from "./editableSource";
 
-let mermaidReady = false;
+let mermaidTheme: string | null = null;
+
+function currentTheme(): "dark" | "default" {
+  return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "default";
+}
 
 async function ensureMermaid() {
-  if (mermaidReady) return;
+  const theme = currentTheme();
+  if (mermaidTheme === theme) return;
   mermaid.initialize({
     startOnLoad: false,
-    theme: document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "default",
-    securityLevel: "loose",
+    theme,
+    // strict：对图中的 HTML 标签做消毒，避免打开不可信 .md 时被注入脚本
+    securityLevel: "strict",
   });
-  mermaidReady = true;
+  mermaidTheme = theme;
 }
 
 let idCounter = 0;
 
-export class MermaidWidget extends WidgetType {
-  readonly id = `mmd-${++idCounter}`;
+/** 渲染是异步且偏慢的，输入过程中做防抖 */
+function renderMermaid(target: HTMLElement, code: string) {
+  const token = String(++idCounter);
+  target.dataset.renderToken = token;
 
+  void (async () => {
+    await ensureMermaid();
+    if (target.dataset.renderToken !== token || !target.isConnected) return;
+    if (!code.trim()) {
+      target.textContent = "空图表";
+      target.classList.add("md-mermaid-error");
+      return;
+    }
+    try {
+      const { svg } = await mermaid.render(`mmd-${token}`, code);
+      if (target.dataset.renderToken !== token || !target.isConnected) return;
+      target.innerHTML = svg;
+      target.classList.remove("md-mermaid-error");
+    } catch (e) {
+      if (target.dataset.renderToken !== token || !target.isConnected) return;
+      target.textContent = `Mermaid 渲染失败: ${e instanceof Error ? e.message : String(e)}`;
+      target.classList.add("md-mermaid-error");
+    }
+    // 图表是异步出现的，高度变了必须让 CodeMirror 重新测量，否则点击定位会偏
+    EditorView.findFromDOM(target)?.requestMeasure();
+  })();
+}
+
+export class MermaidWidget extends WidgetType {
   constructor(
     readonly from: number,
     readonly to: number,
@@ -27,33 +65,68 @@ export class MermaidWidget extends WidgetType {
     super();
   }
 
+  /** 只比较内容与长度：位置变化不应触发整图重绘 */
   eq(other: MermaidWidget) {
-    return other.from === this.from && other.to === this.to && other.code === this.code;
+    return other.to - other.from === this.to - this.from && other.code === this.code;
   }
 
   toDOM() {
     const wrap = document.createElement("div");
     wrap.className = "md-mermaid-widget";
-    bindBlockClickEdit(wrap, this.from, this.to);
+    stampBlockRange(wrap, this.from, this.to);
+
+    const source = document.createElement("div");
+    source.className = "md-block-source";
+    makePlainTextEditable(source);
+    source.textContent = this.code;
+
     const inner = document.createElement("div");
     inner.className = "md-mermaid-inner";
-    wrap.appendChild(inner);
+    renderMermaid(inner, this.code);
 
-    void (async () => {
-      await ensureMermaid();
-      try {
-        const { svg } = await mermaid.render(this.id, this.code);
-        inner.innerHTML = svg;
-      } catch (e) {
-        inner.textContent = `Mermaid 渲染失败: ${e instanceof Error ? e.message : String(e)}`;
-        inner.classList.add("md-mermaid-error");
-      }
-    })();
+    // 外层只留白，视觉盒子在内层（根元素的 margin 会破坏高度测量）
+    const box = document.createElement("div");
+    box.className = "md-mermaid-box";
+    box.appendChild(source);
+    box.appendChild(inner);
+    wrap.appendChild(box);
+
+    let debounce = 0;
+    attachSourceEditing(wrap, {
+      source: () => source,
+      toMarkdown: (text) => `\`\`\`mermaid\n${text.replace(/\n+$/, "")}\n\`\`\``,
+      onInput: (text) => {
+        window.clearTimeout(debounce);
+        debounce = window.setTimeout(() => renderMermaid(inner, text), 400);
+      },
+      indentOnTab: true,
+    });
+
+    wrap.addEventListener("mousedown", (event) => {
+      const target = event.target as HTMLElement;
+      if (!box.contains(target)) return;
+      if (source.contains(target) || target === source) return;
+      event.preventDefault();
+      beginSourceEditing(wrap, source);
+    });
 
     return wrap;
   }
 
-  ignoreEvent() {
+  updateDOM(dom: HTMLElement) {
+    const source = dom.querySelector<HTMLElement>(".md-block-source");
+    const inner = dom.querySelector<HTMLElement>(".md-mermaid-inner");
+    if (!source || !inner) return false;
+
+    stampBlockRange(dom, this.from, this.to);
+    if (document.activeElement !== source) {
+      if ((source.textContent ?? "") !== this.code) source.textContent = this.code;
+      renderMermaid(inner, this.code);
+    }
     return true;
+  }
+
+  ignoreEvent(event: Event) {
+    return !clickedOnBlockPadding(event, "md-mermaid-widget");
   }
 }

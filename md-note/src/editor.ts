@@ -1,12 +1,11 @@
 import {
   EditorView,
   Decoration,
-  ViewPlugin,
   keymap,
   drawSelection,
   dropCursor,
   lineNumbers,
-  type ViewUpdate,
+  highlightActiveLine,
   type DecorationSet,
 } from "@codemirror/view";
 import {
@@ -22,28 +21,36 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirro
 import { search, searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { markdown, markdownKeymap, markdownLanguage } from "@codemirror/lang-markdown";
 import { tags as t } from "@lezer/highlight";
-import type { SyntaxNodeRef } from "@lezer/common";
+import type { SyntaxNode, SyntaxNodeRef } from "@lezer/common";
 import { CodeBlockWidget, HrWidget } from "./editor/widgets/codeBlock";
 import { BlockMathWidget, InlineMathWidget, scanMath } from "./editor/widgets/math";
 import {
   TableWidget,
   insertTableAtCursor,
   parseTable,
-  tableAtomicRanges,
   tableBackspace,
   tableDeleteKey,
-  tableEditingHandlers,
   tableSelectionSnap,
+  type TableRange,
 } from "./editor/widgets/table";
 import { ImageWidget, parseImage } from "./editor/widgets/image";
 import { MermaidWidget } from "./editor/widgets/mermaid";
 import { FrontMatterWidget } from "./editor/widgets/frontmatter";
 import { tableTab, tableShiftTab } from "./editor/commands/table";
+import { enterAdjacentBlock, focusBlockStartingAt } from "./editor/widgets/editableSource";
 import { bracketExtensions } from "./editor/commands/brackets";
 import { editorActionKeymap, runEditorAction, type EditorAction } from "./editor/commands/format";
 import { parseFrontMatter } from "./lib/frontmatter";
-import { dirOf, relativePath, resolveAssetPath } from "./lib/paths";
+import { dirOf, resolveAssetPath } from "./lib/paths";
+import { addPendingImage } from "./lib/pendingImages";
+import { htmlToMarkdown } from "./lib/htmlPaste";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import * as api from "./lib/tauri";
+import {
+  editorShowError,
+  editorShowMessage,
+} from "./lib/editorBridge";
+import { getLocale, t as tr } from "./lib/i18n";
 
 export type EditorMode = "preview" | "source";
 
@@ -74,22 +81,60 @@ const markdownHighlight = HighlightStyle.define([
 const HEADINGS = new Set([
   "ATXHeading1", "ATXHeading2", "ATXHeading3",
   "ATXHeading4", "ATXHeading5", "ATXHeading6",
+  "SetextHeading1", "SetextHeading2",
 ]);
 
-function hideMarkers(
-  node: SyntaxNodeRef,
-  name: string,
-  decos: Range<Decoration>[],
-  overlaps: (from: number, to: number) => boolean,
-) {
-  for (const c of node.node.getChildren(name)) {
-    if (!overlaps(c.from, c.to)) {
-      decos.push(
-        Decoration.mark({ class: "cm-md-syntax-hidden" }).range(c.from, c.to),
-      );
-    }
-  }
+/** 标题级别：用于给标题行加上与 Typora 一致的上方留白 */
+function headingLevel(name: string): number {
+  const m = /(\d)$/.exec(name);
+  return m ? Number(m[1]) : 1;
 }
+
+/** 真正把标记从排版里拿掉（透明字符仍会占位，会在链接后留下大片空白） */
+const HIDE_MARK = Decoration.replace({});
+
+/**
+ * 自带编辑能力的块级 Widget：只有光标严格落在内部才算「进入源码」。
+ * 边界位置（块的首尾）不触发，否则紧贴块前后放光标就会把整块翻成源码。
+ */
+function blockReveal(from: number, to: number) {
+  return { revealFrom: from + 1, revealTo: to - 1 };
+}
+
+/**
+ * 永不显形。
+ *
+ * 过滤条件是 `head < revealFrom || head > revealTo`，给一个空区间
+ * （from > to）就永远成立。用于列表符号、引用标记这类
+ * 「Typora 里根本看不到源码」的标记。
+ */
+const NEVER_REVEAL = { from: 1, to: 0 };
+
+/** 任务项：行首标记（含有序列表形式） */
+const TASK_LINE_RE = /^(\s*(?:[-*+]|\d+[.)])\s+)\[([ xX])\](\s|$)/;
+
+/** 行内包裹语法：Lezer 不认或不给配对信息，但导出链路支持，预览必须跟上 */
+function tagWrap(tag: string, cls: string) {
+  return { re: new RegExp(`<${tag}>([^\\n]*?)</${tag}>`, "gi"), cls };
+}
+
+const INLINE_WRAPS: Array<{ re: RegExp; cls: string }> = [
+  { re: /==([^=\n]+?)==/g, cls: "md-highlight" },
+  tagWrap("u", "md-underline"),
+  tagWrap("sup", "md-sup"),
+  tagWrap("sub", "md-sub"),
+  tagWrap("mark", "md-highlight"),
+  tagWrap("b", "md-strong"),
+  tagWrap("strong", "md-strong"),
+  tagWrap("i", "md-em"),
+  tagWrap("em", "md-em"),
+  tagWrap("s", "md-del"),
+  tagWrap("del", "md-del"),
+  tagWrap("kbd", "md-kbd"),
+];
+
+/** 单独出现、没有配对的行内标签（换行、水平线等） */
+const INLINE_VOID_TAGS = /<br\s*\/?>/gi;
 
 function fencedCodeInfo(node: SyntaxNodeRef, doc: EditorState["doc"]): string {
   const info = node.node.getChild("CodeInfo");
@@ -118,17 +163,69 @@ function isInCode(tree: ReturnType<typeof syntaxTree>, from: number, to: number)
   return inside;
 }
 
-function buildDecorations(state: EditorState, filePath: string | null): DecorationSet {
+interface PreviewSets {
+  /** 行装饰：引用/列表/任务，不随光标隐藏 */
+  lines: DecorationSet;
+  /** 标记隐藏与块级 Widget，未按光标过滤 */
+  statics: DecorationSet;
+  /** statics 按当前选区过滤后的结果 */
+  visible: DecorationSet;
+  /** 自带编辑能力的块（表格/代码块/公式/图表/图片/分割线/front matter）：
+   *  光标以整块为单位跳过，不会掉进源码里 */
+  atomicBlocks: TableRange[];
+}
+
+/**
+ * 构建与光标无关的装饰。
+ *
+ * 只在文档变化时调用；移动光标只做一次范围受限的过滤（见 applySelection），
+ * 避免每次按方向键都重新遍历语法树并把全文物化成字符串。
+ */
+function buildPreviewSets(
+  state: EditorState,
+  filePath: string | null,
+): { lines: DecorationSet; statics: DecorationSet; atomicBlocks: TableRange[] } {
+  const lineDecos: Range<Decoration>[] = [];
   const decos: Range<Decoration>[] = [];
-  const sel = state.selection.main;
-  const selFrom = sel.from;
-  const selTo = sel.to;
+  const atomicBlocks: TableRange[] = [];
   const doc = state.doc;
   const tree = syntaxTree(state);
+  const text = doc.toString();
 
-  const overlaps = (from: number, to: number) => selFrom < to && selTo >= from;
+  const fm = parseFrontMatter(text);
+  const fmEnd = fm ? fm.to : 0;
 
-  const lineDeco = (
+  const hide = (from: number, to: number, reveal?: { from: number; to: number }) => {
+    if (to <= from) return;
+    decos.push(
+      (reveal
+        ? Decoration.replace({ revealFrom: reveal.from, revealTo: reveal.to })
+        : HIDE_MARK
+      ).range(from, to),
+    );
+  };
+
+  // 标记的「露出触发范围」是整个节点：光标落在 **粗体** 中间也应看到源码，
+  // 而不是只有正好压在 ** 上时才显形
+  const hideChildren = (node: SyntaxNodeRef, name: string) => {
+    const reveal = { from: node.from, to: node.to };
+    for (const c of node.node.getChildren(name)) hide(c.from, c.to, reveal);
+  };
+
+  /** 块级替换装饰要求区间恰好占满整行，否则会把所在行从中间劈开 */
+  const coversWholeLines = (from: number, to: number) =>
+    doc.lineAt(from).from === from && doc.lineAt(to).to === to;
+
+  const addLineClass = (
+    lineFrom: number,
+    cls: string,
+    attributes?: Record<string, string>,
+  ) => {
+    lineDecos.push(Decoration.line({ class: cls, attributes }).range(lineFrom));
+  };
+
+  /** 整块的每一行都加类（引用竖线、列表缩进） */
+  const lineDecoAll = (
     from: number,
     to: number,
     cls: string,
@@ -136,11 +233,7 @@ function buildDecorations(state: EditorState, filePath: string | null): Decorati
   ) => {
     const s = doc.lineAt(from).number;
     const e = doc.lineAt(to).number;
-    for (let i = s; i <= e; i++) {
-      decos.push(
-        Decoration.line({ class: cls, attributes }).range(doc.line(i).from),
-      );
-    }
+    for (let i = s; i <= e; i++) addLineClass(doc.line(i).from, cls, attributes);
   };
 
   const listDepth = (node: SyntaxNodeRef): number => {
@@ -157,151 +250,203 @@ function buildDecorations(state: EditorState, filePath: string | null): Decorati
       const from = node.from;
       const to = node.to;
 
+      // front matter 区间由专门的 Widget 接管，跳过 Lezer 在这里的误判
+      // （`---` 会被解析成 HorizontalRule + SetextHeading）
+      // 注意用 to <= fmEnd 判断：根节点 from 也是 0，用 from 会直接中止整棵树的遍历
+      if (fm && to <= fmEnd) return false;
+
       if (HEADINGS.has(n)) {
+        // 标题上方留白：Typora 里标题与前文之间有明显间距
+        addLineClass(doc.lineAt(from).from, `md-heading md-heading-${headingLevel(n)}`);
         for (const c of node.node.getChildren("HeaderMark")) {
-          if (!overlaps(c.from, c.to)) {
+          // ATX：`## ` 在行首；Setext：`===` 单独占下一行，连同换行一起吃掉
+          if (c.from > from) {
+            hide(c.from - 1, c.to, { from, to });
+          } else {
             let end = c.to;
             if (end < to && doc.sliceString(end, end + 1) === " ") end++;
-            decos.push(
-              Decoration.mark({ class: "cm-md-syntax-hidden cm-md-syntax-hidden--collapse" }).range(c.from, end),
-            );
+            hide(c.from, end, { from, to });
           }
         }
         return;
       }
 
+      if (n === "QuoteMark") {
+        // 必须在遍历里单独处理：只有第一行的 `>` 是 Blockquote 的直接子节点，
+        // 后续行的 QuoteMark 嵌在 Paragraph / List 里，getChildren 拿不到
+        let end = to;
+        if (doc.sliceString(end, end + 1) === " ") end++;
+        hide(from, end, NEVER_REVEAL);
+        return;
+      }
+
       if (n === "Blockquote") {
-        hideMarkers(node, "QuoteMark", decos, overlaps);
-        lineDeco(from, to, "md-blockquote");
+        lineDecoAll(from, to, "md-blockquote");
         return;
       }
 
       if (n === "StrongEmphasis" || n === "Emphasis") {
-        hideMarkers(node, "EmphasisMark", decos, overlaps);
+        hideChildren(node, "EmphasisMark");
         return;
       }
 
       if (n === "Strikethrough") {
-        hideMarkers(node, "StrikethroughMark", decos, overlaps);
+        hideChildren(node, "StrikethroughMark");
         return;
       }
 
       if (n === "InlineCode") {
-        hideMarkers(node, "CodeMark", decos, overlaps);
+        hideChildren(node, "CodeMark");
         return;
       }
 
       if (n === "ListMark" || n === "TaskMarker") {
-        if (!overlaps(from, to)) {
-          decos.push(
-            Decoration.mark({ class: "cm-md-syntax-hidden cm-md-syntax-hidden--collapse" }).range(from, to),
-          );
-        }
+        // 与 Typora 一致：列表符号与复选框的源码永不显形，由 CSS 画出来
+        let end = to;
+        if (doc.sliceString(end, end + 1) === " ") end++;
+        hide(from, end, NEVER_REVEAL);
         return;
       }
 
       if (n === "Task") {
-        lineDeco(from, to, "md-task-item");
+        const m = TASK_LINE_RE.exec(doc.lineAt(from).text);
+        const done = m ? m[2].toLowerCase() === "x" : false;
+        // 只给首行：复选框是 ::before 画的，多行任务项会画出好几个
+        addLineClass(doc.lineAt(from).from, done ? "md-task-item md-task-done" : "md-task-item");
         return;
       }
 
       if (n === "ListItem") {
         const depth = listDepth(node);
-        const classes = ["md-list-item"];
         const parent = node.node.parent;
-        if (parent?.name === "OrderedList") classes.push("md-ordered-list");
-        else if (parent?.name === "BulletList") classes.push("md-bullet-list");
         const indentExtra = depth > 1 ? (depth - 1) * 24 : 0;
-        const attributes =
+        const indentStyle =
           indentExtra > 0
-            ? {
-                style: `--md-list-marker-left: calc(var(--editor-padding-x) + ${indentExtra}px); padding-left: calc(var(--editor-padding-x) + var(--editor-list-marker-offset) + ${indentExtra}px);`,
-              }
-            : undefined;
-        lineDeco(from, to, classes.join(" "), attributes);
+            ? `--md-list-marker-left: calc(var(--editor-padding-x) + ${indentExtra}px); padding-left: calc(var(--editor-padding-x) + var(--editor-list-marker-offset) + ${indentExtra}px);`
+            : "";
+
+        const firstLine = doc.lineAt(from);
+        const lastLine = doc.lineAt(to);
+        const ordered = parent?.name === "OrderedList";
+
+        // 有序列表显示源码里真实的序号（`3.` 就该显示 3，而不是 CSS 计数器从 1 重排）
+        let markerStyle = "";
+        if (ordered) {
+          const mark = node.node.getChild("ListMark");
+          const raw = mark ? doc.sliceString(mark.from, mark.to) : "";
+          const safe = raw.replace(/[^0-9.)]/g, "");
+          if (safe) markerStyle = `--md-marker: "${safe}";`;
+        }
+
+        // 每行只挂一条带 style 的行装饰，避免多条装饰的 style 互相覆盖
+        const firstClasses = ordered
+          ? "md-list-item md-ordered-list"
+          : parent?.name === "BulletList"
+            ? "md-list-item md-bullet-list"
+            : "md-list-item";
+        addLineClass(
+          firstLine.from,
+          firstClasses,
+          indentStyle || markerStyle ? { style: `${indentStyle}${markerStyle}` } : undefined,
+        );
+        for (let i = firstLine.number + 1; i <= lastLine.number; i++) {
+          addLineClass(
+            doc.line(i).from,
+            "md-list-item",
+            indentStyle ? { style: indentStyle } : undefined,
+          );
+        }
+        return;
+      }
+
+      if (n === "Escape") {
+        // `\*` 只显示 `*`，反斜杠藏掉
+        hide(from, from + 1, { from, to });
         return;
       }
 
       if (n === "Link") {
-        hideMarkers(node, "LinkMark", decos, overlaps);
-        hideMarkers(node, "URL", decos, overlaps);
-        if (!overlaps(from, to)) {
-          decos.push(Decoration.mark({ class: "cm-md-link" }).range(from, to));
-        }
+        hideChildren(node, "LinkMark");
+        hideChildren(node, "URL");
+        hideChildren(node, "LinkTitle");
+        // 引用式链接 [文字][ref] 的 [ref] 也要藏
+        hideChildren(node, "LinkLabel");
+        decos.push(Decoration.mark({ class: "cm-md-link" }).range(from, to));
         return;
       }
 
       if (n === "Image") {
         const { alt, url } = parseImage(node, doc);
         const resolved = resolveAssetPath(filePath, url);
-        if (overlaps(from, to)) return;
+        // 行内图片必须用行内装饰，否则会把整行从中间截断
+        const block = coversWholeLines(from, to);
+        if (block) atomicBlocks.push({ from, to });
         decos.push(
           Decoration.replace({
-            widget: new ImageWidget(from, to, url, alt, resolved),
-            block: true,
+            widget: new ImageWidget(from, to, url, alt, resolved, !block),
+            block,
+            ...(block ? blockReveal(from, to) : null),
           }).range(from, to),
         );
         return;
       }
 
       if (n === "Autolink") {
-        if (!overlaps(from, to)) {
-          decos.push(Decoration.mark({ class: "cm-md-link" }).range(from, to));
-        }
+        // <https://x> 的尖括号要藏掉
+        hideChildren(node, "LinkMark");
+        decos.push(Decoration.mark({ class: "cm-md-link" }).range(from, to));
         return;
       }
 
       if (n === "HorizontalRule") {
-        if (overlaps(from, to)) return;
-        decos.push(
-          Decoration.replace({ widget: new HrWidget(from, to), block: true }).range(from, to),
-        );
-        return;
-      }
-
-      if (n === "Table") {
-        if (overlaps(from, to)) return;
-        const { header, rows, aligns } = parseTable(node, doc);
+        if (!coversWholeLines(from, to)) return;
+        atomicBlocks.push({ from, to });
         decos.push(
           Decoration.replace({
-            widget: new TableWidget(from, to, header, rows, aligns),
+            widget: new HrWidget(from, to),
             block: true,
+            ...blockReveal(from, to),
           }).range(from, to),
         );
         return;
       }
 
-      if (n === "TableDelimiter") {
-        if (!overlaps(from, to)) {
-          decos.push(
-            Decoration.mark({ class: "cm-md-syntax-hidden cm-md-syntax-hidden--collapse" }).range(from, to),
-          );
-        }
+      if (n === "Table") {
+        if (!coversWholeLines(from, to)) return;
+        const { header, rows, aligns } = parseTable(node, doc);
+        atomicBlocks.push({ from, to });
+        decos.push(
+          Decoration.replace({
+            widget: new TableWidget(from, to, header, rows, aligns),
+            block: true,
+            ...blockReveal(from, to),
+          }).range(from, to),
+        );
         return;
       }
 
       if (n === "FencedCode") {
+        // 未闭合的围栏按 CommonMark 会一直吃到文末，渲染成组件会把整篇文档吞掉
+        if (node.node.getChildren("CodeMark").length < 2) return;
         const lang = fencedCodeInfo(node, doc).trim().toLowerCase();
         const code = fencedCodeText(node, doc);
-        if (overlaps(from, to)) {
-          hideMarkers(node, "CodeMark", decos, overlaps);
+        const block = coversWholeLines(from, to);
+        if (!block) {
+          // 缩进在列表里的围栏代码块：只隐藏围栏，不做块级替换
+          hideChildren(node, "CodeMark");
           return;
         }
-        if (lang === "mermaid") {
-          decos.push(
-            Decoration.replace({
-              widget: new MermaidWidget(from, to, code),
-              block: true,
-            }).range(from, to),
-          );
-        } else {
-          decos.push(
-            Decoration.replace({
-              widget: new CodeBlockWidget(from, to, code, lang),
-              block: true,
-            }).range(from, to),
-          );
-        }
+        atomicBlocks.push({ from, to });
+        decos.push(
+          Decoration.replace({
+            widget:
+              lang === "mermaid"
+                ? new MermaidWidget(from, to, code)
+                : new CodeBlockWidget(from, to, code, lang),
+            block: true,
+            ...blockReveal(from, to),
+          }).range(from, to),
+        );
         return;
       }
     },
@@ -310,72 +455,156 @@ function buildDecorations(state: EditorState, filePath: string | null): Decorati
   // 数学公式（$...$ / $$...$$）
   const inCode = (from: number, to: number) => isInCode(tree, from, to);
   for (const math of scanMath(doc, inCode)) {
-    if (!overlaps(math.from, math.to)) {
+    if (fm && math.from < fmEnd) continue;
+    decos.push(
+      Decoration.replace({
+        widget: math.block
+          ? new BlockMathWidget(math.from, math.to, math.tex)
+          : new InlineMathWidget(math.from, math.to, math.tex),
+        block: math.block,
+      }).range(math.from, math.to),
+    );
+  }
+
+  // ==高亮==、<u>/<mark>/<b>/<i>/<kbd> 等行内标签
+  for (const wrap of INLINE_WRAPS) {
+    wrap.re.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = wrap.re.exec(text))) {
+      const inner = m[1];
+      if (!inner) continue; // 空内容，mark 不能为空区间
+      const from = m.index;
+      const to = from + m[0].length;
+      if (fm && from < fmEnd) continue;
+      if (inCode(from, to)) continue;
+
+      const open = m[0].indexOf(inner);
+      const innerFrom = from + open;
+      const innerTo = innerFrom + inner.length;
+      const reveal = { from, to };
+      hide(from, innerFrom, reveal);
+      decos.push(Decoration.mark({ class: wrap.cls }).range(innerFrom, innerTo));
+      hide(innerTo, to, reveal);
+    }
+  }
+
+  // <br> 这类无配对标签直接藏掉
+  INLINE_VOID_TAGS.lastIndex = 0;
+  let voidTag: RegExpExecArray | null;
+  while ((voidTag = INLINE_VOID_TAGS.exec(text))) {
+    const from = voidTag.index;
+    const to = from + voidTag[0].length;
+    if (fm && from < fmEnd) continue;
+    if (inCode(from, to)) continue;
+    hide(from, to, { from, to });
+  }
+
+  // YAML Front Matter（fm.to 含结尾换行，块级装饰必须去掉它才是整行区间）
+  if (fm) {
+    const fmTo = fm.to > 0 && text[fm.to - 1] === "\n" ? fm.to - 1 : fm.to;
+    if (coversWholeLines(fm.from, fmTo)) {
+      atomicBlocks.push({ from: fm.from, to: fmTo });
       decos.push(
         Decoration.replace({
-          widget: math.block
-            ? new BlockMathWidget(math.from, math.to, math.tex)
-            : new InlineMathWidget(math.from, math.to, math.tex),
-          block: math.block,
-        }).range(math.from, math.to),
+          widget: new FrontMatterWidget(fm.from, fmTo, fm.raw),
+          block: true,
+          ...blockReveal(fm.from, fmTo),
+        }).range(fm.from, fmTo),
       );
     }
   }
 
-  // YAML Front Matter
-  const fm = parseFrontMatter(doc.toString());
-  if (fm && !overlaps(fm.from, fm.to)) {
-    const summary = Object.entries(fm.data)
-      .slice(0, 3)
-      .map(([k, v]) => `${k}: ${v}`)
-      .join(" · ");
-    decos.push(
-      Decoration.replace({
-        widget: new FrontMatterWidget(fm.from, fm.to, summary),
-        block: true,
-      }).range(fm.from, fm.to),
-    );
-  }
-
-  // 脚注引用 [^label]
-  const fnRe = /\[\^([^\]]+)\]/g;
-  const text = doc.toString();
+  // 脚注引用 [^label] → 上标；脚注定义 [^label]: 保持原样
+  const fnRe = /\[\^([^\]\n]+)\]/g;
   let fnm: RegExpExecArray | null;
   while ((fnm = fnRe.exec(text))) {
     const from = fnm.index;
     const to = from + fnm[0].length;
-    if (!inCode(from, to) && !overlaps(from, to) && !(fm && from < fm.to)) {
-      decos.push(
-        Decoration.mark({ class: "cm-md-footnote" }).range(from, to),
-      );
+    if (fm && from < fmEnd) continue;
+    if (inCode(from, to)) continue;
+
+    const line = doc.lineAt(from);
+    const isDefinition = from === line.from && text.slice(to, to + 1) === ":";
+    if (isDefinition) {
+      decos.push(Decoration.mark({ class: "cm-md-footnote-def" }).range(from, to));
+      continue;
     }
+    const reveal = { from, to };
+    hide(from, from + 2, reveal);
+    decos.push(Decoration.mark({ class: "cm-md-footnote" }).range(from + 2, to - 1));
+    hide(to - 1, to, reveal);
   }
 
-  return Decoration.set(decos, true);
+  return {
+    lines: Decoration.set(lineDecos, true),
+    statics: Decoration.set(decos, true),
+    atomicBlocks,
+  };
+}
+
+/**
+ * 光标所在处露出源码：把光标压住的装饰过滤掉。
+ *
+ * 判定用的是光标位置（selection.head）而不是整个选区：否则 Ctrl+A 全选会把
+ * 整篇文档一次性翻成源码，拖选时也会一路闪烁。
+ *
+ * 标记类装饰带 revealFrom/revealTo（所属节点的范围），所以光标落在
+ * `**粗体**` 中间也会显形，而不是必须压在 `**` 上。
+ *
+ * `filterFrom/filterTo` 把测试范围限制在光标所在行，其余区块整块保留，
+ * 因此移动光标的开销与文档长度无关。
+ */
+function applySelection(statics: DecorationSet, state: EditorState): DecorationSet {
+  const doc = state.doc;
+  const head = state.selection.main.head;
+  const line = doc.lineAt(head);
+  return statics.update({
+    filter: (dFrom, dTo, value) => {
+      const spec = value.spec as { revealFrom?: number; revealTo?: number } | null;
+      const revealFrom = spec?.revealFrom ?? dFrom;
+      const revealTo = spec?.revealTo ?? dTo;
+      return head < revealFrom || head > revealTo;
+    },
+    filterFrom: line.from,
+    filterTo: line.to,
+  });
 }
 
 const rebuildPreviewEffect = StateEffect.define<void>();
 
+/** 光标以整块为单位跳过这些区域（块内部有自己的编辑器） */
+const ATOMIC_MARK = Decoration.mark({});
+
+function atomicBlockRanges(sets: PreviewSets): DecorationSet {
+  if (!sets.atomicBlocks.length) return Decoration.none;
+  return Decoration.set(
+    sets.atomicBlocks.map((b) => ATOMIC_MARK.range(b.from, b.to)),
+    true,
+  );
+}
+
 function livePreview(ctx: { filePath: string | null }): Extension {
-  return StateField.define<DecorationSet>({
+  return StateField.define<PreviewSets>({
     create(state) {
-      return buildDecorations(state, ctx.filePath);
+      const built = buildPreviewSets(state, ctx.filePath);
+      return { ...built, visible: applySelection(built.statics, state) };
     },
-    update(deco, tr) {
-      if (
-        tr.docChanged ||
-        !tr.startState.selection.eq(tr.state.selection) ||
-        tr.effects.some((e) => e.is(rebuildPreviewEffect))
-      ) {
-        return buildDecorations(tr.state, ctx.filePath);
+    update(value, tr) {
+      if (tr.docChanged || tr.effects.some((e) => e.is(rebuildPreviewEffect))) {
+        const built = buildPreviewSets(tr.state, ctx.filePath);
+        return { ...built, visible: applySelection(built.statics, tr.state) };
       }
-      return deco.map(tr.changes);
+      if (!tr.startState.selection.eq(tr.state.selection)) {
+        return { ...value, visible: applySelection(value.statics, tr.state) };
+      }
+      return value;
     },
     provide: (f) => [
-      EditorView.decorations.from(f),
+      EditorView.decorations.from(f, (v) => v.lines),
+      EditorView.decorations.from(f, (v) => v.visible),
       EditorView.atomicRanges.of((view) => {
-        const deco = view.state.field(f, false);
-        return deco ? tableAtomicRanges(deco) : Decoration.none;
+        const v = view.state.field(f, false);
+        return v ? atomicBlockRanges(v) : Decoration.none;
       }),
     ],
   });
@@ -398,38 +627,58 @@ function previewExt(mode: EditorMode, ctx: { filePath: string | null }): Extensi
     : [];
 }
 
+/**
+ * 打字机模式。
+ *
+ * 必须在更新周期之外派发：CodeMirror 在 `ViewPlugin.update()` 里调用
+ * `view.dispatch()` 会抛 "Calls to EditorView.update are not allowed while an
+ * update is in progress"，异常被吞掉后整个插件会被 deactivate。
+ */
 function typewriterExt(enabled: boolean): Extension {
   if (!enabled) return [];
-  return ViewPlugin.fromClass(
-    class {
-      update(u: ViewUpdate) {
-        if (u.selectionSet || u.docChanged) {
-          const head = u.state.selection.main.head;
-          u.view.dispatch({
-            effects: EditorView.scrollIntoView(head, { y: "center" }),
-          });
-        }
-      }
-    },
-  );
+  let frame = 0;
+  return EditorView.updateListener.of((u) => {
+    if (!u.selectionSet && !u.docChanged) return;
+    if (frame) return;
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      const view = u.view;
+      if (!view.dom.isConnected) return;
+      view.dispatch({
+        effects: EditorView.scrollIntoView(view.state.selection.main.head, { y: "center" }),
+      });
+    });
+  });
 }
 
+/**
+ * 插入图片。
+ *
+ * 文档已保存 → 直接写到同目录的 assets/；还没保存 → 先在内存暂存并立刻回显，
+ * 等保存时统一落盘。任何情况下都不打断书写去弹保存框。
+ */
 async function insertImage(
   view: EditorView,
   filePath: string | null,
   bytes: Uint8Array,
   ext = "png",
+  mime = "image/png",
 ) {
-  const dir = filePath ? dirOf(filePath) : ".";
   const name = `image-${Date.now()}.${ext}`;
-  const absPath = `${dir}/${name}`.replace(/\\/g, "/");
-  try {
-    await api.writeBinary(absPath, Array.from(bytes));
-  } catch (e) {
-    console.error("Failed to save pasted image:", e);
-    return;
+  const rel = `assets/${name}`;
+
+  if (filePath) {
+    const abs = `${dirOf(filePath)}/${rel}`.replace(/\\/g, "/");
+    try {
+      await api.writeBinary(abs, Array.from(bytes));
+    } catch (e) {
+      editorShowError(e);
+      return;
+    }
+  } else {
+    addPendingImage(rel, bytes, mime);
   }
-  const rel = filePath ? relativePath(dir, absPath) : name;
+
   const insert = `![](${rel})`;
   const pos = view.state.selection.main.head;
   const line = view.state.doc.lineAt(pos);
@@ -441,29 +690,140 @@ async function insertImage(
     changes: { from: pos, insert: block },
     selection: { anchor: endPos },
     scrollIntoView: true,
+    userEvent: "input.image",
   });
+  editorShowMessage(
+    tr(getLocale(), filePath ? "toast.imageSaved" : "toast.imagePending"),
+  );
+}
+
+function normalizeWs(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function htmlTextContent(html: string): string {
+  try {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    return normalizeWs(doc.body.textContent ?? "");
+  } catch {
+    return "";
+  }
 }
 
 function shouldHandleImagePaste(event: ClipboardEvent): boolean {
   const items = event.clipboardData?.items;
   if (!items?.length) return false;
 
-  let imageItem: DataTransferItem | null = null;
+  let hasImageFile = false;
   for (const item of items) {
-    if (item.type.startsWith("image/")) imageItem = item;
+    if (item.kind === "file" && item.type.startsWith("image/")) hasImageFile = true;
   }
-  if (!imageItem) return false;
+  if (!hasImageFile) return false;
 
+  // 只在剪贴板没有实际文字时按图片处理。
+  // 不能因为存在 text/html 就放弃 —— 从浏览器、Word、聊天软件复制图片时，
+  // 剪贴板里几乎总会同时塞一份 <img> 的 HTML，之前那条判断把图片粘贴全挡掉了。
   const text = event.clipboardData?.getData("text/plain")?.trim() ?? "";
-  const html = event.clipboardData?.getData("text/html")?.trim() ?? "";
-  // 剪贴板同时含文本时优先走普通粘贴（截图通常只有图片）
-  if (text || html) return false;
+  return text.length === 0;
+}
+
+/** Ctrl+Shift+V 请求「粘贴为纯文本」，由紧随其后的 paste 事件消费 */
+let plainPasteRequested = false;
+
+/**
+ * ```lang 或 $$ 之后按回车：补上闭合标记并直接进入组件里编辑。
+ *
+ * 不做这一步的话，未闭合围栏按 CommonMark 会一路吃到文档末尾，
+ * 整篇文章都会变成一个代码块。
+ */
+function openBlockOnEnter(view: EditorView): boolean {
+  const { state } = view;
+  const sel = state.selection.main;
+  if (!sel.empty) return false;
+
+  const line = state.doc.lineAt(sel.head);
+  if (sel.head !== line.to) return false;
+
+  const fence = /^(`{3,}|~{3,})([^\s`~]*)\s*$/.exec(line.text);
+  const math = /^\$\$\s*$/.test(line.text);
+  if (!fence && !math) return false;
+
+  // 已经是完整代码块（比如光标停在被展开的源码里）就别再插一道围栏，
+  // 直接进组件编辑
+  if (fence) {
+    let node: SyntaxNode | null = syntaxTree(state).resolveInner(line.from, 1);
+    for (; node; node = node.parent) {
+      if (node.name !== "FencedCode") continue;
+      if (node.getChildren("CodeMark").length >= 2) {
+        focusBlockStartingAt(view, node.from);
+        return true;
+      }
+      break;
+    }
+  }
+
+  const closing = fence ? fence[1] : "$$";
+  const insert = `\n\n${closing}`;
+  const blockFrom = line.from;
+  const blockTo = line.to + insert.length;
+
+  view.dispatch({
+    changes: { from: line.to, insert },
+    // 光标先停在块外，随后把焦点交给组件内部的编辑区
+    selection: { anchor: blockTo },
+    userEvent: "input.block",
+    scrollIntoView: true,
+  });
+  focusBlockStartingAt(view, blockFrom);
   return true;
 }
 
-function mediaHandlers(ctx: { filePath: string | null }): Extension {
+function urlAtPos(doc: string, pos: number): string | null {
+  const lineStart = doc.lastIndexOf("\n", pos - 1) + 1;
+  const lineEnd = doc.indexOf("\n", pos);
+  const line = doc.slice(lineStart, lineEnd === -1 ? doc.length : lineEnd);
+  const offset = pos - lineStart;
+  const linkRe = /\[([^\]]*)\]\(([^)]+)\)/g;
+  let m: RegExpExecArray | null;
+  while ((m = linkRe.exec(line))) {
+    const start = m.index;
+    const end = start + m[0].length;
+    if (offset >= start && offset <= end) return m[2];
+  }
+  const urlRe = /https?:\/\/[^\s)<>"]+/g;
+  while ((m = urlRe.exec(line))) {
+    if (offset >= m.index && offset <= m.index + m[0].length) return m[0];
+  }
+  return null;
+}
+
+function mediaHandlers(
+  ctx: { filePath: string | null },
+  onOpenMarkdown?: (content: string, path?: string) => void,
+): Extension {
   return EditorView.domEventHandlers({
     paste(event, view) {
+      // Ctrl/Cmd+Shift+V：粘贴为纯文本，跳过 HTML → Markdown 转换
+      if (plainPasteRequested) {
+        plainPasteRequested = false;
+        return false;
+      }
+      const htmlClip = event.clipboardData?.getData("text/html")?.trim() ?? "";
+      const plainClip = event.clipboardData?.getData("text/plain") ?? "";
+      // 从代码编辑器复制 Markdown 时剪贴板会同时带一份「带语法着色的 HTML」，
+      // 两者文字内容相同 —— 这种情况必须按纯文本粘，否则原文会被转换器改写
+      const htmlIsJustStyledText =
+        !!htmlClip && !!plainClip && htmlTextContent(htmlClip) === normalizeWs(plainClip);
+
+      if (htmlClip && !htmlIsJustStyledText && !shouldHandleImagePaste(event)) {
+        const md = htmlToMarkdown(htmlClip);
+        if (md.trim().length > 1) {
+          event.preventDefault();
+          const { from, to } = view.state.selection.main;
+          view.dispatch({ changes: { from, to, insert: md }, scrollIntoView: true });
+          return true;
+        }
+      }
       if (!shouldHandleImagePaste(event)) return false;
       const items = event.clipboardData?.items;
       if (!items) return false;
@@ -474,7 +834,7 @@ function mediaHandlers(ctx: { filePath: string | null }): Extension {
           if (!file) return true;
           void file.arrayBuffer().then((buf) => {
             const ext = file.type.split("/")[1] || "png";
-            void insertImage(view, ctx.filePath, new Uint8Array(buf), ext);
+            void insertImage(view, ctx.filePath, new Uint8Array(buf), ext, file.type || "image/png");
           });
           return true;
         }
@@ -484,42 +844,62 @@ function mediaHandlers(ctx: { filePath: string | null }): Extension {
     drop(event, view) {
       const files = event.dataTransfer?.files;
       if (!files?.length) return false;
+
       const file = files[0];
-      if (!file.type.startsWith("image/") && !/\.(png|jpe?g|gif|webp|svg)$/i.test(file.name)) {
-        return false;
+      const isImage =
+        file.type.startsWith("image/") || /\.(png|jpe?g|gif|webp|svg)$/i.test(file.name);
+      const isMarkdown = /\.(md|markdown|txt)$/i.test(file.name);
+
+      if (isMarkdown && onOpenMarkdown) {
+        event.preventDefault();
+        const path = (file as File & { path?: string }).path;
+        void file.text().then((text) => {
+          onOpenMarkdown(text, path);
+        });
+        return true;
       }
+
+      if (!isImage) return false;
       event.preventDefault();
       void file.arrayBuffer().then((buf) => {
         const ext = file.name.split(".").pop() || "png";
-        void insertImage(view, ctx.filePath, new Uint8Array(buf), ext);
+        void insertImage(view, ctx.filePath, new Uint8Array(buf), ext, file.type || "image/png");
       });
       return true;
     },
     mousedown(event, view) {
       if (event.button !== 0) return false;
 
-      const taskLine = (event.target as HTMLElement).closest(".cm-line.md-task-item");
+      let pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+      const target = event.target as HTMLElement;
+      // 与 Typora 一致：普通点击是定位光标，Ctrl/Cmd + 点击才打开链接
+      if (pos != null && (event.ctrlKey || event.metaKey) && target.closest(".cm-md-link")) {
+        const url = urlAtPos(view.state.doc.toString(), pos);
+        if (url) {
+          event.preventDefault();
+          void openUrl(url).catch(() => editorShowError(url));
+          return true;
+        }
+      }
+
+      const taskLine = target.closest(".cm-line.md-task-item");
       if (!taskLine) return false;
 
-      let pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
-      if (pos == null && taskLine) {
+      if (pos == null) {
         pos = view.posAtDOM(taskLine, 0);
       }
       if (pos == null) return false;
 
       const line = view.state.doc.lineAt(pos);
-      const m = /^(\s*[-*+]\s+)\[([ xX])\](\s)/.exec(line.text);
+      const m = TASK_LINE_RE.exec(line.text);
       if (!m) return false;
 
       const bracketPos = line.from + m[1].length;
       const onBrackets = pos >= bracketPos && pos <= bracketPos + 3;
 
-      let onCheckboxVisual = false;
-      if (taskLine) {
-        const rect = taskLine.getBoundingClientRect();
-        const padLeft = parseFloat(getComputedStyle(taskLine).paddingLeft) || 62;
-        onCheckboxVisual = event.clientX - rect.left < padLeft;
-      }
+      const rect = taskLine.getBoundingClientRect();
+      const CHECKBOX_HIT = 40;
+      const onCheckboxVisual = event.clientX - rect.left < CHECKBOX_HIT;
 
       if (!onBrackets && !onCheckboxVisual) return false;
 
@@ -527,9 +907,31 @@ function mediaHandlers(ctx: { filePath: string | null }): Extension {
       const newMark = checked ? " " : "x";
       view.dispatch({
         changes: { from: bracketPos + 1, to: bracketPos + 2, insert: newMark },
+        userEvent: "input.toggleTask",
       });
       event.preventDefault();
       return true;
+    },
+    keydown(event, view) {
+      if (event.key === "Control" || event.key === "Meta") {
+        view.dom.classList.add("cm-mod-held");
+      }
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "v") {
+        plainPasteRequested = true;
+        // 兜底：粘贴事件没来（比如被系统吞了）就自动复位
+        window.setTimeout(() => { plainPasteRequested = false; }, 500);
+      }
+      return false;
+    },
+    keyup(event, view) {
+      if (event.key === "Control" || event.key === "Meta") {
+        view.dom.classList.remove("cm-mod-held");
+      }
+      return false;
+    },
+    blur(_event, view) {
+      view.dom.classList.remove("cm-mod-held");
+      return false;
     },
   });
 }
@@ -562,6 +964,8 @@ export interface EditorOptions {
   onChange: (doc: string) => void;
   onModeChange: (m: EditorMode) => void;
   onCursorLine?: (line: number) => void;
+  onOpenMarkdown?: (content: string, path?: string) => void;
+  onViewportRange?: (from: number, to: number) => void;
 }
 
 export function createEditor(
@@ -587,39 +991,54 @@ export function createEditor(
       history(),
       drawSelection(),
       dropCursor(),
+      // 默认不画高亮底色，只是给当前行打标记，供专注模式变暗使用
+      highlightActiveLine(),
       lineNumbersCompartment.of(opts.lineNumbers ? lineNumbers() : []),
       wrapCompartment.of(opts.wordWrap ? EditorView.lineWrapping : []),
       tabSizeCompartment.of(EditorState.tabSize.of(opts.tabSize)),
       spellCheckCompartment.of(spellCheckExt(opts.spellCheck)),
       markdown({ base: markdownLanguage }),
       syntaxHighlighting(markdownHighlight),
+      // 必须排在 defaultKeymap 之前，否则退格删整对不生效
+      bracketExtensions(),
       keymap.of([
-        ...defaultKeymap,
-        ...historyKeymap,
-        ...markdownKeymap,
-        ...searchKeymap,
+        // 与 App 的全局 Ctrl+/ 冲突：不阻断冒泡的话会被切回来
+        { key: "Mod-/", run: () => { toggleMode(); return true; }, stopPropagation: true },
         ...editorActionKeymap(),
-        indentWithTab,
+        // ```java + 回车 直接生成 java 代码块（$$ 同理）
+        { key: "Enter", run: (v: EditorView) => mode === "preview" && openBlockOnEnter(v) },
+        // 块级组件是原子区间，光标会整块跳过；在边界上把焦点交给组件内部编辑器
+        { key: "ArrowDown", run: (v: EditorView) => enterAdjacentBlock(v, true, false) },
+        { key: "ArrowUp", run: (v: EditorView) => enterAdjacentBlock(v, false, false) },
+        { key: "ArrowRight", run: (v: EditorView) => enterAdjacentBlock(v, true, true) },
+        { key: "ArrowLeft", run: (v: EditorView) => enterAdjacentBlock(v, false, true) },
         { key: "Tab", run: tableTab },
         { key: "Shift-Tab", run: tableShiftTab },
-      ]),
-      keymap.of([
         { key: "Backspace", run: tableBackspace },
         { key: "Delete", run: tableDeleteKey },
+        // markdownKeymap 必须排在 defaultKeymap 前面，否则回车续列表会被
+        // insertNewlineAndIndent 抢先处理掉
+        ...markdownKeymap,
+        ...defaultKeymap,
+        ...historyKeymap,
+        ...searchKeymap,
+        indentWithTab,
       ]),
       search({ top: true }),
       highlightSelectionMatches(),
-      bracketExtensions(),
-      keymap.of([{ key: "Mod-/", run: () => { toggleMode(); return true; } }]),
       previewCompartment.of(previewExt(mode, assetContext)),
       typewriterCompartment.of(typewriterExt(typewriter)),
-      mediaHandlers(assetContext),
-      tableEditingHandlers(),
+      mediaHandlers(assetContext, opts.onOpenMarkdown),
       EditorView.updateListener.of((u) => {
         if (u.docChanged) opts.onChange(u.state.doc.toString());
-        if (u.selectionSet || u.viewportChanged) {
+        if (u.selectionSet) {
           const line = u.state.doc.lineAt(u.state.selection.main.head).number;
           opts.onCursorLine?.(line);
+        }
+        if (u.viewportChanged || u.selectionSet) {
+          const from = u.state.doc.lineAt(u.view.viewport.from).number;
+          const to = u.state.doc.lineAt(u.view.viewport.to).number;
+          opts.onViewportRange?.(from, to);
         }
       }),
     ],

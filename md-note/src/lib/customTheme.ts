@@ -10,25 +10,29 @@ export function getCustomCssPath(): string | null {
 export function setCustomCssPath(path: string | null) {
   if (path) localStorage.setItem(KEY, path);
   else localStorage.removeItem(KEY);
-  applyCustomCss();
+  window.dispatchEvent(new Event("mdnote-custom-css-changed"));
 }
 
-export function applyCustomCss() {
+/** 将自定义 CSS 注入编辑器容器，仅影响预览区域 */
+export function applyCustomCssToHost(host: HTMLElement | null) {
+  const existing = host?.querySelector(`#${LINK_ID}`) as HTMLLinkElement | null;
+  if (existing) existing.remove();
+
   const path = getCustomCssPath();
-  let link = document.getElementById(LINK_ID) as HTMLLinkElement | null;
-  if (!path) {
-    link?.remove();
-    return;
-  }
-  if (!link) {
-    link = document.createElement("link");
-    link.id = LINK_ID;
-    link.rel = "stylesheet";
-    document.head.appendChild(link);
-  }
+  if (!host || !path) return;
+
+  const link = document.createElement("link");
+  link.id = LINK_ID;
+  link.rel = "stylesheet";
   try {
     link.href = convertFileSrc(path);
   } catch {
     link.href = path;
   }
+  host.appendChild(link);
+}
+
+export function removeCustomCssFromHost(host: HTMLElement | null) {
+  const link = host?.querySelector(`#${LINK_ID}`);
+  link?.remove();
 }

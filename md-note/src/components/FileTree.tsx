@@ -18,6 +18,7 @@ interface Props {
   onCreateFolder: (parentDir: string, name: string) => void | Promise<void>;
   onRenamePath: (path: string, newName: string, isDir: boolean) => void | Promise<void>;
   onDelete: (path: string, isDir: boolean) => void;
+  onError?: (e: unknown) => void;
 }
 
 type CreatingState = {
@@ -186,6 +187,7 @@ export default function FileTree({
   onCreateFolder,
   onRenamePath,
   onDelete,
+  onError,
 }: Props) {
   const [rootExpanded, setRootExpanded] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
@@ -195,6 +197,7 @@ export default function FileTree({
   const [creating, setCreating] = useState<CreatingState | null>(null);
   const [renaming, setRenaming] = useState<RenamingState | null>(null);
   const [clipboard, setClipboard] = useState<TreeClipboard | null>(null);
+  const [filter, setFilter] = useState("");
   const tr = useCallback(
     (key: Parameters<typeof t>[1]) => t(locale, key),
     [locale],
@@ -283,7 +286,7 @@ export default function FileTree({
         if (kind === "file") await onCreateFile(parentDir, name);
         else await onCreateFolder(parentDir, name);
       } catch (e) {
-        console.error(e);
+        onError?.(e);
       }
     },
     [creating, onCreateFile, onCreateFolder],
@@ -324,7 +327,7 @@ export default function FileTree({
       try {
         await onRenamePath(path, name, isDir);
       } catch (e) {
-        console.error(e);
+        onError?.(e);
       }
     },
     [renaming, onRenamePath],
@@ -388,9 +391,9 @@ export default function FileTree({
     try {
       await navigator.clipboard.writeText(text);
     } catch (e) {
-      console.error(e);
+      onError?.(e);
     }
-  }, []);
+  }, [onError]);
 
   const copyRelativePath = useCallback(
     (path: string) => void copyText(relativeToWorkspace(rootPath, path)),
@@ -406,9 +409,9 @@ export default function FileTree({
     try {
       await revealItemInDir(path);
     } catch (e) {
-      console.error(e);
+      onError?.(e);
     }
-  }, []);
+  }, [onError]);
 
   const copyFile = useCallback((path: string) => {
     setClipboard({ mode: "copy", path });
@@ -434,10 +437,10 @@ export default function FileTree({
         }
         onRefresh();
       } catch (e) {
-        console.error(e);
+        onError?.(e);
       }
     },
-    [clipboard, onRefresh],
+    [clipboard, onRefresh, onError],
   );
 
   const clipboardMenuItems = useCallback(
@@ -658,6 +661,9 @@ export default function FileTree({
       const isMd = /\.(md|markdown|txt)$/i.test(entry.name);
       if (!isMd) return null;
 
+      const fq = filter.trim().toLowerCase();
+      if (fq && !entry.name.toLowerCase().includes(fq)) return null;
+
       const isSelected = selectedPath === entry.path;
       const isRenaming = renaming?.path === entry.path;
       return (
@@ -698,6 +704,15 @@ export default function FileTree({
 
   return (
     <>
+      <div className="file-tree-filter">
+        <input
+          type="search"
+          className="file-tree-filter-input"
+          placeholder={tr("tree.filter")}
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+        />
+      </div>
       <ul className="file-list file-tree">
         <li className="tree-group tree-root">
           <div

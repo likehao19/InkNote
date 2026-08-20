@@ -8,14 +8,16 @@ const KEYS = {
   lineHeight: "mdnote.lineHeight",
   editorMaxWidth: "mdnote.editorMaxWidth",
   focusMaxWidth: "mdnote.focusMaxWidth",
-  autosave: "mdnote.autosave",
-  autosaveDelay: "mdnote.autosaveDelay",
   defaultEditorMode: "mdnote.defaultEditorMode",
   lineNumbers: "mdnote.lineNumbers",
   wordWrap: "mdnote.wordWrap",
   tabSize: "mdnote.tabSize",
   spellCheck: "mdnote.spellCheck",
   restoreLastFolder: "mdnote.restoreLastFolder",
+  restoreLastFile: "mdnote.restoreLastFile",
+  fontFamily: "mdnote.fontFamily",
+  monoFontFamily: "mdnote.monoFontFamily",
+  editorZoom: "mdnote.editorZoom",
   sidebarVisible: "mdnote.sidebarVisible",
   sidebarWidth: "mdnote.sidebarWidth",
   defaultSidebarTab: "mdnote.defaultSidebarTab",
@@ -78,22 +80,6 @@ export function setFocusMaxWidth(n: number) {
   writeNumber(KEYS.focusMaxWidth, n);
 }
 
-export function getAutosave(): boolean {
-  return readBool(KEYS.autosave, true);
-}
-
-export function setAutosave(on: boolean) {
-  writeBool(KEYS.autosave, on);
-}
-
-export function getAutosaveDelay(): number {
-  return readNumber(KEYS.autosaveDelay, 500, 10000, 1200);
-}
-
-export function setAutosaveDelay(ms: number) {
-  writeNumber(KEYS.autosaveDelay, ms);
-}
-
 export function getDefaultEditorMode(): DefaultEditorMode {
   const v = localStorage.getItem(KEYS.defaultEditorMode);
   return v === "source" ? "source" : "preview";
@@ -141,6 +127,54 @@ export function getRestoreLastFolder(): boolean {
 
 export function setRestoreLastFolder(on: boolean) {
   writeBool(KEYS.restoreLastFolder, on);
+}
+
+export function getRestoreLastFile(): boolean {
+  return readBool(KEYS.restoreLastFile, true);
+}
+
+export function setRestoreLastFile(on: boolean) {
+  writeBool(KEYS.restoreLastFile, on);
+}
+
+const FONT_STACKS: Record<string, string> = {
+  system: "system-ui, -apple-system, Segoe UI, Microsoft YaHei, PingFang SC, sans-serif",
+  serif: "Georgia, Cambria, Times New Roman, serif",
+};
+
+export function getFontFamily(): string {
+  const v = localStorage.getItem(KEYS.fontFamily);
+  return v && FONT_STACKS[v] ? v : "system";
+}
+
+export function setFontFamily(key: string) {
+  localStorage.setItem(KEYS.fontFamily, key);
+}
+
+export function getMonoFontFamily(): string {
+  return localStorage.getItem(KEYS.monoFontFamily) === "jetbrains" ? "jetbrains" : "system";
+}
+
+export function setMonoFontFamily(key: string) {
+  localStorage.setItem(KEYS.monoFontFamily, key);
+}
+
+export function resolveFontFamily(): string {
+  return FONT_STACKS[getFontFamily()] ?? FONT_STACKS.system;
+}
+
+export function resolveMonoFontFamily(): string {
+  return getMonoFontFamily() === "jetbrains"
+    ? "JetBrains Mono, ui-monospace, Consolas, monospace"
+    : "ui-monospace, Cascadia Code, Consolas, monospace";
+}
+
+export function getEditorZoom(): number {
+  return readNumber(KEYS.editorZoom, 80, 150, 100);
+}
+
+export function setEditorZoom(n: number) {
+  writeNumber(KEYS.editorZoom, n);
 }
 
 export function getSidebarVisiblePref(): boolean {
@@ -224,4 +258,7 @@ export function applyEditorLayoutPrefs() {
   root.style.setProperty("--editor-max-width", `${getEditorMaxWidth()}rem`);
   root.style.setProperty("--editor-focus-max-width", `${getFocusMaxWidth()}rem`);
   root.style.setProperty("--typewriter-padding", `${getTypewriterPadding()}vh`);
+  root.style.setProperty("--editor-font-family", resolveFontFamily());
+  root.style.setProperty("--editor-mono-font", resolveMonoFontFamily());
+  root.style.setProperty("--editor-zoom", String(getEditorZoom() / 100));
 }

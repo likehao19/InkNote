@@ -7,6 +7,7 @@ import type { SavedSidebarTab } from "../lib/workspace";
 import { isMac } from "../lib/tauri";
 import * as api from "../lib/tauri";
 import { getCustomCssPath, setCustomCssPath } from "../lib/customTheme";
+import ThemePicker from "./ThemePicker";
 
 export type SettingsCategory =
   | "general"
@@ -37,9 +38,8 @@ const CATEGORY_KEYS: Record<SettingsCategory, MessageKey> = {
 export interface SettingsValues {
   locale: Locale;
   theme: ThemePref;
-  autosave: boolean;
-  autosaveDelay: number;
   restoreLastFolder: boolean;
+  restoreLastFile: boolean;
   confirmDiscard: boolean;
   confirmDelete: boolean;
   recentFilesLimit: number;
@@ -48,6 +48,9 @@ export interface SettingsValues {
   defaultEditorMode: DefaultEditorMode;
   fontSize: number;
   lineHeight: number;
+  fontFamily: string;
+  monoFontFamily: string;
+  editorZoom: number;
   editorMaxWidth: number;
   focusMaxWidth: number;
   lineNumbers: boolean;
@@ -62,9 +65,8 @@ export interface SettingsValues {
 export interface SettingsHandlers {
   onLocale: (locale: Locale) => void;
   onTheme: (theme: ThemePref) => void;
-  onAutosave: (on: boolean) => void;
-  onAutosaveDelay: (ms: number) => void;
   onRestoreLastFolder: (on: boolean) => void;
+  onRestoreLastFile: (on: boolean) => void;
   onConfirmDiscard: (on: boolean) => void;
   onConfirmDelete: (on: boolean) => void;
   onRecentFilesLimit: (n: number) => void;
@@ -74,6 +76,9 @@ export interface SettingsHandlers {
   onDefaultEditorMode: (mode: DefaultEditorMode) => void;
   onFontSize: (n: number) => void;
   onLineHeight: (n: number) => void;
+  onFontFamily: (key: string) => void;
+  onMonoFontFamily: (key: string) => void;
+  onEditorZoom: (n: number) => void;
   onEditorMaxWidth: (n: number) => void;
   onFocusMaxWidth: (n: number) => void;
   onLineNumbers: (on: boolean) => void;
@@ -97,9 +102,8 @@ function buildSearchIndex(): { category: SettingsCategory; keys: MessageKey[] }[
       category: "general",
       keys: [
         "settings.language", "settings.languageDesc",
-        "settings.autosave", "settings.autosaveDesc",
-        "settings.autosaveDelay", "settings.autosaveDelayDesc",
         "settings.restoreLastFolder", "settings.restoreLastFolderDesc",
+        "settings.restoreLastFile", "settings.restoreLastFileDesc",
         "settings.confirmDiscard", "settings.confirmDiscardDesc",
         "settings.confirmDelete", "settings.confirmDeleteDesc",
         "settings.recentFilesLimit", "settings.recentFilesLimitDesc",
@@ -119,6 +123,8 @@ function buildSearchIndex(): { category: SettingsCategory; keys: MessageKey[] }[
         "settings.defaultMode", "settings.defaultModeDesc",
         "settings.fontSize", "settings.fontSizeDesc",
         "settings.lineHeight", "settings.lineHeightDesc",
+        "settings.fontFamily", "settings.monoFontFamily",
+        "settings.editorZoom", "settings.editorZoomDesc",
         "settings.editorMaxWidth", "settings.editorMaxWidthDesc",
         "settings.focusMaxWidth", "settings.focusMaxWidthDesc",
         "settings.lineNumbers", "settings.lineNumbersDesc",
@@ -222,7 +228,7 @@ export default function Settings({ values, handlers, onClose }: Props) {
               autoFocus
             />
           </div>
-          <button type="button" className="settings-close" onClick={onClose} aria-label="Close">
+          <button type="button" className="settings-close" onClick={onClose} aria-label={tr("dialog.close")}>
             <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
               <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
             </svg>
@@ -256,21 +262,11 @@ export default function Settings({ values, handlers, onClose }: Props) {
                         <option value="en">{tr("settings.language.en")}</option>
                       </select>
                     </SettingItem>
-                    <SettingItem label={tr("settings.autosave")} desc={tr("settings.autosaveDesc")}>
-                      <Toggle checked={values.autosave} onChange={handlers.onAutosave} />
-                    </SettingItem>
-                    <SettingItem label={tr("settings.autosaveDelay")} desc={tr("settings.autosaveDelayDesc")}>
-                      <NumberInput
-                        min={500}
-                        max={10000}
-                        step={100}
-                        value={values.autosaveDelay}
-                        onChange={handlers.onAutosaveDelay}
-                        disabled={!values.autosave}
-                      />
-                    </SettingItem>
                     <SettingItem label={tr("settings.restoreLastFolder")} desc={tr("settings.restoreLastFolderDesc")}>
                       <Toggle checked={values.restoreLastFolder} onChange={handlers.onRestoreLastFolder} />
+                    </SettingItem>
+                    <SettingItem label={tr("settings.restoreLastFile")} desc={tr("settings.restoreLastFileDesc")}>
+                      <Toggle checked={values.restoreLastFile} onChange={handlers.onRestoreLastFile} />
                     </SettingItem>
                     <SettingItem label={tr("settings.confirmDiscard")} desc={tr("settings.confirmDiscardDesc")}>
                       <Toggle checked={values.confirmDiscard} onChange={handlers.onConfirmDiscard} />
@@ -336,6 +332,27 @@ export default function Settings({ values, handlers, onClose }: Props) {
                         onChange={handlers.onLineHeight}
                       />
                     </SettingItem>
+                    <SettingItem label={tr("settings.fontFamily")}>
+                      <select value={values.fontFamily} onChange={(e) => handlers.onFontFamily(e.target.value)}>
+                        <option value="system">{tr("settings.fontFamily.system")}</option>
+                        <option value="serif">{tr("settings.fontFamily.serif")}</option>
+                      </select>
+                    </SettingItem>
+                    <SettingItem label={tr("settings.monoFontFamily")}>
+                      <select value={values.monoFontFamily} onChange={(e) => handlers.onMonoFontFamily(e.target.value)}>
+                        <option value="system">{tr("settings.monoFontFamily.system")}</option>
+                        <option value="jetbrains">{tr("settings.monoFontFamily.jetbrains")}</option>
+                      </select>
+                    </SettingItem>
+                    <SettingItem label={tr("settings.editorZoom")} desc={tr("settings.editorZoomDesc")}>
+                      <NumberInput
+                        min={80}
+                        max={150}
+                        step={10}
+                        value={values.editorZoom}
+                        onChange={handlers.onEditorZoom}
+                      />
+                    </SettingItem>
                     <SettingItem label={tr("settings.editorMaxWidth")} desc={tr("settings.editorMaxWidthDesc")}>
                       <NumberInput
                         min={32}
@@ -381,11 +398,7 @@ export default function Settings({ values, handlers, onClose }: Props) {
                 {activeCategory === "appearance" && (
                   <SettingsPage title={tr("settings.section.appearance")}>
                     <SettingItem label={tr("settings.theme")} desc={tr("settings.themeDesc")}>
-                      <select value={values.theme} onChange={(e) => handlers.onTheme(e.target.value as ThemePref)}>
-                        <option value="light">{tr("settings.theme.light")}</option>
-                        <option value="dark">{tr("settings.theme.dark")}</option>
-                        <option value="system">{tr("settings.theme.system")}</option>
-                      </select>
+                      <ThemePicker locale={locale} value={values.theme} onChange={handlers.onTheme} />
                     </SettingItem>
                     <SettingItem label={tr("settings.showStatusBar")} desc={tr("settings.showStatusBarDesc")}>
                       <Toggle checked={values.showStatusBar} onChange={handlers.onShowStatusBar} />
