@@ -19,9 +19,20 @@ interface DocState {
   newTab: () => string;
   openTab: (path: string, content: string) => string;
   closeTab: (id: string) => void;
+  restoreTab: (snap: {
+    path: string | null;
+    content: string;
+    diskContent: string;
+    dirty: boolean;
+  }) => void;
   updateContent: (id: string, content: string) => void;
   setMode: (id: string, mode: EditorMode) => void;
-  markSaved: (id: string, path?: string, content?: string) => void;
+  /** 保存完成：只更新磁盘基线，不动正在编辑的内容 */
+  markSaved: (id: string, path?: string, savedContent?: string) => void;
+  /** 用磁盘内容整体替换（外部修改 / 手动重新加载） */
+  loadFromDisk: (id: string, path: string, content: string) => void;
+  /** 仅改路径（重命名），不影响未保存状态 */
+  setPath: (id: string, path: string) => void;
   getActive: () => TabDoc | undefined;
   toggleFocusMode: () => void;
   toggleTypewriterMode: () => void;
@@ -66,6 +77,7 @@ export const useTabsStore = create<DocState>((set, get) => ({
         content,
         diskContent: content,
         dirty: false,
+        mode: getDefaultEditorMode(),
       };
       return { tabs: [tab], activeId: tab.id };
     });
@@ -74,6 +86,19 @@ export const useTabsStore = create<DocState>((set, get) => ({
 
   closeTab: (_id) => {
     const tab = emptyTab();
+    set({ tabs: [tab], activeId: tab.id });
+  },
+
+  restoreTab: (snap) => {
+    const cur = get().tabs.find((t) => t.id === get().activeId) ?? get().tabs[0] ?? emptyTab();
+    const tab: TabDoc = {
+      id: cur.id,
+      path: snap.path,
+      content: snap.content,
+      diskContent: snap.diskContent,
+      dirty: snap.dirty,
+      mode: getDefaultEditorMode(),
+    };
     set({ tabs: [tab], activeId: tab.id });
   },
 
@@ -91,19 +116,40 @@ export const useTabsStore = create<DocState>((set, get) => ({
     }));
   },
 
-  markSaved: (id, path, content) => {
+  /**
+   * 保存完成。
+   *
+   * 只把磁盘基线推进到刚写出去的内容，**不能**用写盘前的快照覆盖 content ——
+   * 否则在 IPC 往返期间敲进去的字会被抹掉。dirty 由当前内容与基线比较得出，
+   * 保存期间新输入的内容会继续保持 dirty，等待用户再次保存或退出时写回。
+   */
+  markSaved: (id, path, savedContent) => {
     set((s) => ({
       tabs: s.tabs.map((t) => {
         if (t.id !== id) return t;
-        const c = content ?? t.content;
+        const disk = savedContent ?? t.content;
         return {
           ...t,
           path: path ?? t.path,
-          content: c,
-          diskContent: c,
-          dirty: false,
+          diskContent: disk,
+          dirty: t.content !== disk,
         };
       }),
+    }));
+  },
+
+  /** 用磁盘内容整体替换当前文档 */
+  loadFromDisk: (id, path, content) => {
+    set((s) => ({
+      tabs: s.tabs.map((t) =>
+        t.id === id ? { ...t, path, content, diskContent: content, dirty: false } : t,
+      ),
+    }));
+  },
+
+  setPath: (id, path) => {
+    set((s) => ({
+      tabs: s.tabs.map((t) => (t.id === id ? { ...t, path } : t)),
     }));
   },
 

@@ -19,36 +19,43 @@ function useMaximized() {
   return maximized;
 }
 
-function MacControls() {
+import type { Locale } from "../lib/i18n";
+import { t } from "../lib/i18n";
+
+interface WindowControlsProps {
+  locale: Locale;
+}
+
+function MacControls({ locale }: WindowControlsProps) {
   const win = getCurrentWindow();
   return (
     <div className="window-controls mac" data-tauri-drag-region={false}>
       <button
         type="button"
         className="wc-btn wc-close"
-        title="关闭"
-        aria-label="关闭"
+        title={t(locale, "win.close")}
+        aria-label={t(locale, "win.close")}
         onClick={() => win.close()}
       />
       <button
         type="button"
         className="wc-btn wc-minimize"
-        title="最小化"
-        aria-label="最小化"
+        title={t(locale, "win.minimize")}
+        aria-label={t(locale, "win.minimize")}
         onClick={() => win.minimize()}
       />
       <button
         type="button"
         className="wc-btn wc-maximize"
-        title="最大化"
-        aria-label="最大化"
+        title={t(locale, "win.maximize")}
+        aria-label={t(locale, "win.maximize")}
         onClick={() => win.toggleMaximize()}
       />
     </div>
   );
 }
 
-function WinControls() {
+function WinControls({ locale }: WindowControlsProps) {
   const win = getCurrentWindow();
   const maximized = useMaximized();
 
@@ -57,8 +64,8 @@ function WinControls() {
       <button
         type="button"
         className="wc-btn wc-minimize"
-        title="最小化"
-        aria-label="最小化"
+        title={t(locale, "win.minimize")}
+        aria-label={t(locale, "win.minimize")}
         onClick={() => win.minimize()}
       >
         <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
@@ -68,8 +75,8 @@ function WinControls() {
       <button
         type="button"
         className="wc-btn wc-maximize"
-        title={maximized ? "还原" : "最大化"}
-        aria-label={maximized ? "还原" : "最大化"}
+        title={maximized ? t(locale, "win.restore") : t(locale, "win.maximize")}
+        aria-label={maximized ? t(locale, "win.restore") : t(locale, "win.maximize")}
         onClick={() => win.toggleMaximize()}
       >
         {maximized ? (
@@ -88,8 +95,8 @@ function WinControls() {
       <button
         type="button"
         className="wc-btn wc-close"
-        title="关闭"
-        aria-label="关闭"
+        title={t(locale, "win.close")}
+        aria-label={t(locale, "win.close")}
         onClick={() => win.close()}
       >
         <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
@@ -100,6 +107,6 @@ function WinControls() {
   );
 }
 
-export default function WindowControls() {
-  return isMac ? <MacControls /> : <WinControls />;
+export default function WindowControls({ locale }: WindowControlsProps) {
+  return isMac ? <MacControls locale={locale} /> : <WinControls locale={locale} />;
 }

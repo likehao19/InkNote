@@ -5,6 +5,13 @@
 md-note/node_modules/
 md-note/dist/
 md-note/dist-ssr/
+# Accidental Vite chunks emitted into the package root by ad-hoc builds
+md-note/*.js
+md-note/tauri.svg
+md-note/vite.svg
+md-note/src-tauri/icons/64x64.png
+md-note/src-tauri/icons/android/
+md-note/src-tauri/icons/ios/
 
 # Rust / Tauri
 md-note/src-tauri/target/

@@ -15,17 +15,56 @@ const HTML_FILTER = { name: "HTML", extensions: ["html"] };
 export function readFile(path: string): Promise<string> {
   return invoke("read_file", { path });
 }
+/**
+ * 记录自己刚写出去的内容。
+ *
+ * 文件监听事件可能在写入完成前到达。按路径和内容记录进行中的写入，
+ * 同时由调用方用 diskContent 识别已经完成但事件迟到的应用写入。
+ */
+const pendingSelfWrites = new Map<string, Map<string, number>>();
+
+function trackSelfWrite(path: string, content: string, delta: 1 | -1) {
+  const contents = pendingSelfWrites.get(path) ?? new Map<string, number>();
+  const next = (contents.get(content) ?? 0) + delta;
+  if (next > 0) contents.set(content, next);
+  else contents.delete(content);
+  if (contents.size) pendingSelfWrites.set(path, contents);
+  else pendingSelfWrites.delete(path);
+}
+
+export function isSelfWritePending(path: string, diskContent: string): boolean {
+  return (pendingSelfWrites.get(path)?.get(diskContent) ?? 0) > 0;
+}
+
 export function writeFile(path: string, content: string): Promise<void> {
-  return invoke("write_file", { path, content });
+  trackSelfWrite(path, content, 1);
+  return invoke<void>("write_file", { path, content }).finally(() => {
+    trackSelfWrite(path, content, -1);
+  });
 }
 export function writeBinary(path: string, data: number[]): Promise<void> {
   return invoke("write_binary", { path, data });
 }
+
+export async function openImageDialog(): Promise<string | null> {
+  const r = await openDialog({
+    multiple: false,
+    filters: [{ name: "Image", extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg"] }],
+  });
+  return typeof r === "string" ? r : null;
+}
 export function listDir(path: string): Promise<DirEntry[]> {
   return invoke("list_dir", { path });
 }
+let startupFileOnce: Promise<string | null> | null = null;
+
+/**
+ * 启动文件在 Rust 侧是 `take()` 语义，只能取一次。
+ * 这里缓存 Promise，避免 StrictMode 双次挂载时第二次拿到 null。
+ */
 export function getStartupFile(): Promise<string | null> {
-  return invoke("get_startup_file");
+  if (!startupFileOnce) startupFileOnce = invoke<string | null>("get_startup_file");
+  return startupFileOnce;
 }
 export function watchFile(path: string): Promise<void> {
   return invoke("watch_file", { path });

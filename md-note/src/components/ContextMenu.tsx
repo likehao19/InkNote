@@ -20,7 +20,7 @@ function matchesAccelerator(e: KeyboardEvent, accelerator: string): boolean {
 
 export interface ContextMenuItem {
   label: string;
-  onClick: () => void;
+  onClick?: () => void;
   shortcut?: string;
   accelerator?: string;
   disabled?: boolean;
@@ -57,7 +57,7 @@ export default function ContextMenu({
 
   const activate = useCallback(
     (item: ContextMenuItem) => {
-      if (item.disabled) return;
+      if (item.disabled || item.separator || !item.onClick) return;
       item.onClick();
       onClose();
     },

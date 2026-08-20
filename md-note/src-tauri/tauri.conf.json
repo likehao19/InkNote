@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "MDNote",
+  "productName": "InkNote",
   "version": "0.1.0",
-  "identifier": "com.mdnote.app",
+  "identifier": "com.inknote.desktop",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "MDNote",
+        "title": "墨笺 InkNote",
         "width": 1080,
         "height": 720,
         "minWidth": 640,
@@ -24,7 +24,7 @@
       }
     ],
     "security": {
-      "csp": null,
+      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost https: data: blob:; media-src 'self' asset: http://asset.localhost blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost asset: http://asset.localhost",
       "assetProtocol": {
         "enable": true,
         "scope": ["**"]
@@ -37,8 +37,8 @@
     "fileAssociations": [
       {
         "ext": ["md", "markdown"],
-        "name": "Markdown",
-        "description": "Markdown 文档",
+        "name": "InkNote Markdown Document",
+        "description": "使用墨笺 InkNote 编辑的 Markdown 文档",
         "role": "Editor",
         "mimeType": "text/markdown"
       }
@@ -49,6 +49,12 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "nsis": {
+        "languages": ["SimpChinese"],
+        "installerIcon": "icons/icon.ico"
+      }
+    }
   }
 }

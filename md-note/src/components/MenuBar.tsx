@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 export interface MenuItemDef {
   label: string;
+  title?: string;
   shortcut?: string;
   action?: () => void;
   separator?: boolean;
@@ -55,21 +56,20 @@ function MenuLeafItem({
   return (
     <button
       type="button"
-      className={
-        item.checked !== undefined
-          ? "menubar-item menubar-item--toggle"
-          : "menubar-item"
-      }
+      className="menubar-item menubar-item--with-gutter"
       role="menuitem"
       aria-checked={item.checked !== undefined ? item.checked : undefined}
       disabled={item.disabled}
-      onClick={() => {
+      title={item.title}
+      onMouseDown={(e) => {
+        // WebView 中避免 mousedown 抢焦点导致菜单在 click 前关闭、动作不触发
+        e.preventDefault();
         item.action?.();
         onActivate();
       }}
       data-tauri-drag-region={false}
     >
-      {item.checked !== undefined && <MenuCheck checked={item.checked} />}
+      <MenuCheck checked={item.checked === true} />
       <span className="menubar-item-label">{item.label}</span>
       {item.shortcut && <span className="menubar-shortcut">{item.shortcut}</span>}
     </button>
@@ -96,13 +96,14 @@ function MenuSubmenuItem({
     >
       <button
         type="button"
-        className="menubar-item menubar-item--submenu"
+        className="menubar-item menubar-item--submenu menubar-item--with-gutter"
         role="menuitem"
         aria-haspopup="true"
         aria-expanded={open}
         disabled={item.disabled}
         data-tauri-drag-region={false}
       >
+        <MenuCheck checked={false} />
         <span className="menubar-item-label">{item.label}</span>
         <SubmenuArrow />
       </button>

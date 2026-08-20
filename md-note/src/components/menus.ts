@@ -1,6 +1,6 @@
 import type { EditorAction } from "../editor";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { modShortcut, shortcut } from "../lib/shortcuts";
+import { basename } from "../lib/paths";
 import type { Locale } from "../lib/i18n";
 import { t } from "../lib/i18n";
 import type { MenuGroupDef } from "./MenuBar";
@@ -24,6 +24,12 @@ export interface MenuCallbacks {
   onToggleEditorMode: () => void;
   onToggleFocus: () => void;
   onToggleTypewriter: () => void;
+  onOpenShortcuts: () => void;
+  onOpenAbout: () => void;
+  onGlobalSearch?: () => void;
+  onQuickOpen?: () => void;
+  onOpenRecent?: (path: string) => void;
+  onReopenClosed?: () => void;
 }
 
 export interface MenuState {
@@ -32,6 +38,8 @@ export interface MenuState {
   editorMode: EditorMode;
   focusMode: boolean;
   typewriterMode: boolean;
+  recentFiles: string[];
+  canReopenClosed?: boolean;
 }
 
 export function buildMenuGroups(
@@ -49,11 +57,29 @@ export function buildMenuGroups(
         { label: tr("menu.new"), shortcut: modShortcut("N"), action: cb.onNewFile },
         { label: tr("menu.open"), shortcut: modShortcut("O"), action: cb.onOpen },
         { label: tr("menu.openFolder"), action: cb.onOpenFolder },
+        ...(state.recentFiles.length > 0 && cb.onOpenRecent
+          ? [
+              {
+                label: tr("menu.openRecent"),
+                children: state.recentFiles.slice(0, 10).map((path) => ({
+                  label: basename(path),
+                  title: path,
+                  action: () => cb.onOpenRecent!(path),
+                })),
+              },
+            ]
+          : []),
         { separator: true, label: "" },
         { label: tr("menu.close"), shortcut: modShortcut("W"), action: cb.onCloseFile },
+        ...(cb.onReopenClosed && state.canReopenClosed
+          ? [{ label: tr("menu.reopenClosed"), shortcut: modShortcut("Shift+T"), action: cb.onReopenClosed }]
+          : []),
         { separator: true, label: "" },
         { label: tr("menu.save"), shortcut: modShortcut("S"), action: cb.onSave },
         { label: tr("menu.saveAs"), shortcut: modShortcut("Shift+S"), action: cb.onSaveAs },
+        ...(cb.onQuickOpen
+          ? [{ label: tr("menu.quickOpen"), shortcut: modShortcut("P"), action: cb.onQuickOpen }]
+          : []),
         { separator: true, label: "" },
         { label: tr("menu.exportHtml"), action: cb.onExportHtml },
         { label: tr("menu.exportPdf"), action: cb.onExportPdf },
@@ -73,6 +99,7 @@ export function buildMenuGroups(
         { label: tr("menu.selectAll"), shortcut: modShortcut("A"), action: () => run("selectAll") },
         { separator: true, label: "" },
         { label: tr("menu.find"), shortcut: modShortcut("F"), action: () => run("find") },
+        { label: tr("menu.findReplace"), shortcut: modShortcut("H"), action: () => run("findReplace") },
       ],
     },
     {
@@ -124,9 +151,13 @@ export function buildMenuGroups(
         { label: tr("menu.strikethrough"), action: () => run("strikethrough") },
         { label: tr("menu.inlineCode"), shortcut: modShortcut("Shift+`"), action: () => run("inlineCode") },
         { label: tr("menu.highlight"), action: () => run("highlight") },
+        { label: tr("menu.underline"), action: () => run("underline") },
+        { label: tr("menu.superscript"), action: () => run("superscript") },
+        { label: tr("menu.subscript"), action: () => run("subscript") },
         { separator: true, label: "" },
         { label: tr("menu.link"), shortcut: modShortcut("K"), action: () => run("link") },
         { label: tr("menu.image"), shortcut: modShortcut("Shift+I"), action: () => run("image") },
+        { label: tr("menu.copyHtml"), action: () => run("copyHtml") },
       ],
     },
     {
@@ -138,6 +169,9 @@ export function buildMenuGroups(
           action: cb.onToggleSidebar,
           checked: state.sidebarVisible,
         },
+        ...(cb.onGlobalSearch
+          ? [{ label: tr("menu.globalSearch"), shortcut: modShortcut("Shift+F"), action: cb.onGlobalSearch }]
+          : []),
         { separator: true, label: "" },
         {
           label: tr("menu.preview"),
@@ -186,15 +220,11 @@ export function buildMenuGroups(
       items: [
         {
           label: tr("menu.shortcuts"),
-          action: () => {
-            void openUrl("https://support.typora.io/Shortcut-Keys/");
-          },
+          action: cb.onOpenShortcuts,
         },
         {
           label: tr("menu.about"),
-          action: () => {
-            alert(tr("menu.aboutBody"));
-          },
+          action: cb.onOpenAbout,
         },
       ],
     },

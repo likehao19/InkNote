@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { Locale } from "../lib/i18n";
 import { t } from "../lib/i18n";
 import FileTree from "./FileTree";
@@ -22,6 +23,8 @@ interface Props {
   currentPath: string | null;
   recentFiles: string[];
   onRemoveRecent: (path: string) => void;
+  onOpenFolder?: () => void;
+  onError?: (e: unknown) => void;
 }
 
 export default function Sidebar({
@@ -42,19 +45,32 @@ export default function Sidebar({
   currentPath,
   recentFiles,
   onRemoveRecent,
+  onOpenFolder,
+  onError,
 }: Props) {
   const tr = (key: Parameters<typeof t>[1]) => t(locale, key);
+  const outlineListRef = useRef<HTMLUListElement>(null);
+
+  useEffect(() => {
+    if (tab !== "outline" || !activeOutlineLine) return;
+    const list = outlineListRef.current;
+    if (!list) return;
+    const active = list.querySelector(".outline-item.active");
+    if (active instanceof HTMLElement) {
+      active.scrollIntoView({ block: "nearest" });
+    }
+  }, [tab, activeOutlineLine]);
 
   return (
     <aside className="sidebar">
       <div className="sidebar-tabs">
-        <button className={tab === "files" ? "tab active" : "tab"} onClick={() => onTab("files")}>
+        <button type="button" className={tab === "files" ? "tab active" : "tab"} onClick={() => onTab("files")}>
           {tr("sidebar.files")}
         </button>
-        <button className={tab === "outline" ? "tab active" : "tab"} onClick={() => onTab("outline")}>
+        <button type="button" className={tab === "outline" ? "tab active" : "tab"} onClick={() => onTab("outline")}>
           {tr("sidebar.outline")}
         </button>
-        <button className={tab === "recent" ? "tab active" : "tab"} onClick={() => onTab("recent")}>
+        <button type="button" className={tab === "recent" ? "tab active" : "tab"} onClick={() => onTab("recent")}>
           {tr("sidebar.recent")}
         </button>
       </div>
@@ -63,7 +79,14 @@ export default function Sidebar({
         {tab === "files" ? (
           <div className="file-panel">
             {!folderPath ? (
-              <div className="empty">{tr("sidebar.emptyFolder")}</div>
+              <div className="empty empty-action">
+                <p>{tr("sidebar.emptyFolder")}</p>
+                {onOpenFolder && (
+                  <button type="button" className="btn-secondary btn-sm" onClick={onOpenFolder}>
+                    {tr("sidebar.openFolderBtn")}
+                  </button>
+                )}
+              </div>
             ) : (
               <FileTree
                 locale={locale}
@@ -76,6 +99,7 @@ export default function Sidebar({
                 onCreateFolder={onCreateFolderInDir ?? (async () => {})}
                 onRenamePath={onRenamePath ?? (async () => {})}
                 onDelete={onDeletePath ?? (() => {})}
+                onError={onError}
               />
             )}
           </div>
@@ -84,7 +108,7 @@ export default function Sidebar({
             {outline.length === 0 ? (
               <div className="empty">{tr("sidebar.emptyOutline")}</div>
             ) : (
-              <ul className="outline-list">
+              <ul className="outline-list" ref={outlineListRef}>
                 {outline.map((h, i) => (
                   <li
                     key={i}

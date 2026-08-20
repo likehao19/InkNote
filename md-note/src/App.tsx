@@ -9,13 +9,26 @@ import Settings from "./components/Settings";
 import ReloadDialog from "./components/ReloadDialog";
 import TableSizePicker from "./components/TableSizePicker";
 import Toast from "./components/Toast";
+import ConfirmDialog from "./components/ConfirmDialog";
+import LinkInsertDialog from "./components/LinkInsertDialog";
+import ImageInsertDialog from "./components/ImageInsertDialog";
+import ShortcutsDialog from "./components/ShortcutsDialog";
+import AboutDialog from "./components/AboutDialog";
+import WelcomePanel from "./components/WelcomePanel";
+import GlobalSearchDialog from "./components/GlobalSearchDialog";
+import QuickOpenDialog from "./components/QuickOpenDialog";
+import PromptDialog from "./components/PromptDialog";
 import * as api from "./lib/tauri";
 import { initPlatform } from "./lib/platform";
+import { setConfirmHandler } from "./lib/confirmBridge";
+import { setEditorBridge, type PromptRequest } from "./lib/editorBridge";
 import { addRecentFile, clearRecentFiles, getRecentFiles, removeRecentFile, trimRecentFiles } from "./lib/recent";
 import {
   getLastFolder,
   setLastFolder,
   clearLastFolder,
+  getLastFile,
+  setLastFile,
   getSidebarTab,
   setSidebarTab as persistSidebarTab,
   type SavedSidebarTab,
@@ -24,8 +37,6 @@ import { apply as applyTheme, getThemePref, resolveTheme, setThemePref, type The
 import { getLocale, setLocale, t, type Locale } from "./lib/i18n";
 import {
   applyEditorLayoutPrefs,
-  getAutosave,
-  getAutosaveDelay,
   getConfirmDelete,
   getConfirmDiscard,
   getDefaultEditorMode,
@@ -37,14 +48,20 @@ import {
   getLineNumbers,
   getRecentFilesLimit,
   getRestoreLastFolder,
+  getRestoreLastFile,
+  getEditorZoom,
+  setEditorZoom as persistEditorZoom,
+  getFontFamily,
+  setFontFamily as persistFontFamily,
+  getMonoFontFamily,
+  setMonoFontFamily as persistMonoFontFamily,
+  setRestoreLastFile as persistRestoreLastFile,
   getShowStatusBar,
   getSidebarVisiblePref,
   getSpellCheck,
   getTabSize,
   getTypewriterPadding,
   getWordWrap,
-  setAutosave as persistAutosave,
-  setAutosaveDelay as persistAutosaveDelay,
   setConfirmDelete as persistConfirmDelete,
   setConfirmDiscard as persistConfirmDiscard,
   setDefaultEditorMode,
@@ -67,17 +84,35 @@ import {
   type DefaultEditorMode,
 } from "./lib/preferences";
 import { markdownToHtml, printHtml } from "./render/export";
-import { parseFrontMatter, updateFrontMatter } from "./lib/frontmatter";
-import { dirOf, joinPath, basename } from "./lib/paths";
+import { parseFrontMatter, updateFrontMatter, frontMatterLineCount } from "./lib/frontmatter";
+import { dirOf, joinPath, basename, relativePath } from "./lib/paths";
 import { useTabsStore } from "./store/useTabsStore";
 import type { EditorAction } from "./editor";
 import { setTableInsertRequestHandler } from "./editor/tableInsertBridge";
 import { useToast } from "./lib/useToast";
 import { countWords, estimateReadMinutes } from "./lib/wordCount";
+import { commitPendingImages, preparePendingImages } from "./lib/pendingImages";
+import {
+  clearSessionRecovery,
+  getSessionRecovery,
+  stashSessionRecovery,
+  type SessionRecoverySnapshot,
+} from "./lib/sessionRecovery";
 
 export default function App() {
   const editorRef = useRef<EditorRef>(null);
-  const { message: toastMessage, showError } = useToast();
+  const scrollAfterLoadRef = useRef<number | null>(null);
+  const closedDocRef = useRef<{
+    path: string | null;
+    content: string;
+    diskContent: string;
+    dirty: boolean;
+  } | null>(null);
+  const { message: toastMessage, toastKind, show, showSuccess, showError } = useToast();
+  const confirmResolveRef = useRef<((v: boolean) => void) | null>(null);
+  const linkResolveRef = useRef<((v: { text: string; url: string } | null) => void) | null>(null);
+  const imageResolveRef = useRef<((v: { alt: string; path: string } | null) => void) | null>(null);
+  const promptResolveRef = useRef<((v: string | null) => void) | null>(null);
   const {
     tabs,
     activeId,
@@ -86,9 +121,12 @@ export default function App() {
     openTab,
     newTab,
     closeTab,
+    restoreTab,
     updateContent,
     setMode,
     markSaved,
+    loadFromDisk,
+    setPath,
     getActive,
     toggleFocusMode,
     toggleTypewriterMode,
@@ -106,16 +144,33 @@ export default function App() {
   const [recentFiles, setRecentFiles] = useState(getRecentFiles);
   const [reloadPrompt, setReloadPrompt] = useState(false);
   const [tablePickerOpen, setTablePickerOpen] = useState(false);
+  const [confirmMessage, setConfirmMessage] = useState<string | null>(null);
+  const [linkDialogText, setLinkDialogText] = useState<string | null>(null);
+  const [imageDialogAlt, setImageDialogAlt] = useState<string | null>(null);
+  const [promptDialog, setPromptDialog] = useState<PromptRequest | null>(null);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
+  const [quickOpenOpen, setQuickOpenOpen] = useState(false);
+  const [sessionRecovery, setSessionRecovery] = useState<SessionRecoverySnapshot | null>(() => {
+    const recovery = getSessionRecovery();
+    return recovery?.dirty ? recovery : null;
+  });
+  const [dragOver, setDragOver] = useState(false);
+  const [canReopenClosed, setCanReopenClosed] = useState(false);
   const [cursorLine, setCursorLine] = useState(1);
+  const [viewportRange, setViewportRange] = useState({ from: 1, to: 1 });
   const [locale, setLocaleState] = useState<Locale>(getLocale);
   const [theme, setTheme] = useState<ThemePref>(getThemePref);
   const [fontSize, setFontSize] = useState(getFontSize);
   const [lineHeight, setLineHeight] = useState(getLineHeight);
   const [editorMaxWidth, setEditorMaxWidth] = useState(getEditorMaxWidth);
   const [focusMaxWidth, setFocusMaxWidth] = useState(getFocusMaxWidth);
-  const [autosave, setAutosave] = useState(getAutosave);
-  const [autosaveDelay, setAutosaveDelay] = useState(getAutosaveDelay);
   const [restoreLastFolder, setRestoreLastFolder] = useState(getRestoreLastFolder);
+  const [restoreLastFile, setRestoreLastFile] = useState(getRestoreLastFile);
+  const [fontFamily, setFontFamilyState] = useState(getFontFamily);
+  const [monoFontFamily, setMonoFontFamilyState] = useState(getMonoFontFamily);
+  const [editorZoom, setEditorZoomState] = useState(getEditorZoom);
   const [confirmDiscard, setConfirmDiscard] = useState(getConfirmDiscard);
   const [confirmDelete, setConfirmDelete] = useState(getConfirmDelete);
   const [recentFilesLimit, setRecentFilesLimit] = useState(getRecentFilesLimit);
@@ -137,38 +192,67 @@ export default function App() {
     const name = path
       ? path.split(/[\\/]/).pop() || path
       : t(locale, "title.untitled");
-    getCurrentWindow().setTitle(`${name} — MDNote`);
+    getCurrentWindow().setTitle(`${name} — 墨笺 InkNote`);
   }, [locale]);
 
-  const confirmDiscardIfNeeded = useCallback(() => {
+  const askConfirm = useCallback((message: string) => {
+    return new Promise<boolean>((resolve) => {
+      confirmResolveRef.current = resolve;
+      setConfirmMessage(message);
+    });
+  }, []);
+
+  const resolveConfirm = useCallback((ok: boolean) => {
+    confirmResolveRef.current?.(ok);
+    confirmResolveRef.current = null;
+    setConfirmMessage(null);
+  }, []);
+
+  const confirmDiscardIfNeeded = useCallback(async () => {
     const tab = getActive();
     if (!tab?.dirty) return true;
     if (!confirmDiscard) return true;
-    return window.confirm(t(locale, "confirm.discard"));
-  }, [getActive, confirmDiscard, locale]);
+    return askConfirm(t(locale, "confirm.discard"));
+  }, [getActive, confirmDiscard, locale, askConfirm]);
 
   const loadFile = useCallback(
     async (path: string) => {
-      if (!confirmDiscardIfNeeded()) return;
+      if (!(await confirmDiscardIfNeeded())) return;
       try {
         const text = await api.readFile(path);
         openTab(path, text);
         addRecentFile(path);
         setRecentFiles(getRecentFiles());
         setTitle(path);
+        setLastFile(path);
         await api.watchFile(path);
       } catch (e) {
+        removeRecentFile(path);
+        setRecentFiles(getRecentFiles());
         showError(e);
       }
     },
     [openTab, setTitle, confirmDiscardIfNeeded, showError],
   );
 
+  const openFileAtLine = useCallback(
+    async (path: string, line: number) => {
+      const tab = getActive();
+      if (tab?.path === path) {
+        requestAnimationFrame(() => editorRef.current?.scrollToLine(line));
+        return;
+      }
+      scrollAfterLoadRef.current = line;
+      await loadFile(path);
+    },
+    [getActive, loadFile],
+  );
+
   const openFile = useCallback(async () => {
-    if (!confirmDiscardIfNeeded()) return;
+    // 不在这里问「是否放弃更改」：loadFile 里已经会问，否则会连问两次
     const p = await api.openFileDialog();
     if (p) await loadFile(p);
-  }, [loadFile, confirmDiscardIfNeeded]);
+  }, [loadFile]);
 
   const openFolder = useCallback(async () => {
     const p = await api.openFolderDialog();
@@ -181,26 +265,35 @@ export default function App() {
   }, []);
 
   const saveTab = useCallback(
-    async (tabId?: string) => {
+    async (tabId?: string): Promise<string | null> => {
       const tab = tabId ? tabs.find((t) => t.id === tabId) : getActive();
-      if (!tab) return;
+      if (!tab) return null;
       let path = tab.path;
       if (!path) {
         path = await api.saveFileDialog();
-        if (!path) return;
+        if (!path) return null;
       }
       try {
+        // 先把未落盘的粘贴图片写出去，再写文档 —— 顺序反了会先触发一次
+        // 「图片文件不存在」的重建
+        const preparedImages = await preparePendingImages(path);
         await api.writeFile(path, tab.content);
+        commitPendingImages(preparedImages);
         markSaved(tab.id, path, tab.content);
         addRecentFile(path);
         setRecentFiles(getRecentFiles());
         setTitle(path);
+        setLastFile(path);
+        clearSessionRecovery();
         await api.watchFile(path);
+        showSuccess(t(locale, "toast.saved"));
+        return path;
       } catch (e) {
         showError(e);
+        return null;
       }
     },
-    [tabs, getActive, markSaved, setTitle, showError],
+    [tabs, getActive, markSaved, setTitle, showError, showSuccess, locale],
   );
 
   const saveAs = useCallback(async () => {
@@ -209,16 +302,21 @@ export default function App() {
     const p = await api.saveFileDialog(tab.path ?? undefined);
     if (!p) return;
     try {
+      const preparedImages = await preparePendingImages(p);
       await api.writeFile(p, tab.content);
+      commitPendingImages(preparedImages);
       markSaved(tab.id, p, tab.content);
       addRecentFile(p);
       setRecentFiles(getRecentFiles());
       setTitle(p);
+      setLastFile(p);
+      clearSessionRecovery();
       await api.watchFile(p);
+      showSuccess(t(locale, "toast.saved"));
     } catch (e) {
       showError(e);
     }
-  }, [getActive, markSaved, setTitle, showError]);
+  }, [getActive, markSaved, setTitle, showError, showSuccess, locale]);
 
   const exportHtml = useCallback(async () => {
     const tab = getActive();
@@ -226,33 +324,84 @@ export default function App() {
     const path = await api.saveHtmlDialog();
     if (!path) return;
     try {
-      const html = await markdownToHtml(tab.content, resolveTheme());
+      const html = await markdownToHtml(tab.content, resolveTheme(), locale, tab.path, true);
       await api.writeFile(path, html);
+      showSuccess(t(locale, "toast.exported"));
     } catch (e) {
       showError(e);
     }
-  }, [getActive, showError]);
+  }, [getActive, showError, showSuccess, locale]);
 
   const exportPdf = useCallback(async () => {
     const tab = getActive();
     if (!tab) return;
-    const html = await markdownToHtml(tab.content, resolveTheme());
-    printHtml(html);
-  }, [getActive]);
+    const html = await markdownToHtml(tab.content, resolveTheme(), locale, tab.path, true);
+    printHtml(html, () => show(t(locale, "toast.printReady")));
+  }, [getActive, locale, show]);
 
-  const handleNewFile = useCallback(() => {
-    if (!confirmDiscardIfNeeded()) return;
+  const handleNewFile = useCallback(async () => {
+    if (!(await confirmDiscardIfNeeded())) return;
     newTab();
     setTitle(null);
   }, [newTab, setTitle, confirmDiscardIfNeeded]);
 
-  const handleCloseFile = useCallback(() => {
+  const handleCloseFile = useCallback(async () => {
     const tab = getActive();
     if (!tab) return;
-    if (tab.dirty && confirmDiscard && !window.confirm(t(locale, "confirm.close"))) return;
+    if (tab.dirty && confirmDiscard) {
+      const ok = await askConfirm(t(locale, "confirm.close"));
+      if (!ok) return;
+    }
+    if (tab.path || tab.content.trim()) {
+      closedDocRef.current = {
+        path: tab.path,
+        content: tab.content,
+        diskContent: tab.diskContent,
+        dirty: tab.dirty,
+      };
+      setCanReopenClosed(true);
+    }
     closeTab(tab.id);
     setTitle(null);
-  }, [getActive, closeTab, setTitle, confirmDiscard, locale]);
+  }, [getActive, closeTab, setTitle, confirmDiscard, locale, askConfirm]);
+
+  const handleReopenClosed = useCallback(async () => {
+    const snap = closedDocRef.current;
+    if (!snap) {
+      show(t(locale, "toast.nothingToReopen"));
+      return;
+    }
+    if (!(await confirmDiscardIfNeeded())) return;
+    restoreTab(snap);
+    closedDocRef.current = null;
+    setCanReopenClosed(false);
+    setTitle(snap.path);
+    if (snap.path) {
+      try {
+        await api.watchFile(snap.path);
+      } catch (e) {
+        showError(e);
+      }
+    } else {
+      api.unwatchFile();
+    }
+    show(t(locale, "toast.reopened"));
+  }, [confirmDiscardIfNeeded, restoreTab, setTitle, show, showError, locale]);
+
+  const handleSessionRecovery = useCallback(() => {
+    const snap = sessionRecovery;
+    if (!snap) return;
+    restoreTab({
+      path: snap.path,
+      content: snap.content,
+      diskContent: snap.diskContent,
+      dirty: snap.dirty,
+    });
+    clearSessionRecovery();
+    setSessionRecovery(null);
+    setTitle(snap.path);
+    show(t(locale, "toast.recoveryRestored"));
+  }, [sessionRecovery, restoreTab, setTitle, show, locale]);
 
   const handleRenamePath = useCallback(
     async (path: string, newName: string, _isDir: boolean) => {
@@ -262,12 +411,13 @@ export default function App() {
       const newPath = joinPath(parent, newName);
       try {
         await api.renamePath(path, newPath);
+        // 只换路径：重命名不该把「未保存」状态抹掉
         if (active?.path === path) {
-          markSaved(active.id, newPath, active.content);
+          setPath(active.id, newPath);
         } else if (active?.path?.startsWith(path + (path.includes("\\") ? "\\" : "/"))) {
           const sep = path.includes("\\") ? "\\" : "/";
           const rel = active.path.slice(path.length + 1);
-          markSaved(active.id, `${newPath}${sep}${rel}`, active.content);
+          setPath(active.id, `${newPath}${sep}${rel}`);
         }
         setDirTick((t) => t + 1);
         setRecentFiles(getRecentFiles());
@@ -275,7 +425,7 @@ export default function App() {
         showError(e);
       }
     },
-    [active, markSaved, showError],
+    [active, setPath, showError],
   );
 
   const handleDeletePath = useCallback(
@@ -285,7 +435,8 @@ export default function App() {
         const msg = isDir
           ? t(locale, "confirm.deleteFolder", { name })
           : t(locale, "confirm.deleteFile", { name });
-        if (!window.confirm(msg)) return;
+        const ok = await askConfirm(msg);
+        if (!ok) return;
       }
       try {
         await api.removePath(path);
@@ -299,7 +450,7 @@ export default function App() {
         showError(e);
       }
     },
-    [active, handleNewFile, confirmDelete, locale, showError],
+    [active, handleNewFile, confirmDelete, locale, showError, askConfirm],
   );
 
   const handleCreateFileInFolder = useCallback(
@@ -364,10 +515,11 @@ export default function App() {
   }, [getActive, activeTabId, setMode]);
 
   const handleSidebarTab = useCallback((tab: SidebarTab) => {
+    if (focusMode) toggleFocusMode();
     setSidebarVisible(true);
     setSidebarTab(tab);
     persistSidebarTab(tab);
-  }, []);
+  }, [focusMode, toggleFocusMode]);
 
   const handleRemoveRecent = useCallback((path: string) => {
     removeRecentFile(path);
@@ -393,23 +545,94 @@ export default function App() {
     if (!tab?.path) return;
     try {
       const disk = await api.readFile(tab.path);
-      if (disk !== tab.content && tab.dirty) {
+      if (disk === tab.content || disk === tab.diskContent) return;
+      // 磁盘上就是当前基线或仍在进行的应用写入：不是外部修改
+      if (api.isSelfWritePending(tab.path, disk)) return;
+      if (tab.dirty) {
         setReloadPrompt(true);
-      } else if (disk !== tab.content) {
-        markSaved(tab.id, tab.path, disk);
+      } else {
+        loadFromDisk(tab.id, tab.path, disk);
+        show(t(locale, "toast.externalReload"));
       }
     } catch {
       /* ignore */
     }
-  }, [getActive, markSaved]);
+  }, [getActive, loadFromDisk, show, locale]);
 
   const reloadFromDisk = useCallback(async () => {
     const tab = getActive();
     if (!tab?.path) return;
     const disk = await api.readFile(tab.path);
-    markSaved(tab.id, tab.path, disk);
+    loadFromDisk(tab.id, tab.path, disk);
     setReloadPrompt(false);
-  }, [getActive, markSaved]);
+    show(t(locale, "toast.reloaded"));
+  }, [getActive, loadFromDisk, show, locale]);
+
+  const handleOpenSample = useCallback(async () => {
+    if (!(await confirmDiscardIfNeeded())) return;
+    try {
+      const res = await fetch("/sample.md");
+      const text = await res.text();
+      newTab();
+      const tab = getActive();
+      if (tab) updateContent(tab.id, text);
+      setTitle(null);
+    } catch (e) {
+      showError(e);
+    }
+  }, [confirmDiscardIfNeeded, newTab, getActive, updateContent, setTitle, showError]);
+
+  const handleDroppedMarkdown = useCallback(
+    async (content: string, path?: string) => {
+      if (path) {
+        await loadFile(path);
+        return;
+      }
+      if (!(await confirmDiscardIfNeeded())) return;
+      newTab();
+      const tab = getActive();
+      if (tab) updateContent(tab.id, content);
+      setTitle(null);
+    },
+    [loadFile, confirmDiscardIfNeeded, newTab, getActive, updateContent, setTitle],
+  );
+
+  const handleToggleFocus = useCallback(() => {
+    const next = !focusMode;
+    toggleFocusMode();
+    if (next) show(t(locale, "toast.focusHint"));
+  }, [focusMode, toggleFocusMode, show, locale]);
+
+  const handleToggleTypewriter = useCallback(() => {
+    const next = !typewriterMode;
+    toggleTypewriterMode();
+    if (next) show(t(locale, "toast.typewriterHint"));
+  }, [typewriterMode, toggleTypewriterMode, show, locale]);
+
+  // 初始化 effect 里用到的回调放进 ref：直接进依赖数组的话，saveTab 依赖 tabs，
+  // 每敲一个字符整个 effect 就会重挂一次（重复注册监听、关掉文件监听、重载文件）
+  const bootRef = useRef({
+    loadFile,
+    openFile,
+    saveTab,
+    saveAs,
+    exportHtml,
+    exportPdf,
+    handleExternalChange,
+    handleToggleFocus,
+    handleToggleTypewriter,
+  });
+  bootRef.current = {
+    loadFile,
+    openFile,
+    saveTab,
+    saveAs,
+    exportHtml,
+    exportPdf,
+    handleExternalChange,
+    handleToggleFocus,
+    handleToggleTypewriter,
+  };
 
   useEffect(() => {
     initPlatform();
@@ -417,6 +640,13 @@ export default function App() {
     applyEditorLayoutPrefs();
     let disposed = false;
     const un: Array<() => void> = [];
+    const track = (p: Promise<() => void>) => {
+      void p.then((f) => {
+        // 清理可能早于 listen 解析完成，这里补一次
+        if (disposed) f();
+        else un.push(f);
+      });
+    };
 
     if (getRestoreLastFolder()) {
       const savedFolder = getLastFolder();
@@ -424,91 +654,256 @@ export default function App() {
         api
           .listDir(savedFolder)
           .then(() => {
-            if (!disposed) setFolderPath(savedFolder);
+            if (!disposed) {
+              setFolderPath(savedFolder);
+              setSidebarVisible(true);
+            }
           })
           .catch(() => clearLastFolder());
       }
     }
 
-    api.onOpenFile((p) => { if (!disposed) loadFile(p); }).then((f) => un.push(f));
-    api.onFileChanged(() => { if (!disposed) handleExternalChange(); }).then((f) => un.push(f));
-    api.onMenu((action) => {
+    track(api.onOpenFile((p) => { if (!disposed) void bootRef.current.loadFile(p); }));
+    track(api.onFileChanged(() => { if (!disposed) void bootRef.current.handleExternalChange(); }));
+    track(api.onMenu((action) => {
       if (disposed) return;
+      const b = bootRef.current;
       switch (action) {
         case "settings": setSettingsOpen(true); break;
-        case "open": openFile(); break;
-        case "save": saveTab(); break;
-        case "save-as": saveAs(); break;
-        case "export-html": exportHtml(); break;
-        case "export-pdf": exportPdf(); break;
+        case "open": void b.openFile(); break;
+        case "save": void b.saveTab(); break;
+        case "save-as": void b.saveAs(); break;
+        case "export-html": void b.exportHtml(); break;
+        case "export-pdf": void b.exportPdf(); break;
         case "toggle-sidebar": setSidebarVisible((v) => !v); break;
-        case "focus-mode": toggleFocusMode(); break;
-        case "typewriter-mode": toggleTypewriterMode(); break;
+        case "focus-mode": b.handleToggleFocus(); break;
+        case "typewriter-mode": b.handleToggleTypewriter(); break;
       }
-    }).then((f) => un.push(f));
-    api.getStartupFile().then((p) => { if (p && !disposed) loadFile(p); });
+    }));
+    api.getStartupFile().then((p) => {
+      if (disposed) return;
+      if (p) {
+        void bootRef.current.loadFile(p);
+        return;
+      }
+      if (getRestoreLastFile()) {
+        const last = getLastFile();
+        if (last) void bootRef.current.loadFile(last);
+      }
+    });
 
     return () => {
       disposed = true;
       un.forEach((f) => f());
       api.unwatchFile();
     };
-  }, [loadFile, openFile, saveTab, saveAs, exportHtml, exportPdf, handleExternalChange, toggleFocusMode, toggleTypewriterMode]);
+    // 只在挂载时执行一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
+    setConfirmHandler((msg) => askConfirm(msg));
+    return () => setConfirmHandler(null);
+  }, [askConfirm]);
+
+  useEffect(() => {
+    setEditorBridge({
+      confirm: (msg) => askConfirm(msg),
+      prompt: (req) =>
+        new Promise((resolve) => {
+          promptResolveRef.current = resolve;
+          setPromptDialog(req);
+        }),
+      pickLink: (defaultText) =>
+        new Promise((resolve) => {
+          linkResolveRef.current = resolve;
+          setLinkDialogText(defaultText);
+        }),
+      pickImage: (defaultAlt) =>
+        new Promise((resolve) => {
+          imageResolveRef.current = resolve;
+          setImageDialogAlt(defaultAlt);
+        }),
+      requestSave: () => saveTab(),
+      showError,
+      showMessage: (msg) => show(msg),
+    });
+    return () => setEditorBridge(null);
+  }, [askConfirm, saveTab, showError, show]);
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void getCurrentWindow().onDragDropEvent(({ payload }) => {
+      if (disposed) return;
+      if (payload.type === "enter") {
+        setDragOver(payload.paths.some((path) => /\.(md|markdown|txt)$/i.test(path)));
+      } else if (payload.type === "leave") {
+        setDragOver(false);
+      } else if (payload.type === "drop") {
+        setDragOver(false);
+        const path = payload.paths.find((candidate) => /\.(md|markdown|txt)$/i.test(candidate));
+        if (path) void loadFile(path);
+      }
+    }).then((fn) => {
+      if (disposed) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [loadFile]);
+
+  useEffect(() => {
+    const win = getCurrentWindow();
+    let unlisten: (() => void) | undefined;
+    void win.onCloseRequested(async (event) => {
+      const tab = getActive();
+      if (!tab?.dirty) {
+        clearSessionRecovery();
+        return;
+      }
+      if (!tab.path) {
+        stashSessionRecovery({
+          path: null,
+          content: tab.content,
+          diskContent: tab.diskContent,
+          dirty: true,
+          time: Date.now(),
+        });
+        return;
+      }
+
+      event.preventDefault();
+      try {
+        const preparedImages = await preparePendingImages(tab.path);
+        await api.writeFile(tab.path, tab.content);
+        commitPendingImages(preparedImages);
+        markSaved(tab.id, tab.path, tab.content);
+        clearSessionRecovery();
+        await win.destroy();
+      } catch (error) {
+        showError(error);
+      }
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => unlisten?.();
+  }, [getActive, markSaved, showError]);
+
+  useEffect(() => {
+    const modalOpen =
+      settingsOpen ||
+      reloadPrompt ||
+      tablePickerOpen ||
+      confirmMessage ||
+      linkDialogText !== null ||
+      imageDialogAlt !== null ||
+      promptDialog ||
+      shortcutsOpen ||
+      aboutOpen ||
+      globalSearchOpen ||
+      quickOpenOpen ||
+      sessionRecovery !== null;
+
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "F8") {
         e.preventDefault();
-        toggleFocusMode();
+        handleToggleFocus();
         return;
       }
       if (e.key === "F9") {
         e.preventDefault();
-        toggleTypewriterMode();
+        handleToggleTypewriter();
+        return;
+      }
+      if (e.key === "F11") {
+        e.preventDefault();
+        void getCurrentWindow().isFullscreen().then((fs) => getCurrentWindow().setFullscreen(!fs));
         return;
       }
       if (!(e.ctrlKey || e.metaKey)) return;
+      if (modalOpen) return;
       const k = e.key.toLowerCase();
-      if (k === "l" && e.shiftKey) {
+      if (k === "p" && !e.shiftKey) {
+        e.preventDefault();
+        setQuickOpenOpen(true);
+      } else if (k === "l" && e.shiftKey) {
         e.preventDefault();
         setSidebarVisible((v) => !v);
       } else if (k === "/" || e.key === "?") {
         e.preventDefault();
         toggleEditorMode();
+      } else if (k === "f" && e.shiftKey) {
+        e.preventDefault();
+        setGlobalSearchOpen(true);
+      } else if (k === "t" && e.shiftKey) {
+        e.preventDefault();
+        void handleReopenClosed();
       } else if (k === "s" && e.shiftKey) { e.preventDefault(); saveAs(); }
       else if (k === "s") { e.preventDefault(); saveTab(); }
       else if (k === "o") { e.preventDefault(); openFile(); }
       else if (k === "n") { e.preventDefault(); handleNewFile(); }
       else if (k === "w") { e.preventDefault(); handleCloseFile(); }
-      else if (k === ",") { e.preventDefault(); setSettingsOpen(true); }
+      else if (k === "=" || k === "+") {
+        e.preventDefault();
+        const next = Math.min(150, getEditorZoom() + 10);
+        persistEditorZoom(next);
+        setEditorZoomState(next);
+        applyEditorLayoutPrefs();
+      } else if (k === "-") {
+        e.preventDefault();
+        const next = Math.max(80, getEditorZoom() - 10);
+        persistEditorZoom(next);
+        setEditorZoomState(next);
+        applyEditorLayoutPrefs();
+      } else if (k === ",") { e.preventDefault(); setSettingsOpen(true); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [saveTab, saveAs, openFile, handleNewFile, handleCloseFile, toggleFocusMode, toggleTypewriterMode, toggleEditorMode]);
+  }, [
+    saveTab,
+    saveAs,
+    openFile,
+    handleNewFile,
+    handleCloseFile,
+    handleReopenClosed,
+    handleToggleFocus,
+    handleToggleTypewriter,
+    toggleEditorMode,
+    settingsOpen,
+    reloadPrompt,
+    tablePickerOpen,
+    confirmMessage,
+    linkDialogText,
+    imageDialogAlt,
+    promptDialog,
+    shortcutsOpen,
+    aboutOpen,
+    globalSearchOpen,
+    quickOpenOpen,
+    sessionRecovery,
+  ]);
 
   useEffect(() => {
+    if (sessionRecovery) return;
     const tab = getActive();
-    if (!autosave || !tab?.dirty || !tab.path) return;
-    const t = setTimeout(() => {
-      api.writeFile(tab.path!, tab.content)
-        .then(() => markSaved(tab.id, tab.path!, tab.content))
-        .catch(showError);
-    }, autosaveDelay);
-    return () => clearTimeout(t);
-  }, [tabs, autosave, autosaveDelay, getActive, markSaved, showError]);
-
-  useEffect(() => {
-    if (!autosave) return;
-    const onBlur = () => {
-      const tab = getActive();
-      if (!tab?.dirty || !tab.path) return;
-      api.writeFile(tab.path, tab.content)
-        .then(() => markSaved(tab.id, tab.path!, tab.content))
-        .catch(showError);
-    };
-    window.addEventListener("blur", onBlur);
-    return () => window.removeEventListener("blur", onBlur);
-  }, [autosave, getActive, markSaved, showError]);
+    if (!tab?.dirty) {
+      clearSessionRecovery();
+      return;
+    }
+    const timer = setTimeout(() => {
+      stashSessionRecovery({
+        path: tab.path,
+        content: tab.content,
+        diskContent: tab.diskContent,
+        dirty: tab.dirty,
+        time: Date.now(),
+      });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [tabs, getActive, sessionRecovery]);
 
   useEffect(() => {
     if (!folderPath) {
@@ -542,16 +937,27 @@ export default function App() {
   }, [fontSize, lineHeight, editorMaxWidth, focusMaxWidth, typewriterPadding]);
 
   useEffect(() => {
-    persistAutosave(autosave);
-  }, [autosave]);
-
-  useEffect(() => {
-    persistAutosaveDelay(autosaveDelay);
-  }, [autosaveDelay]);
-
-  useEffect(() => {
     persistRestoreLastFolder(restoreLastFolder);
   }, [restoreLastFolder]);
+
+  useEffect(() => {
+    persistRestoreLastFile(restoreLastFile);
+  }, [restoreLastFile]);
+
+  useEffect(() => {
+    persistFontFamily(fontFamily);
+    applyEditorLayoutPrefs();
+  }, [fontFamily]);
+
+  useEffect(() => {
+    persistMonoFontFamily(monoFontFamily);
+    applyEditorLayoutPrefs();
+  }, [monoFontFamily]);
+
+  useEffect(() => {
+    persistEditorZoom(editorZoom);
+    applyEditorLayoutPrefs();
+  }, [editorZoom]);
 
   useEffect(() => {
     persistConfirmDiscard(confirmDiscard);
@@ -614,22 +1020,85 @@ export default function App() {
 
   const outline = useMemo(() => {
     const items: { level: number; text: string; line: number }[] = [];
-    (active?.content ?? "").split("\n").forEach((line, i) => {
+    const content = active?.content ?? "";
+    const lines = content.split("\n");
+    // front matter 的最后一行 + `---` 会被当成 setext 二级标题，必须跳过
+    const start = frontMatterLineCount(content);
+    let inFence = false;
+    for (let i = start; i < lines.length; i++) {
+      const line = lines[i];
+      if (/^\s*(```|~~~)/.test(line)) {
+        inFence = !inFence;
+        continue;
+      }
+      if (inFence) continue;
+
       const m = /^(#{1,6})\s+(.+)$/.exec(line);
-      if (m) items.push({ level: m[1].length, text: m[2], line: i + 1 });
-    });
+      if (m) {
+        items.push({ level: m[1].length, text: m[2], line: i + 1 });
+        continue;
+      }
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      const next = lines[i + 1]?.trim() ?? "";
+      if (/^=+\s*$/.test(next)) {
+        items.push({ level: 1, text: trimmed, line: i + 1 });
+      } else if (/^-+\s*$/.test(next)) {
+        items.push({ level: 2, text: trimmed, line: i + 1 });
+      }
+    }
     return items;
   }, [active?.content]);
 
+  const showWelcome = !active?.path && !active?.content.trim();
+  const wasWelcomeRef = useRef(showWelcome);
+
+  useEffect(() => {
+    if (showWelcome) {
+      wasWelcomeRef.current = true;
+      return;
+    }
+    if (wasWelcomeRef.current) {
+      wasWelcomeRef.current = false;
+      requestAnimationFrame(() => {
+        const host = document.querySelector(".editor-host .cm-content");
+        if (host instanceof HTMLElement) host.focus();
+      });
+    }
+  }, [showWelcome]);
+
+  useEffect(() => {
+    if (showWelcome || !active) return;
+    const line = scrollAfterLoadRef.current;
+    if (!line) return;
+    scrollAfterLoadRef.current = null;
+    requestAnimationFrame(() => {
+      editorRef.current?.scrollToLine(line);
+    });
+  }, [showWelcome, active?.path, active?.id]);
+
   const activeOutlineLine = useMemo(() => {
     if (!outline.length) return null;
+    const cursorVisible = cursorLine >= viewportRange.from && cursorLine <= viewportRange.to;
+    const refLine = cursorVisible ? cursorLine : viewportRange.from;
     let best = outline[0].line;
     for (const h of outline) {
-      if (h.line <= cursorLine) best = h.line;
+      if (h.line <= refLine) best = h.line;
       else break;
     }
     return best;
-  }, [outline, cursorLine]);
+  }, [outline, cursorLine, viewportRange]);
+
+  const handleCopyPath = useCallback(async () => {
+    const tab = getActive();
+    if (!tab?.path) return;
+    try {
+      await navigator.clipboard.writeText(tab.path);
+      show(t(locale, "toast.pathCopied"));
+    } catch (e) {
+      showError(e);
+    }
+  }, [getActive, show, showError, locale]);
 
   const scrollToHeading = useCallback((line: number) => {
     editorRef.current?.scrollToLine(line);
@@ -665,11 +1134,19 @@ export default function App() {
         onSidebarTab={handleSidebarTab}
         onSetEditorMode={handleModeChange}
         onToggleEditorMode={toggleEditorMode}
-        onToggleFocus={toggleFocusMode}
-        onToggleTypewriter={toggleTypewriterMode}
+        onToggleFocus={handleToggleFocus}
+        onToggleTypewriter={handleToggleTypewriter}
         onOpenSettings={() => setSettingsOpen(true)}
+        onOpenShortcuts={() => setShortcutsOpen(true)}
+        onOpenAbout={() => setAboutOpen(true)}
+        onGlobalSearch={() => setGlobalSearchOpen(true)}
+        onQuickOpen={() => setQuickOpenOpen(true)}
+        onOpenRecent={(p) => void loadFile(p)}
+        onReopenClosed={() => void handleReopenClosed()}
+        canReopenClosed={canReopenClosed}
+        recentFiles={recentFiles}
       />
-      <div className="app-body">
+      <div className={dragOver ? "app-body drag-over" : "app-body"}>
         {sidebarVisible && !focusMode && (
           <SidebarPanel
             locale={locale}
@@ -680,10 +1157,7 @@ export default function App() {
             <Sidebar
               locale={locale}
               tab={sidebarTab}
-              onTab={(t) => {
-                setSidebarTab(t);
-                persistSidebarTab(t);
-              }}
+              onTab={handleSidebarTab}
               folderPath={folderPath}
               dirTick={dirTick}
               onOpenPath={(p) => loadFile(p)}
@@ -698,13 +1172,28 @@ export default function App() {
               currentPath={active?.path ?? null}
               recentFiles={recentFiles}
               onRemoveRecent={handleRemoveRecent}
+              onOpenFolder={() => void openFolder()}
+              onError={showError}
             />
           </SidebarPanel>
         )}
         <main className="main">
-          {active && (
+          {showWelcome && (
+            <WelcomePanel
+              locale={locale}
+              recentFiles={recentFiles}
+              onNew={() => void handleNewFile()}
+              onOpen={() => void openFile()}
+              onOpenFolder={() => void openFolder()}
+              onOpenSample={() => void handleOpenSample()}
+              onOpenRecent={(p) => void loadFile(p)}
+              onOpenSettings={() => setSettingsOpen(true)}
+            />
+          )}
+          {active && !showWelcome && (
             <Editor
               ref={editorRef}
+              locale={locale}
               key={active.path ?? active.id}
               value={active.content}
               mode={active.mode}
@@ -717,6 +1206,8 @@ export default function App() {
               onChange={handleChange}
               onModeChange={handleModeChange}
               onCursorLine={setCursorLine}
+              onViewportRange={(from, to) => setViewportRange({ from, to })}
+              onOpenMarkdown={(content, path) => void handleDroppedMarkdown(content, path)}
             />
           )}
         </main>
@@ -727,8 +1218,11 @@ export default function App() {
           mode={active?.mode ?? "preview"}
           stats={stats}
           path={active?.path ?? null}
+          dirty={active?.dirty ?? false}
+          cursorLine={cursorLine}
           focusMode={focusMode}
           typewriterMode={typewriterMode}
+          onCopyPath={() => void handleCopyPath()}
         />
       )}
       {settingsOpen && (
@@ -737,9 +1231,8 @@ export default function App() {
           values={{
             locale,
             theme,
-            autosave,
-            autosaveDelay,
             restoreLastFolder,
+            restoreLastFile,
             confirmDiscard,
             confirmDelete,
             recentFilesLimit,
@@ -748,6 +1241,9 @@ export default function App() {
             defaultEditorMode,
             fontSize,
             lineHeight,
+            fontFamily,
+            monoFontFamily,
+            editorZoom,
             editorMaxWidth,
             focusMaxWidth,
             lineNumbers,
@@ -767,9 +1263,8 @@ export default function App() {
               setTheme(next);
               setThemePref(next);
             },
-            onAutosave: setAutosave,
-            onAutosaveDelay: setAutosaveDelay,
             onRestoreLastFolder: setRestoreLastFolder,
+            onRestoreLastFile: setRestoreLastFile,
             onConfirmDiscard: setConfirmDiscard,
             onConfirmDelete: setConfirmDelete,
             onRecentFilesLimit: setRecentFilesLimit,
@@ -790,6 +1285,9 @@ export default function App() {
             },
             onFontSize: setFontSize,
             onLineHeight: setLineHeight,
+            onFontFamily: setFontFamilyState,
+            onMonoFontFamily: setMonoFontFamilyState,
+            onEditorZoom: setEditorZoomState,
             onEditorMaxWidth: setEditorMaxWidth,
             onFocusMaxWidth: setFocusMaxWidth,
             onLineNumbers: setLineNumbers,
@@ -815,7 +1313,110 @@ export default function App() {
         onSelect={handleTableSizeSelect}
         onCancel={() => setTablePickerOpen(false)}
       />
-      <Toast message={toastMessage} />
+      <Toast message={toastMessage} kind={toastKind} />
+      {confirmMessage && (
+        <ConfirmDialog
+          locale={locale}
+          message={confirmMessage}
+          onConfirm={() => resolveConfirm(true)}
+          onCancel={() => resolveConfirm(false)}
+        />
+      )}
+      {linkDialogText !== null && (
+        <LinkInsertDialog
+          locale={locale}
+          defaultText={linkDialogText}
+          onConfirm={(text, url) => {
+            linkResolveRef.current?.({ text, url });
+            linkResolveRef.current = null;
+            setLinkDialogText(null);
+          }}
+          onCancel={() => {
+            linkResolveRef.current?.(null);
+            linkResolveRef.current = null;
+            setLinkDialogText(null);
+          }}
+        />
+      )}
+      {imageDialogAlt !== null && (
+        <ImageInsertDialog
+          locale={locale}
+          defaultAlt={imageDialogAlt}
+          onBrowse={async () => {
+            const picked = await api.openImageDialog();
+            if (!picked) return null;
+            const tab = getActive();
+            if (tab?.path) return relativePath(dirOf(tab.path), picked);
+            return picked;
+          }}
+          onConfirm={(alt, path) => {
+            imageResolveRef.current?.({ alt, path });
+            imageResolveRef.current = null;
+            setImageDialogAlt(null);
+          }}
+          onCancel={() => {
+            imageResolveRef.current?.(null);
+            imageResolveRef.current = null;
+            setImageDialogAlt(null);
+          }}
+        />
+      )}
+      {promptDialog && (
+        <PromptDialog
+          locale={locale}
+          title={promptDialog.title}
+          label={promptDialog.label}
+          defaultValue={promptDialog.defaultValue}
+          placeholder={promptDialog.placeholder}
+          onConfirm={(value) => {
+            promptResolveRef.current?.(value);
+            promptResolveRef.current = null;
+            setPromptDialog(null);
+          }}
+          onCancel={() => {
+            promptResolveRef.current?.(null);
+            promptResolveRef.current = null;
+            setPromptDialog(null);
+          }}
+        />
+      )}
+      {shortcutsOpen && (
+        <ShortcutsDialog locale={locale} onClose={() => setShortcutsOpen(false)} />
+      )}
+      {aboutOpen && (
+        <AboutDialog locale={locale} onClose={() => setAboutOpen(false)} />
+      )}
+      {globalSearchOpen && (
+        <GlobalSearchDialog
+          locale={locale}
+          folderPath={folderPath}
+          recentFiles={recentFiles}
+          onOpenResult={(path, line) => void openFileAtLine(path, line)}
+          onOpenFolder={() => void openFolder()}
+          onClose={() => setGlobalSearchOpen(false)}
+        />
+      )}
+      {quickOpenOpen && (
+        <QuickOpenDialog
+          locale={locale}
+          folderPath={folderPath}
+          recentFiles={recentFiles}
+          currentPath={active?.path ?? null}
+          onOpen={(p) => void loadFile(p)}
+          onClose={() => setQuickOpenOpen(false)}
+        />
+      )}
+      {sessionRecovery && (
+        <ConfirmDialog
+          locale={locale}
+          message={t(locale, "recovery.prompt")}
+          onConfirm={() => handleSessionRecovery()}
+          onCancel={() => {
+            clearSessionRecovery();
+            setSessionRecovery(null);
+          }}
+        />
+      )}
     </div>
   );
 }

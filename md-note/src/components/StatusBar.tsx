@@ -7,8 +7,11 @@ interface Props {
   mode: EditorMode;
   stats: { words: number; chars: number; lines: number; readMin: number };
   path: string | null;
+  dirty: boolean;
+  cursorLine: number;
   focusMode: boolean;
   typewriterMode: boolean;
+  onCopyPath?: () => void;
 }
 
 export default function StatusBar({
@@ -16,18 +19,27 @@ export default function StatusBar({
   mode,
   stats,
   path,
+  dirty,
+  cursorLine,
   focusMode,
   typewriterMode,
+  onCopyPath,
 }: Props) {
   const tr = (key: Parameters<typeof t>[1], vars?: Record<string, string | number>) =>
     t(locale, key, vars);
 
   const flags = [
+    dirty ? tr("status.modified") : null,
     focusMode ? tr("status.focus") : null,
     typewriterMode ? tr("status.typewriter") : null,
   ]
     .filter(Boolean)
     .join(" · ");
+
+  const pathLabel = path ?? tr("status.unsaved");
+  const pathTitle = path
+    ? `${path}\n${tr("status.clickCopy")}`
+    : tr("status.unsaved");
 
   return (
     <footer className="statusbar">
@@ -41,13 +53,21 @@ export default function StatusBar({
         </>
       )}
       <span className="status-sep" />
+      <span className="status-item">{tr("status.line", { n: cursorLine })}</span>
       <span className="status-item">{tr("status.words", { n: stats.words })}</span>
+      <span className="status-item">{tr("status.chars", { n: stats.chars })}</span>
       <span className="status-item">{tr("status.lines", { n: stats.lines })}</span>
       <span className="status-item">{tr("status.readMin", { n: stats.readMin })}</span>
       <span className="status-spacer" />
-      <span className="status-item status-path" title={path ?? ""}>
-        {path ?? tr("status.unsaved")}
-      </span>
+      <button
+        type="button"
+        className="status-item status-path-btn"
+        title={pathTitle}
+        disabled={!path}
+        onClick={() => path && onCopyPath?.()}
+      >
+        {pathLabel}
+      </button>
     </footer>
   );
 }

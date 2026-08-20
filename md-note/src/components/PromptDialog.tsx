@@ -1,12 +1,28 @@
+import type { Locale } from "../lib/i18n";
+import { t } from "../lib/i18n";
+import { useModalEscape } from "../lib/useModalEscape";
+
 interface Props {
+  locale: Locale;
   title: string;
   label: string;
   defaultValue?: string;
+  placeholder?: string;
   onConfirm: (value: string) => void;
   onCancel: () => void;
 }
 
-export default function PromptDialog({ title, label, defaultValue = "", onConfirm, onCancel }: Props) {
+export default function PromptDialog({
+  locale,
+  title,
+  label,
+  defaultValue = "",
+  placeholder,
+  onConfirm,
+  onCancel,
+}: Props) {
+  useModalEscape(true, onCancel);
+
   return (
     <div className="modal-backdrop" onClick={onCancel}>
       <div className="modal modal-sm" onClick={(e) => e.stopPropagation()}>
@@ -20,6 +36,7 @@ export default function PromptDialog({ title, label, defaultValue = "", onConfir
               <input
                 type="text"
                 defaultValue={defaultValue}
+                placeholder={placeholder}
                 autoFocus
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
@@ -33,7 +50,9 @@ export default function PromptDialog({ title, label, defaultValue = "", onConfir
             </div>
           </div>
           <div className="modal-actions">
-            <button type="button" className="btn-secondary" onClick={onCancel}>取消</button>
+            <button type="button" className="btn-secondary" onClick={onCancel}>
+              {t(locale, "dialog.cancel")}
+            </button>
             <button
               type="button"
               className="btn-primary"
@@ -42,7 +61,7 @@ export default function PromptDialog({ title, label, defaultValue = "", onConfir
                 onConfirm(el?.value ?? "");
               }}
             >
-              确定
+              {t(locale, "dialog.confirm")}
             </button>
           </div>
         </div>
