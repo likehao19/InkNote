@@ -1,12 +1,14 @@
 import type { EditorMode } from "../editor";
 import type { SavedSidebarTab } from "./workspace";
+import { getStoredValue, setStoredValue } from "./settingsStore";
 
 export type DefaultEditorMode = EditorMode;
+export type EditorWidthPreset = "compact" | "standard" | "wide" | "full";
 
 const KEYS = {
   fontSize: "mdnote.fontSize",
   lineHeight: "mdnote.lineHeight",
-  editorMaxWidth: "mdnote.editorMaxWidth",
+  editorWidthPreset: "mdnote.editorWidthPreset",
   focusMaxWidth: "mdnote.focusMaxWidth",
   defaultEditorMode: "mdnote.defaultEditorMode",
   lineNumbers: "mdnote.lineNumbers",
@@ -29,23 +31,23 @@ const KEYS = {
 } as const;
 
 function readBool(key: string, defaultOn = true): boolean {
-  const v = localStorage.getItem(key);
+  const v = getStoredValue(key);
   if (v === "on") return true;
   if (v === "off") return false;
   return defaultOn;
 }
 
 function writeBool(key: string, on: boolean) {
-  localStorage.setItem(key, on ? "on" : "off");
+  setStoredValue(key, on ? "on" : "off");
 }
 
 function readNumber(key: string, min: number, max: number, fallback: number): number {
-  const n = Number(localStorage.getItem(key));
+  const n = Number(getStoredValue(key));
   return n >= min && n <= max ? n : fallback;
 }
 
 function writeNumber(key: string, n: number) {
-  localStorage.setItem(key, String(n));
+  setStoredValue(key, String(n));
 }
 
 export function getFontSize(): number {
@@ -64,12 +66,15 @@ export function setLineHeight(n: number) {
   writeNumber(KEYS.lineHeight, n);
 }
 
-export function getEditorMaxWidth(): number {
-  return readNumber(KEYS.editorMaxWidth, 32, 80, 46);
+export function getEditorWidthPreset(): EditorWidthPreset {
+  const value = getStoredValue(KEYS.editorWidthPreset);
+  return value === "compact" || value === "standard" || value === "wide"
+    ? value
+    : "full";
 }
 
-export function setEditorMaxWidth(n: number) {
-  writeNumber(KEYS.editorMaxWidth, n);
+export function setEditorWidthPreset(preset: EditorWidthPreset) {
+  setStoredValue(KEYS.editorWidthPreset, preset);
 }
 
 export function getFocusMaxWidth(): number {
@@ -81,16 +86,16 @@ export function setFocusMaxWidth(n: number) {
 }
 
 export function getDefaultEditorMode(): DefaultEditorMode {
-  const v = localStorage.getItem(KEYS.defaultEditorMode);
+  const v = getStoredValue(KEYS.defaultEditorMode);
   return v === "source" ? "source" : "preview";
 }
 
 export function setDefaultEditorMode(mode: DefaultEditorMode) {
-  localStorage.setItem(KEYS.defaultEditorMode, mode);
+  setStoredValue(KEYS.defaultEditorMode, mode);
 }
 
 export function getLineNumbers(): boolean {
-  return localStorage.getItem(KEYS.lineNumbers) === "on";
+  return getStoredValue(KEYS.lineNumbers) === "on";
 }
 
 export function setLineNumbers(on: boolean) {
@@ -114,7 +119,7 @@ export function setTabSize(n: number) {
 }
 
 export function getSpellCheck(): boolean {
-  return localStorage.getItem(KEYS.spellCheck) === "on";
+  return getStoredValue(KEYS.spellCheck) === "on";
 }
 
 export function setSpellCheck(on: boolean) {
@@ -143,20 +148,20 @@ const FONT_STACKS: Record<string, string> = {
 };
 
 export function getFontFamily(): string {
-  const v = localStorage.getItem(KEYS.fontFamily);
+  const v = getStoredValue(KEYS.fontFamily);
   return v && FONT_STACKS[v] ? v : "system";
 }
 
 export function setFontFamily(key: string) {
-  localStorage.setItem(KEYS.fontFamily, key);
+  setStoredValue(KEYS.fontFamily, key);
 }
 
 export function getMonoFontFamily(): string {
-  return localStorage.getItem(KEYS.monoFontFamily) === "jetbrains" ? "jetbrains" : "system";
+  return getStoredValue(KEYS.monoFontFamily) === "jetbrains" ? "jetbrains" : "system";
 }
 
 export function setMonoFontFamily(key: string) {
-  localStorage.setItem(KEYS.monoFontFamily, key);
+  setStoredValue(KEYS.monoFontFamily, key);
 }
 
 export function resolveFontFamily(): string {
@@ -202,12 +207,12 @@ export function setSidebarWidth(n: number) {
 }
 
 export function getDefaultSidebarTab(): SavedSidebarTab {
-  const v = localStorage.getItem(KEYS.defaultSidebarTab);
+  const v = getStoredValue(KEYS.defaultSidebarTab);
   return v === "outline" || v === "recent" ? v : "files";
 }
 
 export function setDefaultSidebarTab(tab: SavedSidebarTab) {
-  localStorage.setItem(KEYS.defaultSidebarTab, tab);
+  setStoredValue(KEYS.defaultSidebarTab, tab);
 }
 
 export function getConfirmDiscard(): boolean {
@@ -253,12 +258,22 @@ export function setTypewriterPadding(vh: number) {
 /** 将偏好写入 CSS 变量，供全局样式使用 */
 export function applyEditorLayoutPrefs() {
   const root = document.documentElement;
+  const widths: Record<EditorWidthPreset, string> = {
+    compact: "46rem",
+    standard: "64rem",
+    wide: "80rem",
+    full: "95vw",
+  };
   root.style.setProperty("--editor-font-size", `${getFontSize()}px`);
   root.style.setProperty("--editor-line-height", String(getLineHeight()));
-  root.style.setProperty("--editor-max-width", `${getEditorMaxWidth()}rem`);
+  root.style.setProperty("--editor-max-width", widths[getEditorWidthPreset()]);
   root.style.setProperty("--editor-focus-max-width", `${getFocusMaxWidth()}rem`);
   root.style.setProperty("--typewriter-padding", `${getTypewriterPadding()}vh`);
   root.style.setProperty("--editor-font-family", resolveFontFamily());
   root.style.setProperty("--editor-mono-font", resolveMonoFontFamily());
   root.style.setProperty("--editor-zoom", String(getEditorZoom() / 100));
+  root.style.setProperty(
+    "--editor-render-font-size",
+    `${getFontSize() * getEditorZoom() / 100}px`,
+  );
 }

@@ -1,15 +1,16 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { getStoredValue, removeStoredValue, setStoredValue } from "./settingsStore";
 
 const KEY = "mdnote.customCss";
 const LINK_ID = "mdnote-custom-css";
 
 export function getCustomCssPath(): string | null {
-  return localStorage.getItem(KEY);
+  return getStoredValue(KEY);
 }
 
 export function setCustomCssPath(path: string | null) {
-  if (path) localStorage.setItem(KEY, path);
-  else localStorage.removeItem(KEY);
+  if (path) setStoredValue(KEY, path);
+  else removeStoredValue(KEY);
   window.dispatchEvent(new Event("mdnote-custom-css-changed"));
 }
 

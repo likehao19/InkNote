@@ -1,7 +1,19 @@
 import { platform } from "@tauri-apps/plugin-os";
 
-export const isMac = platform() === "macos";
-export const isWin = platform() === "windows";
+function currentPlatform(): string {
+  try {
+    return platform();
+  } catch {
+    const value = typeof navigator === "undefined" ? "" : navigator.platform || navigator.userAgent;
+    if (/mac/i.test(value)) return "macos";
+    if (/win/i.test(value)) return "windows";
+    return "linux";
+  }
+}
+
+const detectedPlatform = currentPlatform();
+export const isMac = detectedPlatform === "macos";
+export const isWin = detectedPlatform === "windows";
 
 /** 在 <html> 上挂载平台 class，供 CSS 做原生差异化样式 */
 export function initPlatform() {

@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { ThemePref } from "../lib/theme";
 import type { Locale, MessageKey } from "../lib/i18n";
 import { t } from "../lib/i18n";
-import type { DefaultEditorMode } from "../lib/preferences";
+import type { DefaultEditorMode, EditorWidthPreset } from "../lib/preferences";
+import type { MarkdownTheme } from "../lib/markdownTheme";
 import type { SavedSidebarTab } from "../lib/workspace";
 import { isMac } from "../lib/tauri";
 import * as api from "../lib/tauri";
 import { getCustomCssPath, setCustomCssPath } from "../lib/customTheme";
 import ThemePicker from "./ThemePicker";
+import MarkdownThemePicker from "./MarkdownThemePicker";
 
 export type SettingsCategory =
   | "general"
@@ -38,6 +40,7 @@ const CATEGORY_KEYS: Record<SettingsCategory, MessageKey> = {
 export interface SettingsValues {
   locale: Locale;
   theme: ThemePref;
+  markdownTheme: MarkdownTheme;
   restoreLastFolder: boolean;
   restoreLastFile: boolean;
   confirmDiscard: boolean;
@@ -51,7 +54,7 @@ export interface SettingsValues {
   fontFamily: string;
   monoFontFamily: string;
   editorZoom: number;
-  editorMaxWidth: number;
+  editorWidthPreset: EditorWidthPreset;
   focusMaxWidth: number;
   lineNumbers: boolean;
   wordWrap: boolean;
@@ -65,6 +68,7 @@ export interface SettingsValues {
 export interface SettingsHandlers {
   onLocale: (locale: Locale) => void;
   onTheme: (theme: ThemePref) => void;
+  onMarkdownTheme: (theme: MarkdownTheme) => void;
   onRestoreLastFolder: (on: boolean) => void;
   onRestoreLastFile: (on: boolean) => void;
   onConfirmDiscard: (on: boolean) => void;
@@ -79,7 +83,7 @@ export interface SettingsHandlers {
   onFontFamily: (key: string) => void;
   onMonoFontFamily: (key: string) => void;
   onEditorZoom: (n: number) => void;
-  onEditorMaxWidth: (n: number) => void;
+  onEditorWidthPreset: (preset: EditorWidthPreset) => void;
   onFocusMaxWidth: (n: number) => void;
   onLineNumbers: (on: boolean) => void;
   onWordWrap: (on: boolean) => void;
@@ -138,6 +142,7 @@ function buildSearchIndex(): { category: SettingsCategory; keys: MessageKey[] }[
       category: "appearance",
       keys: [
         "settings.theme", "settings.themeDesc",
+        "settings.markdownTheme", "settings.markdownThemeDesc",
         "settings.customCss", "settings.customCssDesc",
         "settings.showStatusBar", "settings.showStatusBarDesc",
       ],
@@ -354,13 +359,15 @@ export default function Settings({ values, handlers, onClose }: Props) {
                       />
                     </SettingItem>
                     <SettingItem label={tr("settings.editorMaxWidth")} desc={tr("settings.editorMaxWidthDesc")}>
-                      <NumberInput
-                        min={32}
-                        max={80}
-                        step={1}
-                        value={values.editorMaxWidth}
-                        onChange={handlers.onEditorMaxWidth}
-                      />
+                      <select
+                        value={values.editorWidthPreset}
+                        onChange={(e) => handlers.onEditorWidthPreset(e.target.value as EditorWidthPreset)}
+                      >
+                        <option value="compact">{tr("settings.editorWidth.compact")}</option>
+                        <option value="standard">{tr("settings.editorWidth.standard")}</option>
+                        <option value="wide">{tr("settings.editorWidth.wide")}</option>
+                        <option value="full">{tr("settings.editorWidth.full")}</option>
+                      </select>
                     </SettingItem>
                     <SettingItem label={tr("settings.focusMaxWidth")} desc={tr("settings.focusMaxWidthDesc")}>
                       <NumberInput
@@ -399,6 +406,16 @@ export default function Settings({ values, handlers, onClose }: Props) {
                   <SettingsPage title={tr("settings.section.appearance")}>
                     <SettingItem label={tr("settings.theme")} desc={tr("settings.themeDesc")}>
                       <ThemePicker locale={locale} value={values.theme} onChange={handlers.onTheme} />
+                    </SettingItem>
+                    <SettingItem
+                      label={tr("settings.markdownTheme")}
+                      desc={tr("settings.markdownThemeDesc")}
+                    >
+                      <MarkdownThemePicker
+                        locale={locale}
+                        value={values.markdownTheme}
+                        onChange={handlers.onMarkdownTheme}
+                      />
                     </SettingItem>
                     <SettingItem label={tr("settings.showStatusBar")} desc={tr("settings.showStatusBarDesc")}>
                       <Toggle checked={values.showStatusBar} onChange={handlers.onShowStatusBar} />

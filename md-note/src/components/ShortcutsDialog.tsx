@@ -8,7 +8,9 @@ interface Props {
   onClose: () => void;
 }
 
-const SHORTCUT_GROUPS: { titleKey: Parameters<typeof t>[1]; items: [string, string][] }[] = [
+type MessageKey = Parameters<typeof t>[1];
+
+const SHORTCUT_GROUPS: { titleKey: MessageKey; items: [MessageKey, string][] }[] = [
   {
     titleKey: "shortcuts.file",
     items: [
@@ -17,6 +19,8 @@ const SHORTCUT_GROUPS: { titleKey: Parameters<typeof t>[1]; items: [string, stri
       ["shortcuts.save", modShortcut("S")],
       ["shortcuts.saveAs", modShortcut("Shift+S")],
       ["shortcuts.closeFile", modShortcut("W")],
+      ["shortcuts.reopenClosed", modShortcut("Shift+T")],
+      ["shortcuts.quickOpen", modShortcut("P")],
       ["shortcuts.settings", modShortcut(",")],
     ],
   },
@@ -24,12 +28,30 @@ const SHORTCUT_GROUPS: { titleKey: Parameters<typeof t>[1]; items: [string, stri
     titleKey: "shortcuts.edit",
     items: [
       ["shortcuts.undo", modShortcut("Z")],
-      ["shortcuts.redo", modShortcut("Y")],
+      ["shortcuts.redo", `${modShortcut("Y")} / ${modShortcut("Shift+Z")}`],
+      ["menu.cut", modShortcut("X")],
+      ["menu.copy", modShortcut("C")],
+      ["menu.paste", modShortcut("V")],
+      ["menu.selectAll", modShortcut("A")],
       ["shortcuts.find", modShortcut("F")],
       ["shortcuts.findReplace", modShortcut("H")],
       ["shortcuts.globalSearch", modShortcut("Shift+F")],
-      ["shortcuts.quickOpen", modShortcut("P")],
-      ["shortcuts.toggleMode", modShortcut("/")],
+    ],
+  },
+  {
+    titleKey: "shortcuts.paragraph",
+    items: [
+      ["menu.paragraphText", modShortcut("0")],
+      ["menu.heading1", modShortcut("1")],
+      ["menu.heading2", modShortcut("2")],
+      ["menu.heading3", modShortcut("3")],
+      ["menu.heading4", modShortcut("4")],
+      ["menu.heading5", modShortcut("5")],
+      ["menu.heading6", modShortcut("6")],
+      ["menu.bulletList", modShortcut("Shift+8")],
+      ["menu.orderedList", modShortcut("Shift+7")],
+      ["menu.taskList", modShortcut("Shift+X")],
+      ["menu.blockquote", modShortcut("Shift+Q")],
     ],
   },
   {
@@ -37,8 +59,10 @@ const SHORTCUT_GROUPS: { titleKey: Parameters<typeof t>[1]; items: [string, stri
     items: [
       ["shortcuts.bold", modShortcut("B")],
       ["shortcuts.italic", modShortcut("I")],
+      ["menu.inlineCode", modShortcut("Shift+`")],
       ["shortcuts.link", modShortcut("K")],
       ["shortcuts.codeBlock", modShortcut("Shift+K")],
+      ["menu.mathBlock", modShortcut("Shift+M")],
       ["shortcuts.table", modShortcut("T")],
       ["shortcuts.image", modShortcut("Shift+I")],
     ],
@@ -47,8 +71,12 @@ const SHORTCUT_GROUPS: { titleKey: Parameters<typeof t>[1]; items: [string, stri
     titleKey: "shortcuts.view",
     items: [
       ["shortcuts.sidebar", modShortcut("Shift+L")],
+      ["shortcuts.toggleMode", modShortcut("/")],
+      ["shortcuts.zoomIn", modShortcut("+")],
+      ["shortcuts.zoomOut", modShortcut("-")],
       ["shortcuts.focus", "F8"],
       ["shortcuts.typewriter", "F9"],
+      ["shortcuts.fullscreen", "F11"],
     ],
   },
 ];
@@ -59,7 +87,7 @@ export default function ShortcutsDialog({ locale, onClose }: Props) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal shortcuts-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>{tr("shortcuts.title")}</h2>
           <button
@@ -80,7 +108,7 @@ export default function ShortcutsDialog({ locale, onClose }: Props) {
               <ul className="shortcuts-list">
                 {group.items.map(([labelKey, shortcut]) => (
                   <li key={labelKey} className="shortcuts-row">
-                    <span>{tr(labelKey as Parameters<typeof t>[1])}</span>
+                    <span>{tr(labelKey)}</span>
                     <kbd className="shortcuts-kbd">{shortcut}</kbd>
                   </li>
                 ))}

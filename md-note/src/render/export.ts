@@ -4,42 +4,61 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import remarkFrontmatter from "remark-frontmatter";
 import remarkRehype from "remark-rehype";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import rehypeKatex from "rehype-katex";
 import rehypeHighlight from "rehype-highlight";
 import rehypeStringify from "rehype-stringify";
 import katexCss from "katex/dist/katex.min.css?inline";
-import mermaid from "mermaid";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { ResolvedTheme } from "../lib/theme";
 import type { Locale } from "../lib/i18n";
+import type { MarkdownTheme } from "../lib/markdownTheme";
+import { configuredMermaid } from "../lib/mermaid";
 import { resolveAssetPath } from "../lib/paths";
 
 const BASE_CSS = `
-  body { font-family: -apple-system, "Segoe UI", system-ui, sans-serif; line-height: 1.75; max-width: 46rem; margin: 2rem auto; padding: 0 1.5rem; }
-  img { max-width: 100%; }
+  :root { --doc-bg: #fcfcfd; --doc-fg: #24272d; --doc-muted: #68707c; --doc-border: #dfe3e8; --doc-accent: #3268c8; --doc-panel: #f3f5f8; --doc-mark: #fff0a8; --doc-radius: 9px; --doc-heading: -apple-system, "Segoe UI", system-ui, sans-serif; }
+  body { background: var(--doc-bg); color: var(--doc-fg); font-family: -apple-system, "Segoe UI", system-ui, sans-serif; line-height: 1.75; max-width: 46rem; margin: 2rem auto; padding: 0 1.5rem; }
+  h1, h2, h3, h4, h5, h6 { color: var(--doc-fg); font-family: var(--doc-heading); letter-spacing: -0.015em; }
+  img { max-width: 100%; border: 1px solid var(--doc-border); border-radius: var(--doc-radius); }
   table { border-collapse: collapse; width: 100%; margin: 1em 0; }
-  th, td { border: 1px solid #ccc; padding: 6px 12px; }
-  th { background: #f6f8fa; }
-  blockquote { border-left: 3px solid #ccc; margin-left: 0; padding-left: 1em; color: #555; }
-  pre { background: #f6f8fa; padding: 1em; border-radius: 6px; overflow-x: auto; }
+  th, td { border: 1px solid var(--doc-border); padding: 8px 12px; }
+  th { background: var(--doc-panel); }
+  blockquote { border-left: 3px solid var(--doc-accent); margin-left: 0; padding: .55em 1em; color: var(--doc-muted); background: color-mix(in srgb, var(--doc-accent) 5%, transparent); }
+  pre { background: var(--doc-panel); border: 1px solid var(--doc-border); padding: 1em; border-radius: var(--doc-radius); overflow-x: auto; }
   pre code.hljs { background: transparent; padding: 0; }
   code { font-family: ui-monospace, Consolas, monospace; font-size: 0.9em; }
-  a { color: #0969da; }
-  mark { background: #fff8c5; padding: 0 2px; }
+  :not(pre) > code { background: var(--doc-panel); border-radius: 4px; padding: .14em .4em; }
+  a { color: var(--doc-accent); }
+  mark { background: var(--doc-mark); padding: 0 2px; }
   .mermaid { text-align: center; margin: 1em 0; }
-  .footnotes { font-size: 0.9em; color: #555; border-top: 1px solid #ddd; margin-top: 2em; padding-top: 1em; }
+  .footnotes { font-size: 0.9em; color: var(--doc-muted); border-top: 1px solid var(--doc-border); margin-top: 2em; padding-top: 1em; }
 `;
 
 const DARK_CSS = `
-  body { background: #1e1e1e; color: #ccc; }
-  th { background: #2d2d30; }
-  th, td { border-color: #444; }
-  blockquote { color: #9d9d9d; border-color: #555; }
-  pre { background: #2d2d30; }
-  a { color: #4da3ff; }
-  mark { background: #5a5320; color: #e4e4e4; }
-  .footnotes { color: #9d9d9d; border-color: #444; }
+  :root { --doc-bg: #181a1f; --doc-fg: #e6e9ee; --doc-muted: #aab1bc; --doc-border: #3b414a; --doc-accent: #78a9ff; --doc-panel: #22252b; --doc-mark: #554b20; }
 `;
+
+function markdownThemeCss(theme: MarkdownTheme, colorTheme: ResolvedTheme): string {
+  if (theme === "vue") {
+    return colorTheme === "dark"
+      ? `:root { --doc-border:#3a3a3a; --doc-accent:#42d392; --doc-panel:#242424; --doc-radius:4px; }`
+      : `:root { --doc-border:#e2e2e3; --doc-accent:#42b883; --doc-panel:#f3f5f7; --doc-radius:4px; }`;
+  }
+  if (theme === "minimal") {
+    return colorTheme === "dark"
+      ? `:root { --doc-border:#343939; --doc-accent:#9aacaa; --doc-panel:#242727; --doc-radius:2px; }`
+      : `:root { --doc-border:#e0e5e4; --doc-accent:#647a76; --doc-panel:#f5f7f7; --doc-radius:2px; }`;
+  }
+  return "";
+}
+
+/** 允许常用排版标签，同时剔除 script、事件属性和危险 URL。 */
+const SANITIZE_SCHEMA = {
+  ...defaultSchema,
+  tagNames: [...(defaultSchema.tagNames ?? []), "mark", "u", "kbd"],
+};
 
 function rehypeHighlightMarks() {
   const skip = new Set(["code", "pre", "script", "style"]);
@@ -86,7 +105,6 @@ function unescapeHtml(text: string): string {
   return text.replace(/&(?:amp|lt|gt|quot|#x27|#39);/g, (m) => HTML_UNESCAPE[m] ?? m);
 }
 
-let mermaidTheme: string | null = null;
 let mermaidId = 0;
 
 /**
@@ -105,10 +123,7 @@ async function renderMermaidBlocks(html: string, theme: ResolvedTheme): Promise<
   if (!blocks.length) return html;
 
   const wanted = theme === "dark" ? "dark" : "neutral";
-  if (mermaidTheme !== wanted) {
-    mermaid.initialize({ startOnLoad: false, theme: wanted, securityLevel: "strict" });
-    mermaidTheme = wanted;
-  }
+  const mermaid = await configuredMermaid(wanted);
 
   let out = html;
   for (const block of blocks) {
@@ -121,14 +136,15 @@ async function renderMermaidBlocks(html: string, theme: ResolvedTheme): Promise<
   }
   return out;
 }
-
 async function buildProcessor() {
   return unified()
     .use(remarkParse)
     .use(remarkFrontmatter)
     .use(remarkGfm)
     .use(remarkMath)
-    .use(remarkRehype)
+    .use(remarkRehype, { allowDangerousHtml: true })
+    .use(rehypeRaw)
+    .use(rehypeSanitize, SANITIZE_SCHEMA)
     .use(rehypeHighlightMarks)
     .use(rehypeKatex)
     .use(rehypeHighlight)
@@ -150,12 +166,14 @@ export async function markdownToHtml(
   locale: Locale = "zh",
   mdPath?: string | null,
   embedImages = false,
+  markdownTheme: MarkdownTheme = "github",
 ): Promise<string> {
   let bodyHtml = await markdownToBodyHtml(md, theme);
   if (embedImages && mdPath) {
     bodyHtml = await embedImagesInHtml(bodyHtml, mdPath);
   }
-  const themeCss = theme === "dark" ? DARK_CSS : "";
+  const exportKatexCss = embedImages ? await embedFontUrlsInCss(katexCss) : katexCss;
+  const themeCss = `${theme === "dark" ? DARK_CSS : ""}${markdownThemeCss(markdownTheme, theme)}`;
   const lang = locale === "zh" ? "zh-CN" : "en";
   return `<!DOCTYPE html>
 <html lang="${lang}">
@@ -164,7 +182,7 @@ export async function markdownToHtml(
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' data: https: http:; style-src 'unsafe-inline'; font-src data:;" />
   <title>Export</title>
-  <style>${katexCss}</style>
+  <style>${exportKatexCss}</style>
   <style>${BASE_CSS}${themeCss}</style>
 </head>
 <body>
@@ -173,9 +191,9 @@ ${bodyHtml}
 </html>`;
 }
 
-async function fileToDataUrl(absPath: string): Promise<string | null> {
+async function urlToDataUrl(url: string): Promise<string | null> {
   try {
-    const res = await fetch(convertFileSrc(absPath));
+    const res = await fetch(url);
     if (!res.ok) return null;
     const blob = await res.blob();
     return await new Promise((resolve) => {
@@ -187,6 +205,31 @@ async function fileToDataUrl(absPath: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+let embeddedKatexCss: Promise<string> | null = null;
+
+function embedFontUrlsInCss(css: string): Promise<string> {
+  if (embeddedKatexCss) return embeddedKatexCss;
+  embeddedKatexCss = (async () => {
+    const woff2Only = css.replace(
+      /src:\s*(url\([^)]*\.woff2\)\s*format\(["']woff2["']\))[^;}]*;/g,
+      "src:$1;",
+    );
+    const urls = [...new Set(
+      [...woff2Only.matchAll(/url\((?:["'])?([^"')]+)(?:["'])?\)/g)].map((match) => match[1]),
+    )];
+    const dataUrls = await Promise.all(urls.map((url) => urlToDataUrl(url)));
+    return urls.reduce(
+      (result, url, index) => dataUrls[index] ? result.split(url).join(dataUrls[index]!) : result,
+      woff2Only,
+    );
+  })();
+  return embeddedKatexCss;
+}
+
+async function fileToDataUrl(absPath: string): Promise<string | null> {
+  return urlToDataUrl(convertFileSrc(absPath));
 }
 
 export async function embedImagesInHtml(html: string, mdPath: string): Promise<string> {
@@ -206,27 +249,4 @@ export async function embedImagesInHtml(html: string, mdPath: string): Promise<s
     }
   }
   return out;
-}
-
-export function printHtml(html: string, onDone?: () => void) {
-  const frame = document.createElement("iframe");
-  frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
-  document.body.appendChild(frame);
-  const doc = frame.contentDocument;
-  if (!doc) return;
-  doc.open();
-  doc.write(html);
-  doc.close();
-
-  const win = frame.contentWindow;
-  if (!win) return;
-
-  const doPrint = () => {
-    win.focus();
-    win.print();
-    onDone?.();
-    setTimeout(() => frame.remove(), 1000);
-  };
-
-  setTimeout(doPrint, 1200);
 }

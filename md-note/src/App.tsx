@@ -34,6 +34,12 @@ import {
   type SavedSidebarTab,
 } from "./lib/workspace";
 import { apply as applyTheme, getThemePref, resolveTheme, setThemePref, type ThemePref } from "./lib/theme";
+import {
+  applyMarkdownTheme,
+  getMarkdownTheme,
+  setMarkdownTheme,
+  type MarkdownTheme,
+} from "./lib/markdownTheme";
 import { getLocale, setLocale, t, type Locale } from "./lib/i18n";
 import {
   applyEditorLayoutPrefs,
@@ -41,7 +47,7 @@ import {
   getConfirmDiscard,
   getDefaultEditorMode,
   getDefaultSidebarTab,
-  getEditorMaxWidth,
+  getEditorWidthPreset,
   getFocusMaxWidth,
   getFontSize,
   getLineHeight,
@@ -66,7 +72,7 @@ import {
   setConfirmDiscard as persistConfirmDiscard,
   setDefaultEditorMode,
   setDefaultSidebarTab,
-  setEditorMaxWidth as persistEditorMaxWidth,
+  setEditorWidthPreset as persistEditorWidthPreset,
   setFocusMaxWidth as persistFocusMaxWidth,
   setFontSize as persistFontSize,
   setLineHeight as persistLineHeight,
@@ -82,8 +88,9 @@ import {
   setTypewriterPadding as persistTypewriterPadding,
   setWordWrap as persistWordWrap,
   type DefaultEditorMode,
+  type EditorWidthPreset,
 } from "./lib/preferences";
-import { markdownToHtml, printHtml } from "./render/export";
+import { markdownToHtml } from "./render/export";
 import { parseFrontMatter, updateFrontMatter, frontMatterLineCount } from "./lib/frontmatter";
 import { dirOf, joinPath, basename, relativePath } from "./lib/paths";
 import { useTabsStore } from "./store/useTabsStore";
@@ -138,6 +145,8 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>(getSidebarTab);
   const [sidebarVisible, setSidebarVisible] = useState(getSidebarVisiblePref);
+  const sidebarVisibleRef = useRef(sidebarVisible);
+  const skipSidebarPreferenceWriteRef = useRef(false);
   const [sidebarWidth, setSidebarWidth] = useState(getSidebarWidth);
   const [folderPath, setFolderPath] = useState<string | null>(null);
   const [dirTick, setDirTick] = useState(0);
@@ -162,9 +171,10 @@ export default function App() {
   const [viewportRange, setViewportRange] = useState({ from: 1, to: 1 });
   const [locale, setLocaleState] = useState<Locale>(getLocale);
   const [theme, setTheme] = useState<ThemePref>(getThemePref);
+  const [markdownTheme, setMarkdownThemeState] = useState<MarkdownTheme>(getMarkdownTheme);
   const [fontSize, setFontSize] = useState(getFontSize);
   const [lineHeight, setLineHeight] = useState(getLineHeight);
-  const [editorMaxWidth, setEditorMaxWidth] = useState(getEditorMaxWidth);
+  const [editorWidthPreset, setEditorWidthPreset] = useState<EditorWidthPreset>(getEditorWidthPreset);
   const [focusMaxWidth, setFocusMaxWidth] = useState(getFocusMaxWidth);
   const [restoreLastFolder, setRestoreLastFolder] = useState(getRestoreLastFolder);
   const [restoreLastFile, setRestoreLastFile] = useState(getRestoreLastFile);
@@ -180,6 +190,12 @@ export default function App() {
   const [wordWrap, setWordWrap] = useState(getWordWrap);
   const [tabSize, setTabSize] = useState(getTabSize);
   const [spellCheck, setSpellCheck] = useState(getSpellCheck);
+
+  const hideSidebarForExternalOpen = useCallback(() => {
+    if (!sidebarVisibleRef.current) return;
+    skipSidebarPreferenceWriteRef.current = true;
+    setSidebarVisible(false);
+  }, []);
   const [typewriterPadding, setTypewriterPadding] = useState(getTypewriterPadding);
   const [showStatusBar, setShowStatusBar] = useState(getShowStatusBar);
 
@@ -324,20 +340,29 @@ export default function App() {
     const path = await api.saveHtmlDialog();
     if (!path) return;
     try {
-      const html = await markdownToHtml(tab.content, resolveTheme(), locale, tab.path, true);
+      const html = await markdownToHtml(tab.content, resolveTheme(), locale, tab.path, true, markdownTheme);
       await api.writeFile(path, html);
       showSuccess(t(locale, "toast.exported"));
     } catch (e) {
       showError(e);
     }
-  }, [getActive, showError, showSuccess, locale]);
+  }, [getActive, showError, showSuccess, locale, markdownTheme]);
 
   const exportPdf = useCallback(async () => {
     const tab = getActive();
     if (!tab) return;
-    const html = await markdownToHtml(tab.content, resolveTheme(), locale, tab.path, true);
-    printHtml(html, () => show(t(locale, "toast.printReady")));
-  }, [getActive, locale, show]);
+    const sourceName = tab.path ? basename(tab.path) : "document.md";
+    const defaultPath = sourceName.replace(/\.(?:md|markdown|txt)$/i, "") + ".pdf";
+    const path = await api.savePdfDialog(defaultPath);
+    if (!path) return;
+    try {
+      const html = await markdownToHtml(tab.content, resolveTheme(), locale, tab.path, true, markdownTheme);
+      await api.exportPdf(path, html);
+      showSuccess(t(locale, "toast.exported"));
+    } catch (e) {
+      showError(e);
+    }
+  }, [getActive, locale, markdownTheme, showError, showSuccess]);
 
   const handleNewFile = useCallback(async () => {
     if (!(await confirmDiscardIfNeeded())) return;
@@ -637,6 +662,7 @@ export default function App() {
   useEffect(() => {
     initPlatform();
     applyTheme();
+    applyMarkdownTheme();
     applyEditorLayoutPrefs();
     let disposed = false;
     const un: Array<() => void> = [];
@@ -648,22 +674,12 @@ export default function App() {
       });
     };
 
-    if (getRestoreLastFolder()) {
-      const savedFolder = getLastFolder();
-      if (savedFolder) {
-        api
-          .listDir(savedFolder)
-          .then(() => {
-            if (!disposed) {
-              setFolderPath(savedFolder);
-              setSidebarVisible(true);
-            }
-          })
-          .catch(() => clearLastFolder());
+    track(api.onOpenFile((p) => {
+      if (!disposed) {
+        hideSidebarForExternalOpen();
+        void bootRef.current.loadFile(p);
       }
-    }
-
-    track(api.onOpenFile((p) => { if (!disposed) void bootRef.current.loadFile(p); }));
+    }));
     track(api.onFileChanged(() => { if (!disposed) void bootRef.current.handleExternalChange(); }));
     track(api.onMenu((action) => {
       if (disposed) return;
@@ -683,8 +699,22 @@ export default function App() {
     api.getStartupFile().then((p) => {
       if (disposed) return;
       if (p) {
+        hideSidebarForExternalOpen();
         void bootRef.current.loadFile(p);
         return;
+      }
+      if (getRestoreLastFolder()) {
+        const savedFolder = getLastFolder();
+        if (savedFolder) {
+          api
+            .listDir(savedFolder)
+            .then(() => {
+              if (!disposed) {
+                setFolderPath(savedFolder);
+              }
+            })
+            .catch(() => clearLastFolder());
+        }
       }
       if (getRestoreLastFile()) {
         const last = getLastFile();
@@ -930,11 +960,11 @@ export default function App() {
   useEffect(() => {
     persistFontSize(fontSize);
     persistLineHeight(lineHeight);
-    persistEditorMaxWidth(editorMaxWidth);
+    persistEditorWidthPreset(editorWidthPreset);
     persistFocusMaxWidth(focusMaxWidth);
     persistTypewriterPadding(typewriterPadding);
     applyEditorLayoutPrefs();
-  }, [fontSize, lineHeight, editorMaxWidth, focusMaxWidth, typewriterPadding]);
+  }, [fontSize, lineHeight, editorWidthPreset, focusMaxWidth, typewriterPadding]);
 
   useEffect(() => {
     persistRestoreLastFolder(restoreLastFolder);
@@ -974,6 +1004,11 @@ export default function App() {
   }, [recentFilesLimit]);
 
   useEffect(() => {
+    sidebarVisibleRef.current = sidebarVisible;
+    if (skipSidebarPreferenceWriteRef.current) {
+      skipSidebarPreferenceWriteRef.current = false;
+      return;
+    }
     setSidebarVisiblePref(sidebarVisible);
   }, [sidebarVisible]);
 
@@ -1194,7 +1229,7 @@ export default function App() {
             <Editor
               ref={editorRef}
               locale={locale}
-              key={active.path ?? active.id}
+              key={active.id}
               value={active.content}
               mode={active.mode}
               filePath={active.path}
@@ -1231,6 +1266,7 @@ export default function App() {
           values={{
             locale,
             theme,
+            markdownTheme,
             restoreLastFolder,
             restoreLastFile,
             confirmDiscard,
@@ -1244,7 +1280,7 @@ export default function App() {
             fontFamily,
             monoFontFamily,
             editorZoom,
-            editorMaxWidth,
+            editorWidthPreset,
             focusMaxWidth,
             lineNumbers,
             wordWrap,
@@ -1262,6 +1298,10 @@ export default function App() {
             onTheme: (next) => {
               setTheme(next);
               setThemePref(next);
+            },
+            onMarkdownTheme: (next) => {
+              setMarkdownThemeState(next);
+              setMarkdownTheme(next);
             },
             onRestoreLastFolder: setRestoreLastFolder,
             onRestoreLastFile: setRestoreLastFile,
@@ -1288,7 +1328,7 @@ export default function App() {
             onFontFamily: setFontFamilyState,
             onMonoFontFamily: setMonoFontFamilyState,
             onEditorZoom: setEditorZoomState,
-            onEditorMaxWidth: setEditorMaxWidth,
+            onEditorWidthPreset: setEditorWidthPreset,
             onFocusMaxWidth: setFocusMaxWidth,
             onLineNumbers: setLineNumbers,
             onWordWrap: setWordWrap,

@@ -7,15 +7,21 @@ import {
   clickedOnBlockPadding,
   makePlainTextEditable,
 } from "./editableSource";
+import { getLocale, t } from "../../lib/i18n";
 
 function renderMath(target: HTMLElement, tex: string, display: boolean) {
   try {
-    katex.render(tex, target, { throwOnError: false, displayMode: display });
+    // render() 会在部分 WebView / 测试文档被判定为 quirks mode 时直接拒绝渲染；
+    // renderToString() 不依赖宿主文档模式，生成的结果与标准页面一致。
+    target.innerHTML = katex.renderToString(tex, {
+      throwOnError: false,
+      displayMode: display,
+    });
   } catch {
     target.textContent = display ? `$$${tex}$$` : `$${tex}$`;
   }
   if (!tex.trim()) {
-    target.textContent = display ? "空公式" : "$$";
+    target.textContent = display ? t(getLocale(), "editor.math.empty") : "$$";
     target.classList.add("md-math-empty");
   } else {
     target.classList.remove("md-math-empty");
@@ -150,8 +156,12 @@ function isDigit(ch: string | undefined): boolean {
  * 开定界符后必须紧跟非空白、闭定界符前必须是非空白、闭定界符后不能紧跟数字。
  * 例如 `价格 $5 到 $10 元` 不会被识别为公式。
  */
-export function scanMath(doc: MathDoc, inCode: (from: number, to: number) => boolean): MathRange[] {
-  const text = doc.sliceString(0, doc.length);
+export function scanMath(
+  doc: MathDoc,
+  inCode: (from: number, to: number) => boolean,
+  sourceText?: string,
+): MathRange[] {
+  const text = sourceText ?? doc.sliceString(0, doc.length);
   const results: MathRange[] = [];
   let i = 0;
 

@@ -1,6 +1,6 @@
 [package]
 name = "inknote"
-version = "0.1.0"
+version = "0.1.2"
 description = "InkNote local Markdown editor"
 authors = ["InkNote contributors"]
 edition = "2021"
@@ -26,3 +26,7 @@ tauri-plugin-single-instance = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 notify = "8"
+
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.38.2"
+windows-core = "0.61"

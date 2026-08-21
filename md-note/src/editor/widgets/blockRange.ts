@@ -38,6 +38,44 @@ export function currentBlockRange(
   return { from: start, to: Math.min(start + len, docLen) };
 }
 
+/**
+ * 把组件外层上下留白的点击放到相邻正文行。
+ *
+ * CodeMirror 若直接处理块级替换节点的边界，会画出与整个组件同高的光标，
+ * 回车也可能被原子区间吞掉。已有相邻行时退到上一行末尾 / 下一行开头，
+ * 光标高度和原生回车行为都会恢复正常。
+ */
+export function bindBlockBoundaryCursor(el: HTMLElement, visualBody: HTMLElement) {
+  el.addEventListener("mousedown", (event) => {
+    if (event.button !== 0 || event.target !== el) return;
+
+    const bodyRect = visualBody.getBoundingClientRect();
+    const before = event.clientY < bodyRect.top;
+    const after = event.clientY > bodyRect.bottom;
+    if (!before && !after) return;
+
+    const view = EditorView.findFromDOM(el);
+    const range = view && currentBlockRange(view, el);
+    if (!view || !range) return;
+
+    let pos = before ? range.from : range.to;
+    if (before && range.from > 0 && view.state.doc.sliceString(range.from - 1, range.from) === "\n") {
+      pos = range.from - 1;
+    } else if (
+      after &&
+      range.to < view.state.doc.length &&
+      view.state.doc.sliceString(range.to, range.to + 1) === "\n"
+    ) {
+      pos = range.to + 1;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
+    view.focus();
+  });
+}
+
 /** 将块级 Widget 上的点击映射到源码字符位置（含横向估算） */
 export function mapClickToBlockPos(
   view: EditorView,

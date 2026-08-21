@@ -200,7 +200,7 @@ const Editor = forwardRef<EditorRef, Props>(function Editor(
   return (
     <>
       <div
-        className={showLineNumbers ? "editor-host editor-host--line-numbers" : "editor-host"}
+        className={`editor-host editor-host--${mode}${showLineNumbers ? " editor-host--line-numbers" : ""}`}
         ref={hostRef}
       />
       {ctxMenu && (

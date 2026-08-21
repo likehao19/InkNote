@@ -1,29 +1,16 @@
 import { WidgetType, EditorView } from "@codemirror/view";
-import mermaid from "mermaid";
 import { stampBlockRange } from "./blockRange";
+import { configuredMermaid } from "../../lib/mermaid";
 import {
   attachSourceEditing,
   beginSourceEditing,
   clickedOnBlockPadding,
   makePlainTextEditable,
 } from "./editableSource";
-
-let mermaidTheme: string | null = null;
+import { getLocale, t } from "../../lib/i18n";
 
 function currentTheme(): "dark" | "default" {
   return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "default";
-}
-
-async function ensureMermaid() {
-  const theme = currentTheme();
-  if (mermaidTheme === theme) return;
-  mermaid.initialize({
-    startOnLoad: false,
-    theme,
-    // strict：对图中的 HTML 标签做消毒，避免打开不可信 .md 时被注入脚本
-    securityLevel: "strict",
-  });
-  mermaidTheme = theme;
 }
 
 let idCounter = 0;
@@ -34,10 +21,10 @@ function renderMermaid(target: HTMLElement, code: string) {
   target.dataset.renderToken = token;
 
   void (async () => {
-    await ensureMermaid();
+    const mermaid = await configuredMermaid(currentTheme());
     if (target.dataset.renderToken !== token || !target.isConnected) return;
     if (!code.trim()) {
-      target.textContent = "空图表";
+      target.textContent = t(getLocale(), "editor.mermaid.empty");
       target.classList.add("md-mermaid-error");
       return;
     }
@@ -48,7 +35,9 @@ function renderMermaid(target: HTMLElement, code: string) {
       target.classList.remove("md-mermaid-error");
     } catch (e) {
       if (target.dataset.renderToken !== token || !target.isConnected) return;
-      target.textContent = `Mermaid 渲染失败: ${e instanceof Error ? e.message : String(e)}`;
+      target.textContent = t(getLocale(), "editor.mermaid.error", {
+        message: e instanceof Error ? e.message : String(e),
+      });
       target.classList.add("md-mermaid-error");
     }
     // 图表是异步出现的，高度变了必须让 CodeMirror 重新测量，否则点击定位会偏

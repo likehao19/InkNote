@@ -1,5 +1,6 @@
 # Local tooling
 .claude/
+.pnpm-store/
 
 # Dependencies & build output (md-note)
 md-note/node_modules/

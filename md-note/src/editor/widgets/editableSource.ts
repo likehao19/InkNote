@@ -104,6 +104,22 @@ export function caretTextOffset(root: HTMLElement): number | null {
   return readPlainText(root, range.startContainer, range.startOffset).caret;
 }
 
+/** DOM 经过语法高亮重排后，文本偏移可能短暂失配；Range 更适合判断是否在末尾。 */
+function caretIsAtEnd(root: HTMLElement): boolean {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || !selection.isCollapsed) return false;
+  const current = selection.getRangeAt(0);
+  if (!root.contains(current.endContainer)) return false;
+  const tail = document.createRange();
+  tail.selectNodeContents(root);
+  try {
+    tail.setStart(current.endContainer, current.endOffset);
+  } catch {
+    return false;
+  }
+  return tail.toString().length === 0;
+}
+
 /** 把光标放到元素内的第 offset 个字符处 */
 export function setCaretOffset(root: HTMLElement, offset: number) {
   const sel = window.getSelection();
@@ -130,6 +146,16 @@ export function setCaretOffset(root: HTMLElement, offset: number) {
   range.collapse(false);
   sel.removeAllRanges();
   sel.addRange(range);
+}
+
+/** Ctrl/Cmd+A 在组件内只选择当前可编辑区，不泄漏到整篇 CodeMirror 文档。 */
+export function selectEditableContents(root: HTMLElement) {
+  const selection = window.getSelection();
+  if (!selection) return;
+  const range = document.createRange();
+  range.selectNodeContents(root);
+  selection.removeAllRanges();
+  selection.addRange(range);
 }
 
 /** 读取编辑区里的源码文本 */
@@ -189,6 +215,8 @@ export interface SourceEditingOptions {
   onEditingChange?: (editing: boolean) => void;
   /** Tab 是否插入缩进（代码块要，公式块不要） */
   indentOnTab?: boolean;
+  /** 末尾空行再次回车时退出，并确保块后存在正文行 */
+  exitOnTrailingBlankLine?: boolean;
 }
 
 /**
@@ -198,6 +226,8 @@ export interface SourceEditingOptions {
 export function attachSourceEditing(wrap: HTMLElement, opts: SourceEditingOptions) {
   let composing = false;
   let frame = 0;
+  let trailingEnterArmed = false;
+  let trailingBlockFrom: number | null = null;
 
   const viewOf = () => EditorView.findFromDOM(wrap);
   const inSource = (event: Event) => {
@@ -242,6 +272,11 @@ export function attachSourceEditing(wrap: HTMLElement, opts: SourceEditingOption
       wrap.classList.remove("md-block--editing");
       opts.onEditingChange?.(false);
     });
+  });
+
+  wrap.addEventListener("mousedown", () => {
+    trailingEnterArmed = false;
+    trailingBlockFrom = null;
   });
 
   wrap.addEventListener("compositionstart", () => {
@@ -290,8 +325,55 @@ export function attachSourceEditing(wrap: HTMLElement, opts: SourceEditingOption
     const view = viewOf();
     if (!view) return;
 
+    if (
+      event.key === "Enter" &&
+      !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey &&
+      opts.exitOnTrailingBlankLine
+    ) {
+      if (trailingEnterArmed) {
+        event.preventDefault();
+        const text = sourceText(el);
+        el.textContent = text.endsWith("\n") ? text.slice(0, -1) : text;
+        if (trailingBlockFrom == null) return;
+        const markdown = opts.toMarkdown(sourceText(el));
+        flush();
+
+        const doc = view.state.doc;
+        const blockEnd = Math.min(trailingBlockFrom + markdown.length, doc.length);
+        if (blockEnd === doc.length) {
+          view.dispatch({
+            changes: { from: blockEnd, insert: "\n" },
+            selection: { anchor: blockEnd + 1 },
+            userEvent: "input.block-exit",
+          });
+        } else {
+          const after = doc.sliceString(blockEnd, blockEnd + 1) === "\n"
+            ? blockEnd + 1
+            : blockEnd;
+          view.dispatch({ selection: { anchor: after } });
+        }
+        view.focus();
+        trailingEnterArmed = false;
+        trailingBlockFrom = null;
+        return;
+      }
+
+      const range = currentBlockRange(view, wrap);
+      trailingEnterArmed = caretIsAtEnd(el) && range != null;
+      trailingBlockFrom = trailingEnterArmed ? range!.from : null;
+      return;
+    }
+    trailingEnterArmed = false;
+    trailingBlockFrom = null;
+
     if (event.ctrlKey || event.metaKey) {
       const key = event.key.toLowerCase();
+      if (key === "a") {
+        event.preventDefault();
+        event.stopPropagation();
+        selectEditableContents(el);
+        return;
+      }
       if (key === "b" || key === "i" || key === "u") {
         // 原生富文本命令会往纯文本区里塞标签
         event.preventDefault();
