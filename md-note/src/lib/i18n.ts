@@ -1,8 +1,10 @@
 export type Locale = "zh" | "en";
 
+import { getStoredValue, setStoredValue } from "./settingsStore";
+
 const KEY = "inknote.locale";
 
-const messages = {
+export const messages = {
   zh: {
     "menu.file": "文件",
     "menu.edit": "编辑",
@@ -127,6 +129,7 @@ const messages = {
 
     "title.unsaved": "未保存",
     "title.untitled": "未命名",
+    "title.brand": "墨笺",
 
     "reload.title": "文件已更改",
     "reload.body": "此文件已在外部被修改，是否重新加载？未保存的更改将丢失。",
@@ -183,8 +186,12 @@ const messages = {
     "settings.tabSizeDesc": "按 Tab 键时的缩进空格数",
     "settings.lineHeight": "行高",
     "settings.lineHeightDesc": "编辑区行间距（1.4–2.4）",
-    "settings.editorMaxWidth": "编辑区宽度",
-    "settings.editorMaxWidthDesc": "正文最大宽度（rem）",
+    "settings.editorMaxWidth": "内容布局",
+    "settings.editorMaxWidthDesc": "控制正文在窗口中的最大宽度",
+    "settings.editorWidth.compact": "紧凑",
+    "settings.editorWidth.standard": "标准",
+    "settings.editorWidth.wide": "宽屏",
+    "settings.editorWidth.full": "全宽（默认）",
     "settings.focusMaxWidth": "专注模式宽度",
     "settings.focusMaxWidthDesc": "专注模式下正文最大宽度（rem）",
     "settings.spellCheck": "拼写检查",
@@ -198,6 +205,13 @@ const messages = {
     "settings.theme.light": "亮色",
     "settings.theme.dark": "暗色",
     "settings.theme.system": "跟随系统",
+    "themePreview.heading": "标题",
+    "themePreview.body": "正文示例",
+    "settings.markdownTheme": "Markdown 主题",
+    "settings.markdownThemeDesc": "只改变引用、代码块、表格、公式等组件样式，每套均适配亮色与暗色",
+    "settings.markdownTheme.github": "GitHub",
+    "settings.markdownTheme.vue": "Vue",
+    "settings.markdownTheme.minimal": "极简",
     "settings.customCss": "自定义 CSS",
     "settings.customCssDesc": "为编辑区预览加载额外样式（仅作用于编辑器区域）",
     "settings.pickCss": "选择 CSS 文件…",
@@ -245,7 +259,6 @@ const messages = {
     "toast.pathCopied": "路径已复制",
     "toast.reopened": "已恢复关闭的文件",
     "toast.nothingToReopen": "没有可恢复的文件",
-    "toast.printReady": "请在打印对话框中确认",
 
     "globalSearch.placeholder": "搜索工作区文件…",
     "globalSearch.noScope": "打开文件夹或最近文件后可搜索",
@@ -296,6 +309,7 @@ const messages = {
     "shortcuts.title": "快捷键",
     "shortcuts.file": "文件",
     "shortcuts.edit": "编辑",
+    "shortcuts.paragraph": "段落",
     "shortcuts.format": "格式",
     "shortcuts.view": "视图",
     "shortcuts.new": "新建",
@@ -303,6 +317,7 @@ const messages = {
     "shortcuts.save": "保存",
     "shortcuts.saveAs": "另存为",
     "shortcuts.closeFile": "关闭文件",
+    "shortcuts.reopenClosed": "重新打开关闭的文件",
     "shortcuts.settings": "设置",
     "shortcuts.undo": "撤销",
     "shortcuts.redo": "重做",
@@ -320,6 +335,24 @@ const messages = {
     "shortcuts.sidebar": "侧边栏",
     "shortcuts.focus": "专注模式",
     "shortcuts.typewriter": "打字机模式",
+    "shortcuts.zoomIn": "放大界面",
+    "shortcuts.zoomOut": "缩小界面",
+    "shortcuts.fullscreen": "切换全屏",
+
+    "editor.code.plainText": "纯文本",
+    "editor.code.copy": "复制",
+    "editor.code.copied": "已复制",
+    "editor.math.empty": "空公式",
+    "editor.mermaid.empty": "空图表",
+    "editor.mermaid.error": "Mermaid 渲染失败：{message}",
+    "editor.image.loadFailed": "无法加载：{path}",
+    "editor.image.editHint": "{path} · 双击编辑",
+    "editor.linkDefinition": "链接定义 · {label} → {url}",
+    "editor.footnote": "脚注 {number} · {text}",
+    "error.invalidSourceFile": "无效的源文件",
+    "error.directoryExists": "目录已存在",
+    "error.parentDirectoryMissing": "父目录不存在",
+    "error.fileExists": "文件已存在",
 
     "about.title": "关于墨笺",
     "about.body": "墨笺 InkNote 是一款轻量 Markdown 编辑器，专注本地写作与实时预览。支持数学公式、Mermaid 图表、表格编辑和主题定制，保持简洁专注。",
@@ -455,6 +488,7 @@ const messages = {
 
     "title.unsaved": "Unsaved",
     "title.untitled": "Untitled",
+    "title.brand": "InkNote",
 
     "reload.title": "File Changed",
     "reload.body": "This file was modified externally. Reload? Unsaved changes will be lost.",
@@ -511,8 +545,12 @@ const messages = {
     "settings.tabSizeDesc": "Spaces inserted per Tab key",
     "settings.lineHeight": "Line Height",
     "settings.lineHeightDesc": "Editor line spacing (1.4–2.4)",
-    "settings.editorMaxWidth": "Editor Width",
-    "settings.editorMaxWidthDesc": "Maximum content width in rem",
+    "settings.editorMaxWidth": "Content Layout",
+    "settings.editorMaxWidthDesc": "Maximum document width within the window",
+    "settings.editorWidth.compact": "Compact",
+    "settings.editorWidth.standard": "Standard",
+    "settings.editorWidth.wide": "Wide",
+    "settings.editorWidth.full": "Full width (Default)",
     "settings.focusMaxWidth": "Focus Mode Width",
     "settings.focusMaxWidthDesc": "Maximum content width in focus mode (rem)",
     "settings.spellCheck": "Spell Check",
@@ -526,6 +564,13 @@ const messages = {
     "settings.theme.light": "Light",
     "settings.theme.dark": "Dark",
     "settings.theme.system": "System",
+    "themePreview.heading": "Heading",
+    "themePreview.body": "Body text sample",
+    "settings.markdownTheme": "Markdown Theme",
+    "settings.markdownThemeDesc": "Component styling for quotes, code, tables, math, and more; all support light and dark modes",
+    "settings.markdownTheme.github": "GitHub",
+    "settings.markdownTheme.vue": "Vue",
+    "settings.markdownTheme.minimal": "Minimal",
     "settings.customCss": "Custom CSS",
     "settings.customCssDesc": "Load extra styles for the editor preview area only",
     "settings.pickCss": "Choose CSS File…",
@@ -573,7 +618,6 @@ const messages = {
     "toast.pathCopied": "Path copied",
     "toast.reopened": "Closed file restored",
     "toast.nothingToReopen": "Nothing to reopen",
-    "toast.printReady": "Confirm in the print dialog",
 
     "globalSearch.placeholder": "Search workspace files…",
     "globalSearch.noScope": "Open a folder or recent files to search",
@@ -624,6 +668,7 @@ const messages = {
     "shortcuts.title": "Keyboard Shortcuts",
     "shortcuts.file": "File",
     "shortcuts.edit": "Edit",
+    "shortcuts.paragraph": "Paragraph",
     "shortcuts.format": "Format",
     "shortcuts.view": "View",
     "shortcuts.new": "New",
@@ -631,6 +676,7 @@ const messages = {
     "shortcuts.save": "Save",
     "shortcuts.saveAs": "Save As",
     "shortcuts.closeFile": "Close File",
+    "shortcuts.reopenClosed": "Reopen Closed File",
     "shortcuts.settings": "Settings",
     "shortcuts.undo": "Undo",
     "shortcuts.redo": "Redo",
@@ -648,6 +694,24 @@ const messages = {
     "shortcuts.sidebar": "Sidebar",
     "shortcuts.focus": "Focus Mode",
     "shortcuts.typewriter": "Typewriter Mode",
+    "shortcuts.zoomIn": "Zoom In",
+    "shortcuts.zoomOut": "Zoom Out",
+    "shortcuts.fullscreen": "Toggle Full Screen",
+
+    "editor.code.plainText": "Plain Text",
+    "editor.code.copy": "Copy",
+    "editor.code.copied": "Copied",
+    "editor.math.empty": "Empty formula",
+    "editor.mermaid.empty": "Empty diagram",
+    "editor.mermaid.error": "Mermaid rendering failed: {message}",
+    "editor.image.loadFailed": "Unable to load: {path}",
+    "editor.image.editHint": "{path} · Double-click to edit",
+    "editor.linkDefinition": "Link definition · {label} → {url}",
+    "editor.footnote": "Footnote {number} · {text}",
+    "error.invalidSourceFile": "Invalid source file",
+    "error.directoryExists": "The folder already exists",
+    "error.parentDirectoryMissing": "The parent folder does not exist",
+    "error.fileExists": "The file already exists",
 
     "about.title": "About InkNote",
     "about.body": "InkNote is a lightweight Markdown editor focused on local writing and live preview. It supports math, Mermaid diagrams, tables, and themes while staying simple and focused.",
@@ -664,12 +728,12 @@ const messages = {
 export type MessageKey = keyof typeof messages.zh;
 
 export function getLocale(): Locale {
-  const v = localStorage.getItem(KEY);
-  return v === "en" ? "en" : "zh";
+  const v = getStoredValue(KEY);
+  return v === "zh" ? "zh" : "en";
 }
 
 export function setLocale(locale: Locale) {
-  localStorage.setItem(KEY, locale);
+  setStoredValue(KEY, locale);
   document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
 }
 

@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
+import { getLocale, t, type MessageKey } from "./i18n";
 export { isMac, isWin } from "./platform";
 
 export interface DirEntry {
@@ -11,6 +12,22 @@ export interface DirEntry {
 
 const MD_FILTER = { name: "Markdown", extensions: ["md", "markdown", "txt"] };
 const HTML_FILTER = { name: "HTML", extensions: ["html"] };
+const PDF_FILTER = { name: "PDF", extensions: ["pdf"] };
+
+const BACKEND_ERROR_KEYS: Record<string, MessageKey> = {
+  invalid_source_file: "error.invalidSourceFile",
+  directory_exists: "error.directoryExists",
+  parent_directory_missing: "error.parentDirectoryMissing",
+  file_exists: "error.fileExists",
+};
+
+function invokeLocalized<T>(command: string, args: Record<string, unknown>): Promise<T> {
+  return invoke<T>(command, args).catch((error) => {
+    const key = BACKEND_ERROR_KEYS[String(error)];
+    if (key) throw new Error(t(getLocale(), key));
+    throw error;
+  });
+}
 
 export function readFile(path: string): Promise<string> {
   return invoke("read_file", { path });
@@ -79,13 +96,13 @@ export function unwatchDir(): Promise<void> {
   return invoke("unwatch_dir");
 }
 export function copyFileToDir(src: string, destDir: string): Promise<string> {
-  return invoke("copy_file_to_dir", { src, destDir });
+  return invokeLocalized("copy_file_to_dir", { src, destDir });
 }
 export function createDir(path: string): Promise<void> {
-  return invoke("create_dir", { path });
+  return invokeLocalized("create_dir", { path });
 }
 export function createFile(path: string, content = ""): Promise<void> {
-  return invoke("create_file", { path, content });
+  return invokeLocalized("create_file", { path, content });
 }
 export function renamePath(oldPath: string, newPath: string): Promise<void> {
   return invoke("rename_path", { oldPath, newPath });
@@ -109,6 +126,13 @@ export async function saveFileDialog(defaultPath?: string): Promise<string | nul
 export async function saveHtmlDialog(): Promise<string | null> {
   const r = await saveDialog({ filters: [HTML_FILTER] });
   return typeof r === "string" ? r : null;
+}
+export async function savePdfDialog(defaultPath?: string): Promise<string | null> {
+  const r = await saveDialog({ filters: [PDF_FILTER], defaultPath });
+  return typeof r === "string" ? r : null;
+}
+export function exportPdf(path: string, html: string): Promise<void> {
+  return invoke("export_pdf", { path, html });
 }
 export async function openCssDialog(): Promise<string | null> {
   const r = await openDialog({

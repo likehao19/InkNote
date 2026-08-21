@@ -5,6 +5,7 @@ import { bindBlockClickEdit, currentBlockRange, stampBlockRange } from "./blockR
 import { attachBlockSelection } from "./editableSource";
 import { pendingImageUrl } from "../../lib/pendingImages";
 import { editorPickImage } from "../../lib/editorBridge";
+import { getLocale, t } from "../../lib/i18n";
 
 export class ImageWidget extends WidgetType {
   constructor(
@@ -14,6 +15,7 @@ export class ImageWidget extends WidgetType {
     readonly alt: string,
     readonly resolved: string,
     readonly inline = false,
+    readonly title = "",
   ) {
     super();
   }
@@ -25,13 +27,15 @@ export class ImageWidget extends WidgetType {
       other.src === this.src &&
       other.alt === this.alt &&
       other.resolved === this.resolved &&
-      other.inline === this.inline
+      other.inline === this.inline &&
+      other.title === this.title
     );
   }
 
   private buildImage(): HTMLImageElement {
     const img = document.createElement("img");
     img.alt = this.alt;
+    if (this.title) img.title = this.title;
     img.loading = "lazy";
     img.draggable = false;
 
@@ -66,7 +70,7 @@ export class ImageWidget extends WidgetType {
       img.style.display = "none";
       const err = document.createElement("span");
       err.className = "md-image-error";
-      err.textContent = `无法加载: ${this.src}`;
+      err.textContent = t(getLocale(), "editor.image.loadFailed", { path: this.src });
       root.appendChild(err);
       EditorView.findFromDOM(root)?.requestMeasure();
     };
@@ -80,7 +84,7 @@ export class ImageWidget extends WidgetType {
 
     const hint = document.createElement("span");
     hint.className = "md-image-path-hint";
-    hint.textContent = `${this.src} · 双击编辑`;
+    hint.textContent = t(getLocale(), "editor.image.editHint", { path: this.src });
     hint.setAttribute("aria-hidden", "true");
     root.appendChild(hint);
 
@@ -96,7 +100,7 @@ export class ImageWidget extends WidgetType {
             changes: {
               from: range.from,
               to: range.to,
-              insert: `![${picked.alt}](${picked.path.trim()})`,
+              insert: `![${picked.alt}](${picked.path.trim()}${this.title ? ` "${this.title}"` : ""})`,
             },
             userEvent: "input.block",
           });
@@ -118,17 +122,24 @@ export class ImageWidget extends WidgetType {
 export function parseImage(
   node: SyntaxNodeRef,
   doc: { sliceString: (f: number, t: number) => string },
-): { alt: string; url: string } {
-  const text = doc.sliceString(node.from, node.to);
-  const m = /^!\[([^\]]*)\]\(([^)]+)\)/.exec(text);
-  if (m) return { alt: m[1], url: m[2] };
+  definitions: ReadonlyMap<string, { url: string; title: string }> = new Map(),
+): { alt: string; url: string; title: string } {
   let alt = "";
   let url = "";
-  for (const c of node.node.getChildren("LinkLabel")) {
-    alt = doc.sliceString(c.from, c.to);
+  let title = "";
+  const marks = node.node.getChildren("LinkMark");
+  if (marks.length >= 2) alt = doc.sliceString(marks[0].to, marks[1].from);
+
+  const directUrl = node.node.getChild("URL");
+  if (directUrl) {
+    url = doc.sliceString(directUrl.from, directUrl.to).replace(/^<|>$/g, "");
+    const directTitle = node.node.getChild("LinkTitle");
+    if (directTitle) title = doc.sliceString(directTitle.from + 1, directTitle.to - 1);
+  } else {
+    const labelNode = node.node.getChild("LinkLabel");
+    const rawLabel = labelNode ? doc.sliceString(labelNode.from + 1, labelNode.to - 1) : alt;
+    const definition = definitions.get(rawLabel.trim().replace(/\s+/g, " ").toLowerCase());
+    if (definition) ({ url, title } = definition);
   }
-  for (const c of node.node.getChildren("URL")) {
-    url = doc.sliceString(c.from, c.to);
-  }
-  return { alt, url };
+  return { alt, url, title };
 }

@@ -1,5 +1,5 @@
 import { WidgetType, EditorView } from "@codemirror/view";
-import { currentBlockRange, stampBlockRange } from "./blockRange";
+import { bindBlockBoundaryCursor, currentBlockRange, stampBlockRange } from "./blockRange";
 import {
   attachBlockSelection,
   attachSourceEditing,
@@ -28,6 +28,7 @@ import php from "highlight.js/lib/languages/php";
 import ruby from "highlight.js/lib/languages/ruby";
 import diff from "highlight.js/lib/languages/diff";
 import ini from "highlight.js/lib/languages/ini";
+import { getLocale, t } from "../../lib/i18n";
 
 for (const [lang, mod] of [
   ["bash", bash],
@@ -74,7 +75,6 @@ const LANGUAGE_OPTIONS = [
 ];
 
 const LANGUAGE_LABELS: Record<string, string> = {
-  "": "纯文本",
   cpp: "C++",
   csharp: "C#",
   javascript: "JavaScript",
@@ -99,7 +99,7 @@ function normalizeLang(info: string): string {
 }
 
 function langLabel(lang: string): string {
-  return LANGUAGE_LABELS[lang] ?? (lang || "纯文本");
+  return LANGUAGE_LABELS[lang] ?? (lang || t(getLocale(), "editor.code.plainText"));
 }
 
 /** 把代码写进元素并上色；keepCaret 用于输入过程中保持光标不跳 */
@@ -134,6 +134,7 @@ export class CodeBlockWidget extends WidgetType {
     readonly to: number,
     readonly code: string,
     readonly lang: string,
+    readonly indented = false,
   ) {
     super();
   }
@@ -143,11 +144,15 @@ export class CodeBlockWidget extends WidgetType {
     return (
       other.to - other.from === this.to - this.from &&
       other.code === this.code &&
-      other.lang === this.lang
+      other.lang === this.lang &&
+      other.indented === this.indented
     );
   }
 
-  private fence(code: string, lang: string): string {
+  private serialize(code: string, lang: string): string {
+    if (this.indented && !lang.trim()) {
+      return code.replace(/\n+$/, "").split("\n").map((line) => `    ${line}`).join("\n");
+    }
     return `\`\`\`${lang.trim()}\n${code.replace(/\n+$/, "")}\n\`\`\``;
   }
 
@@ -176,10 +181,14 @@ export class CodeBlockWidget extends WidgetType {
     box.appendChild(gutter);
     box.appendChild(pre);
 
-    // 工具条：语言下拉 + 复制，浮在右上角
+    // 右上角只放复制；语言选择单独贴在代码块左上边缘。
     const header = document.createElement("div");
     header.className = "md-codeblock-header";
     header.contentEditable = "false";
+
+    const languageControl = document.createElement("div");
+    languageControl.className = "md-codeblock-language-control";
+    languageControl.contentEditable = "false";
 
     const select = document.createElement("select");
     select.className = "md-codeblock-lang";
@@ -194,6 +203,7 @@ export class CodeBlockWidget extends WidgetType {
       if (value === current) opt.selected = true;
       select.appendChild(opt);
     }
+    select.value = current;
     select.addEventListener("mousedown", (e) => e.stopPropagation());
     select.addEventListener("change", () => {
       const view = EditorView.findFromDOM(wrap);
@@ -201,7 +211,7 @@ export class CodeBlockWidget extends WidgetType {
       if (!view || !range) return;
       const code = codeEl.textContent ?? "";
       view.dispatch({
-        changes: { from: range.from, to: range.to, insert: this.fence(code, select.value) },
+        changes: { from: range.from, to: range.to, insert: this.serialize(code, select.value) },
         userEvent: "input.codeblock",
       });
       view.focus();
@@ -210,7 +220,7 @@ export class CodeBlockWidget extends WidgetType {
     const copyBtn = document.createElement("button");
     copyBtn.type = "button";
     copyBtn.className = "md-codeblock-copy";
-    copyBtn.textContent = "复制";
+    copyBtn.textContent = t(getLocale(), "editor.code.copy");
     copyBtn.addEventListener("mousedown", (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -218,22 +228,27 @@ export class CodeBlockWidget extends WidgetType {
     copyBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       void navigator.clipboard.writeText(codeEl.textContent ?? this.code);
-      copyBtn.textContent = "已复制";
-      window.setTimeout(() => { copyBtn.textContent = "复制"; }, 1200);
+      copyBtn.textContent = t(getLocale(), "editor.code.copied");
+      window.setTimeout(() => {
+        copyBtn.textContent = t(getLocale(), "editor.code.copy");
+      }, 1200);
     });
 
-    header.appendChild(select);
     header.appendChild(copyBtn);
+    languageControl.appendChild(select);
     box.appendChild(header);
+    box.appendChild(languageControl);
+    bindBlockBoundaryCursor(wrap, box);
 
     attachSourceEditing(wrap, {
       source: () => codeEl,
-      toMarkdown: (text) => this.fence(text, select.value),
+      toMarkdown: (text) => this.serialize(text, select.value),
       onInput: (text, el) => {
         paintCode(el, text, select.value, true);
         paintGutter(gutter, text);
       },
       indentOnTab: true,
+      exitOnTrailingBlankLine: true,
     });
 
     // 点在代码区以外的盒内留白也进入编辑；外层留白不抢点击

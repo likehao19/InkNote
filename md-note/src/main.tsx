@@ -4,12 +4,10 @@ import App from "./App";
 import { initPlatform } from "./lib/platform";
 import { getLocale, setLocale } from "./lib/i18n";
 import { applyEditorLayoutPrefs } from "./lib/preferences";
+import { applyMarkdownTheme } from "./lib/markdownTheme";
+import { initializeSettingsStore } from "./lib/settingsStore";
 import "katex/dist/katex.min.css";
 import "./App.css";
-
-initPlatform();
-setLocale(getLocale());
-applyEditorLayoutPrefs();
 
 document.addEventListener(
   "contextmenu",
@@ -19,8 +17,18 @@ document.addEventListener(
   { capture: true },
 );
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);
+async function bootstrap() {
+  await initializeSettingsStore();
+  initPlatform();
+  setLocale(getLocale());
+  applyEditorLayoutPrefs();
+  applyMarkdownTheme();
+
+  ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>,
+  );
+}
+
+void bootstrap();

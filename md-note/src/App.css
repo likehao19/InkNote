@@ -1052,8 +1052,92 @@ body.sidebar-resizing * {
   --editor-block-indent: 16px;
   --editor-quote-bar: 3px;
   --editor-list-marker-offset: 1.35em;
+  --md-heading-font: var(--editor-font-family, var(--font-ui));
+  --md-component-radius: 9px;
+  --md-component-shadow: none;
+  --md-accent: var(--accent);
+  --md-heading-color: var(--fg);
+  --md-muted: var(--fg-muted);
+  --md-quote-bg: color-mix(in srgb, var(--accent) 4%, transparent);
+  --md-panel-bg: var(--code-bg);
+  --md-panel-border: var(--border);
+  --md-code-bg: var(--md-panel-bg);
+  --md-code-fg: var(--fg);
+  --md-code-keyword: var(--syntax-keyword);
+  --md-code-string: var(--syntax-string);
+  --md-code-number: var(--syntax-number);
+  --md-code-comment: var(--syntax-comment);
+  --md-quote-border: var(--md-accent);
+  --font-mono: var(--editor-mono-font, ui-monospace, Consolas, monospace);
   user-select: text;
   -webkit-user-select: text;
+}
+
+/* Markdown 主题只设计组件，不改正文底色、正文颜色和基础排版。 */
+html[data-md-theme="github"] .editor-host {
+  --md-accent: #0969da;
+  --md-panel-bg: #f6f8fa;
+  --md-panel-border: #d0d7de;
+  --md-quote-bg: #f6f8fa;
+  --md-code-bg: #f6f8fa;
+  --md-code-fg: #1f2328;
+  --md-code-keyword: #cf222e;
+  --md-code-string: #0a3069;
+  --md-code-number: #0550ae;
+  --md-code-comment: #6e7781;
+  --md-quote-border: #d0d7de;
+  --md-component-radius: 6px;
+}
+html[data-theme="dark"][data-md-theme="github"] .editor-host {
+  --md-accent: #58a6ff;
+  --md-panel-bg: #161b22;
+  --md-panel-border: #30363d;
+  --md-quote-bg: #161b22;
+  --md-code-bg: #161b22;
+  --md-code-fg: #e6edf3;
+  --md-code-keyword: #ff7b72;
+  --md-code-string: #a5d6ff;
+  --md-code-number: #79c0ff;
+  --md-code-comment: #8b949e;
+  --md-quote-border: #30363d;
+}
+
+html[data-md-theme="vue"] .editor-host {
+  --md-accent: #42b883;
+  --md-panel-bg: #f3f5f7;
+  --md-panel-border: #e2e2e3;
+  --md-quote-bg: #f3faf7;
+  --md-code-bg: #282c34;
+  --md-code-fg: #abb2bf;
+  --md-code-keyword: #c678dd;
+  --md-code-string: #98c379;
+  --md-code-number: #d19a66;
+  --md-code-comment: #7f848e;
+  --md-quote-border: #42b883;
+  --md-component-radius: 4px;
+}
+html[data-theme="dark"][data-md-theme="vue"] .editor-host {
+  --md-accent: #42d392;
+  --md-panel-bg: #242424;
+  --md-panel-border: #3a3a3a;
+  --md-quote-bg: #202a26;
+  --md-code-bg: #16181d;
+  --md-code-fg: #abb2bf;
+  --md-quote-border: #42d392;
+}
+
+html[data-md-theme="minimal"] .editor-host {
+  --md-accent: #647a76;
+  --md-panel-bg: #f5f7f7;
+  --md-panel-border: #e0e5e4;
+  --md-quote-bg: #f7f9f9;
+  --md-component-radius: 2px;
+}
+html[data-theme="dark"][data-md-theme="minimal"] .editor-host {
+  --md-accent: #9aacaa;
+  --md-panel-bg: #242727;
+  --md-panel-border: #343939;
+  --md-quote-bg: #222525;
 }
 .editor-host .cm-editor,
 .editor-host .cm-scroller,
@@ -1065,14 +1149,14 @@ body.sidebar-resizing * {
 .editor-host .cm-editor { height: 100%; background: var(--bg-editor); }
 .editor-host .cm-editor.cm-focused { outline: none; }
 .editor-host .cm-scroller {
-  font-family: var(--font-ui);
-  font-size: var(--editor-font-size);
+  font-family: var(--editor-font-family, var(--font-ui));
+  font-size: var(--editor-render-font-size, var(--editor-font-size));
   line-height: var(--editor-line-height, 1.75);
   overflow: auto;
 }
 .editor-host .cm-content {
-  padding: 28px 0 48px;
-  max-width: var(--editor-max-width, 46rem);
+  padding: clamp(32px, 6vh, 64px) 0 48px;
+  max-width: var(--editor-max-width, 95vw);
   margin: 0 auto;
   color: var(--fg);
   caret-color: var(--fg);
@@ -1103,12 +1187,24 @@ body.sidebar-resizing * {
 }
 
 /* 实时预览渲染 — 标记用 Decoration.replace 真正移出排版，不留占位空白 */
-.cm-md-h1 { font-size: 1.85em; font-weight: 700; letter-spacing: -0.02em; }
-.cm-md-h2 { font-size: 1.5em; font-weight: 700; letter-spacing: -0.01em; }
-.cm-md-h3 { font-size: 1.28em; font-weight: 600; }
+.cm-md-h1,
+.cm-md-h2,
+.cm-md-h3,
+.cm-md-h4,
+.cm-md-h5,
+.cm-md-h6 { font-family: var(--md-heading-font); color: var(--md-heading-color); }
+.cm-md-h1 { font-size: 1.92em; font-weight: 720; letter-spacing: -0.025em; }
+.cm-md-h2 { font-size: 1.52em; font-weight: 700; letter-spacing: -0.015em; }
+.cm-md-h3 { font-size: 1.27em; font-weight: 650; }
 .cm-md-h4 { font-size: 1.12em; font-weight: 600; }
 .cm-md-h5 { font-size: 1.02em; font-weight: 600; }
 .cm-md-h6 { font-size: 0.95em; font-weight: 600; color: var(--fg-muted); }
+.cm-md-heading-mark,
+.cm-md-heading-mark * {
+  color: color-mix(in srgb, var(--fg-faint) 68%, transparent) !important;
+  font-weight: 400 !important;
+  letter-spacing: 0;
+}
 
 /* 标题上方留白（Typora 里标题与前文之间有明显间距）。
    只能用 padding —— .cm-line 的高度同样是用 rect 量的，margin 不计入。 */
@@ -1119,14 +1215,33 @@ body.sidebar-resizing * {
 .cm-line.md-heading-4,
 .cm-line.md-heading-5,
 .cm-line.md-heading-6 { padding-top: 0.65em; }
+
+/* 空白源码行在预览里只保留紧凑的块间距；光标进入时恢复为正常编辑行。 */
+.editor-host--preview .cm-line.md-blank-line {
+  min-height: 0;
+  height: 0.48em;
+  line-height: 0.48em;
+  overflow: hidden;
+}
+.editor-host--preview .cm-line.md-blank-line-extra {
+  height: 0;
+  line-height: 0;
+}
+.editor-host--preview .cm-line.md-blank-line.cm-activeLine {
+  min-height: 1em;
+  height: auto;
+  line-height: inherit;
+  overflow: visible;
+}
 .cm-md-code {
-  background: var(--code-bg);
-  padding: 1px 5px;
-  border-radius: 3px;
+  background: var(--md-panel-bg);
+  padding: 0.14em 0.42em;
+  border: 1px solid var(--md-panel-border);
+  border-radius: 5px;
   font-family: var(--font-mono);
   font-size: 0.88em;
 }
-.cm-md-link { color: var(--accent); text-decoration: none; cursor: text; }
+.cm-md-link { color: var(--md-accent); text-decoration: none; cursor: text; }
 .cm-md-link:hover { text-decoration: underline; }
 /* 按住 Ctrl/Cmd 时才提示可点击（普通点击是定位光标） */
 .cm-mod-held .cm-md-link { cursor: pointer; }
@@ -1134,7 +1249,7 @@ body.sidebar-resizing * {
 .cm-md-footnote {
   vertical-align: super;
   font-size: 0.75em;
-  color: var(--accent);
+  color: var(--md-accent);
   padding: 0 1px;
 }
 .cm-md-footnote-def { color: var(--fg-muted); font-size: 0.9em; }
@@ -1177,16 +1292,18 @@ body.sidebar-resizing * {
 .cm-line.md-blockquote {
   color: var(--fg-muted);
   padding-left: calc(var(--editor-padding-x) + var(--editor-quote-bar) + var(--editor-block-indent));
+  background: none;
 }
 .cm-line.md-blockquote::before {
   content: "";
   position: absolute;
   left: var(--editor-padding-x);
-  top: 0.2em;
-  bottom: 0.2em;
+  /* 每个源码行都会生成一条行装饰；贴齐行盒上下边缘后，相邻行会连成整条竖线。 */
+  top: 0;
+  bottom: 0;
   width: var(--editor-quote-bar);
-  background: var(--border-strong);
-  border-radius: 2px;
+  background: var(--md-quote-border);
+  border-radius: 0;
   pointer-events: none;
 }
 
@@ -1242,8 +1359,8 @@ body.sidebar-resizing * {
   text-decoration-color: var(--border-strong);
 }
 .cm-line.md-task-done::before {
-  border-color: var(--accent);
-  background: var(--accent);
+  border-color: var(--md-accent);
+  background: var(--md-accent);
 }
 .cm-line.md-task-done::after {
   content: "";
@@ -1269,7 +1386,9 @@ body.sidebar-resizing * {
 .md-mermaid-widget,
 .md-frontmatter-widget,
 .md-hr-widget,
-.md-math-block {
+.md-math-block,
+.md-metadata-widget,
+.md-html-widget {
   box-sizing: border-box;
   max-width: calc(100% - 2 * var(--editor-padding-x));
   margin: 0 var(--editor-padding-x);
@@ -1284,7 +1403,9 @@ body.sidebar-resizing * {
 }
 .md-image-widget img {
   max-width: 100%;
-  border-radius: 4px;
+  border: 1px solid var(--md-panel-border);
+  border-radius: var(--md-component-radius);
+  box-shadow: none;
   vertical-align: middle;
 }
 .md-image-path-hint {
@@ -1316,57 +1437,120 @@ body.sidebar-resizing * {
    外层只负责纵向留白（padding，不能用 margin），内盒承载边框与底色 */
 .md-codeblock-widget {
   position: relative;
+  width: calc(100% - 2 * var(--editor-padding-x));
+  min-width: 0;
   padding: 8px 0;
   cursor: text;
 }
 .md-codeblock-box {
   position: relative;
   display: flex;
-  border-radius: 6px;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--md-panel-border);
+  border-radius: var(--md-component-radius);
   overflow: hidden;
-  background: var(--code-bg);
+  background: var(--md-code-bg);
+  box-shadow: var(--md-component-shadow);
 }
 .md-codeblock-gutter {
   flex: none;
-  padding: 12px 10px 12px 14px;
+  padding: 40px 10px 12px 14px;
   text-align: right;
   white-space: pre;
   user-select: none;
-  color: var(--fg-faint);
+  color: var(--md-code-comment);
   font-family: var(--font-mono);
   font-size: 0.85em;
   line-height: 1.55;
-  border-right: 1px solid var(--border);
+  border-right: 1px solid var(--md-panel-border);
 }
 .md-codeblock-widget pre {
-  flex: 1;
+  flex: 1 1 0;
+  width: 0;
+  max-width: 100%;
   min-width: 0;
   margin: 0;
   padding: 0;
   overflow-x: auto;
+  overflow-y: hidden;
 }
 .md-codeblock-widget code {
   display: block;
-  padding: 12px 16px;
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 100%;
+  padding: 40px 16px 12px;
   min-height: 1.6em;
   outline: none;
   white-space: pre;
   font-family: var(--font-mono);
   font-size: 0.85em;
   line-height: 1.55;
+  color: var(--md-code-fg);
+}
+
+/* 实时预览由各组件自行管理横向滚动，页面本身不产生第二条横向滚动条。 */
+.editor-host--preview .cm-scroller {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* GitHub Markdown：代码块本身是无边框的 pre，不常驻行号栏。 */
+html[data-md-theme="github"] .md-codeblock-box {
+  border: 0;
+  border-radius: 6px;
+}
+html[data-md-theme="github"] .md-codeblock-gutter {
+  display: block;
+  padding: 42px 0 16px 16px;
+  border-right: 0;
+}
+html[data-md-theme="github"] .md-codeblock-widget code {
+  padding: 42px 16px 16px 12px;
+  font-size: 0.85em;
+  line-height: 1.45;
+}
+html[data-md-theme="github"] .cm-md-code {
+  padding: 0.2em 0.4em;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(175, 184, 193, 0.2);
+}
+html[data-theme="dark"][data-md-theme="github"] .cm-md-code {
+  background: rgba(110, 118, 129, 0.4);
+}
+
+/* Vue 文档风格同样保持干净的无行号代码面板，用深色代码区与 GitHub 区分。 */
+html[data-md-theme="vue"] .md-codeblock-box {
+  border: 0;
+  border-radius: 8px;
+}
+html[data-md-theme="vue"] .md-codeblock-gutter {
+  display: block;
+  padding: 44px 0 18px 18px;
+  border-right: 0;
+}
+html[data-md-theme="vue"] .md-codeblock-widget code {
+  padding: 44px 20px 18px 12px;
+  line-height: 1.6;
 }
 .md-codeblock-lang {
-  padding: 1px 4px;
-  border: none;
-  border-radius: 3px;
-  background: transparent;
+  max-width: 132px;
+  height: 22px;
+  padding: 0 22px 0 8px;
+  border: 0;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--md-panel-bg) 72%, transparent);
   color: var(--fg-muted);
   font-family: var(--font-ui);
   font-size: 11px;
   outline: none;
   cursor: pointer;
+  appearance: none;
 }
-.md-codeblock-lang:hover { background: var(--bg-hover); color: var(--fg); }
+.md-codeblock-lang:hover { color: var(--fg); background: var(--md-panel-bg); }
+.md-codeblock-lang:focus { outline: none; box-shadow: none; }
 
 /* highlight.js 主题（跟随应用色板） */
 .hljs { color: var(--fg); background: transparent; }
@@ -1378,6 +1562,15 @@ body.sidebar-resizing * {
 .hljs-function, .hljs-built_in { color: var(--syntax-function); }
 .hljs-meta { color: var(--syntax-meta); }
 .hljs-operator { color: var(--syntax-operator); }
+.md-codeblock-widget .hljs { color: var(--md-code-fg); }
+.md-codeblock-widget .hljs-comment,
+.md-codeblock-widget .hljs-quote { color: var(--md-code-comment); }
+.md-codeblock-widget .hljs-keyword,
+.md-codeblock-widget .hljs-selector-tag { color: var(--md-code-keyword); }
+.md-codeblock-widget .hljs-string,
+.md-codeblock-widget .hljs-addition { color: var(--md-code-string); }
+.md-codeblock-widget .hljs-number,
+.md-codeblock-widget .hljs-literal { color: var(--md-code-number); }
 
 /* 分割线 Widget：线本身用 ::before 画，根元素只留白 */
 .md-hr-widget {
@@ -1390,7 +1583,7 @@ body.sidebar-resizing * {
   content: "";
   display: block;
   height: 1px;
-  background: var(--border-strong);
+  background: linear-gradient(90deg, transparent, var(--border-strong) 12%, var(--border-strong) 88%, transparent);
 }
 
 /* ============================================================
@@ -1812,20 +2005,27 @@ html.platform-mac .modal { border-radius: 10px; }
 /* ---------- 表格 Widget ---------- */
 .md-table-widget {
   position: relative;
-  padding: 12px 0;
+  padding: 6px 0;
 }
 .md-table-body {
   overflow-x: auto;
+  border: 1px solid var(--md-panel-border);
+  border-radius: var(--md-component-radius);
+  background: color-mix(in srgb, var(--bg-editor) 96%, var(--code-bg));
+  box-shadow: var(--md-component-shadow);
 }
 .md-table-widget table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 0.95em;
 }
 .md-table-widget th,
 .md-table-widget td {
-  border: 1px solid var(--border-strong);
-  padding: 6px 12px;
+  border: none;
+  border-right: 1px solid var(--md-panel-border);
+  border-bottom: 1px solid var(--md-panel-border);
+  padding: 8px 13px;
   outline: none;
   min-width: 3em;
   min-height: 1.5em;
@@ -1833,18 +2033,38 @@ html.platform-mac .modal { border-radius: 10px; }
   user-select: text;
   cursor: text;
 }
-.md-table-widget th { background: var(--code-bg); font-weight: 600; }
+.md-table-widget th:last-child,
+.md-table-widget td:last-child { border-right: none; }
+.md-table-widget tr:last-child td { border-bottom: none; }
+.md-table-widget th {
+  background: var(--md-panel-bg);
+  font-weight: 650;
+}
+html[data-md-theme="github"] .md-table-body {
+  border-radius: 0;
+  background: var(--bg-editor);
+}
+html[data-md-theme="github"] .md-table-widget th {
+  background: var(--bg-editor);
+  font-weight: 600;
+}
+html[data-md-theme="github"] .md-table-widget tbody tr:nth-child(2n) td {
+  background: #f6f8fa;
+}
+html[data-theme="dark"][data-md-theme="github"] .md-table-widget tbody tr:nth-child(2n) td {
+  background: #161b22;
+}
 
 /* 框选：Markdown 只支持按列对齐，框选多列后点对齐会作用到这几列 */
 .md-table-widget th.md-table-cell-selected,
 .md-table-widget td.md-table-cell-selected {
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  background: color-mix(in srgb, var(--md-accent) 14%, transparent);
 }
 
 /* 单元格内的行内 Markdown 渲染（聚焦时会切回源码文本） */
 .md-table-widget td code,
 .md-table-widget th code {
-  background: var(--code-bg);
+  background: var(--md-panel-bg);
   padding: 1px 4px;
   border-radius: 3px;
   font-family: var(--font-mono);
@@ -1859,14 +2079,15 @@ html.platform-mac .modal { border-radius: 10px; }
   border-radius: 2px;
   padding: 0 2px;
 }
-.md-table-link { color: var(--accent); text-decoration: none; }
+.md-table-link { color: var(--md-accent); text-decoration: none; }
 
-/* 工具栏占位槽：始终保留高度，避免聚焦时布局跳动 */
+/* 工具栏浮在表格上沿，不参与块高，也不会让隐藏状态留下 30px 空白。 */
 .md-table-toolbar-slot {
-  min-height: 30px;
-  margin-bottom: 2px;
-  position: sticky;
-  top: 0;
+  position: absolute;
+  left: 0;
+  top: 6px;
+  height: 26px;
+  transform: translateY(-100%);
   z-index: 5;
   pointer-events: none;
 }
@@ -1875,7 +2096,7 @@ html.platform-mac .modal { border-radius: 10px; }
   display: flex;
   align-items: center;
   gap: 4px;
-  height: 30px;
+  height: 26px;
   padding: 0;
   width: fit-content;
   background: transparent;
@@ -1968,9 +2189,11 @@ html.platform-mac .modal { border-radius: 10px; }
 /* ---------- 数学公式 ---------- */
 .md-math-inline { padding: 0 2px; cursor: text; }
 .md-math-block {
-  padding: 16px 0;
+  padding: 18px 14px;
   overflow-x: auto;
   cursor: text;
+  border-radius: var(--md-component-radius);
+  background: color-mix(in srgb, var(--md-panel-bg) 65%, transparent);
 }
 .md-math-render { text-align: center; padding: 4px 0; }
 .md-math-empty { color: var(--fg-faint); font-size: 0.85em; }
@@ -1985,22 +2208,60 @@ html.platform-mac .modal { border-radius: 10px; }
   line-height: 1.55;
   padding: 8px 10px;
   margin-bottom: 8px;
-  border-radius: 4px;
-  background: var(--code-bg);
+  border: 1px solid var(--md-panel-border);
+  border-radius: calc(var(--md-component-radius) - 2px);
+  background: var(--md-panel-bg);
   color: var(--fg-muted);
   outline: none;
   tab-size: 2;
   text-align: left;
+}
+.md-block-source:focus {
+  border-color: var(--md-panel-border);
+  box-shadow: none;
 }
 .md-block--editing .md-block-source {
   display: block;
   color: var(--fg);
 }
 
-/* 图片 / 分割线选中：用淡底色而不是描边，避免出现「点击边框」 */
+/* 链接定义 / 脚注 / HTML：默认显示渲染结果，点击后切到同位置源码编辑 */
+.md-metadata-widget,
+.md-html-widget {
+  padding: 6px 0;
+  cursor: text;
+}
+.md-metadata-preview {
+  padding: 8px 11px;
+  border: 1px solid var(--md-panel-border);
+  border-left: 3px solid var(--md-accent);
+  border-radius: 0 calc(var(--md-component-radius) - 2px) calc(var(--md-component-radius) - 2px) 0;
+  background: var(--md-quote-bg);
+  color: var(--fg-muted);
+  font-size: 0.88em;
+}
+.md-metadata-footnote .md-metadata-preview {
+  font-size: 0.82em;
+}
+.md-html-preview {
+  min-height: 1.55em;
+  overflow-x: auto;
+  padding: 10px 12px;
+  border: 1px dashed var(--md-panel-border);
+  border-radius: var(--md-component-radius);
+  background: color-mix(in srgb, var(--md-panel-bg) 55%, transparent);
+}
+.md-block--editing > .md-metadata-preview,
+.md-block--editing > .md-html-preview {
+  display: none;
+}
+.md-entity { cursor: text; }
+
+/* 图片 / 分割线选中仅保留键盘状态，不改变视觉，点击时不闪边框或底色。 */
 .md-block--selected {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  border-radius: 4px;
+  background: transparent;
+  border-radius: var(--md-component-radius);
+  box-shadow: none;
 }
 .md-image-widget:focus,
 .md-hr-widget:focus,
@@ -2008,7 +2269,9 @@ html.platform-mac .modal { border-radius: 10px; }
 .md-table-widget:focus-within,
 .md-math-block:focus-within,
 .md-mermaid-widget:focus-within,
-.md-frontmatter-widget:focus-within { outline: none; }
+.md-frontmatter-widget:focus-within,
+.md-metadata-widget:focus-within,
+.md-html-widget:focus-within { outline: none; }
 .md-codeblock-widget code:focus,
 .md-block-source:focus,
 .md-table-widget th:focus,
@@ -2020,9 +2283,11 @@ html.platform-mac .modal { border-radius: 10px; }
   cursor: text;
 }
 .md-mermaid-box {
-  padding: 16px;
-  border-radius: 6px;
-  background: var(--code-bg);
+  padding: 20px;
+  border: 1px solid var(--md-panel-border);
+  border-radius: var(--md-component-radius);
+  background: var(--md-panel-bg);
+  box-shadow: var(--md-component-shadow);
   overflow-x: auto;
 }
 
@@ -2035,9 +2300,11 @@ html.platform-mac .modal { border-radius: 10px; }
   cursor: text;
 }
 .md-frontmatter-box {
-  padding: 8px 10px 2px;
-  border-radius: 6px;
-  background: var(--code-bg);
+  padding: 10px 12px 4px;
+  border: 1px solid var(--md-panel-border);
+  border-radius: var(--md-component-radius);
+  background: var(--md-panel-bg);
+  box-shadow: var(--md-component-shadow);
 }
 .md-frontmatter-label {
   font-size: 11px;
@@ -2420,18 +2687,29 @@ html[data-theme="dark"] .toast-success {
 html[data-theme="dark"] .toast-error {
   background: #9f2d1e;
 }
+.shortcuts-modal {
+  width: min(880px, 94vw);
+  max-height: 86vh;
+  overflow: hidden;
+}
 .shortcuts-body {
-  max-height: 60vh;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 36px;
+  max-height: 72vh;
   overflow-y: auto;
+  padding: 16px 20px 20px;
 }
 .shortcuts-group {
-  margin-bottom: 1rem;
+  min-width: 0;
 }
 .shortcuts-group-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--fg-muted);
-  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--fg);
+  margin: 0 0 8px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--border);
 }
 .shortcuts-list {
   list-style: none;
@@ -2442,16 +2720,22 @@ html[data-theme="dark"] .toast-error {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 4px 0;
+  gap: 16px;
+  min-height: 29px;
+  padding: 3px 0;
   font-size: 13px;
 }
 .shortcuts-kbd {
   font-family: var(--font-mono);
   font-size: 11px;
-  padding: 2px 6px;
+  flex-shrink: 0;
+  padding: 3px 7px;
   border: 1px solid var(--border);
   border-radius: 3px;
   background: var(--bg-sidebar);
+}
+@media (max-width: 640px) {
+  .shortcuts-body { grid-template-columns: 1fr; }
 }
 .modal-text-pre {
   white-space: pre-line;
@@ -2472,7 +2756,11 @@ html[data-theme="dark"] .toast-error {
   gap: 10px;
   width: 100%;
 }
+.settings-item-control .theme-picker {
+  width: min(440px, 48vw);
+}
 .theme-picker-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -2480,7 +2768,7 @@ html[data-theme="dark"] .toast-error {
   border: 2px solid var(--border);
   border-radius: 8px;
   background: var(--bg);
-  cursor: default;
+  cursor: pointer;
   text-align: center;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
@@ -2490,6 +2778,23 @@ html[data-theme="dark"] .toast-error {
 .theme-picker-card.selected {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
+}
+.theme-picker-card.selected::after {
+  content: "✓";
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 0 1px 4px color-mix(in srgb, #000 20%, transparent);
+  z-index: 2;
 }
 .theme-picker-label {
   font-size: 12px;
@@ -2542,6 +2847,112 @@ html[data-theme="dark"] .toast-error {
   color: var(--syntax-keyword);
   font-family: var(--font-mono);
   align-self: flex-start;
+}
+
+/* Markdown 主题卡：每张卡并排展示同一主题的浅色 / 深色版本。 */
+.md-theme-preview {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  height: 82px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+.md-theme-preview-pane {
+  --preview-bg: #fff;
+  --preview-fg: #222;
+  --preview-muted: #8a8a8a;
+  --preview-accent: #3268c8;
+  --preview-code: #f3f5f8;
+  min-width: 0;
+  padding: 9px 7px;
+  background: var(--preview-bg);
+  color: var(--preview-fg);
+  text-align: left;
+}
+.md-theme-preview-pane + .md-theme-preview-pane {
+  border-left: 1px solid color-mix(in srgb, var(--preview-muted) 32%, transparent);
+}
+.md-theme-preview-title {
+  margin-bottom: 6px;
+  color: var(--preview-fg);
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1;
+}
+.md-theme-preview-line {
+  width: 64%;
+  height: 3px;
+  margin-bottom: 4px;
+  border-radius: 3px;
+  background: var(--preview-muted);
+  opacity: 0.55;
+}
+.md-theme-preview-line-long { width: 88%; }
+.md-theme-preview-quote {
+  width: 82%;
+  height: 11px;
+  margin: 5px 0 4px;
+  border-left: 2px solid var(--preview-accent);
+  background: color-mix(in srgb, var(--preview-accent) 7%, transparent);
+}
+.md-theme-preview-table {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: 88%;
+  height: 10px;
+  margin-bottom: 4px;
+  border: 1px solid color-mix(in srgb, var(--preview-muted) 24%, transparent);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.md-theme-preview-table i {
+  border-right: 1px solid color-mix(in srgb, var(--preview-muted) 18%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--preview-muted) 18%, transparent);
+  background: color-mix(in srgb, var(--preview-code) 72%, var(--preview-bg));
+}
+.md-theme-preview-code {
+  width: 92%;
+  padding: 3px 4px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--preview-muted) 20%, transparent);
+  border-radius: 3px;
+  background: var(--preview-code);
+  color: var(--preview-accent);
+  font-family: ui-monospace, monospace;
+  font-size: 5.5px;
+  white-space: nowrap;
+}
+.md-theme-preview-pane[data-md-preview="minimal"] .md-theme-preview-code {
+  border-radius: 1px;
+}
+.md-theme-preview-pane[data-md-preview="github"][data-preview-mode="light"] {
+  --preview-bg: #fff; --preview-fg: #1a1a1a; --preview-muted: #737373;
+  --preview-accent: #0969da; --preview-code: #f6f8fa;
+}
+.md-theme-preview-pane[data-md-preview="github"][data-preview-mode="dark"] {
+  --preview-bg: #1e1e1e; --preview-fg: #e4e4e4; --preview-muted: #a8a8a8;
+  --preview-accent: #58a6ff; --preview-code: #161b22;
+}
+.md-theme-preview-pane[data-md-preview="vue"][data-preview-mode="light"] {
+  --preview-bg: #fff; --preview-fg: #1a1a1a; --preview-muted: #737373;
+  --preview-accent: #42b883; --preview-code: #282c34;
+}
+.md-theme-preview-pane[data-md-preview="vue"][data-preview-mode="dark"] {
+  --preview-bg: #1e1e1e; --preview-fg: #e4e4e4; --preview-muted: #a8a8a8;
+  --preview-accent: #42d392; --preview-code: #16181d;
+}
+.md-theme-preview-pane[data-md-preview="minimal"][data-preview-mode="light"] {
+  --preview-bg: #fff; --preview-fg: #1a1a1a; --preview-muted: #737373;
+  --preview-accent: #647a76; --preview-code: #f5f7f7;
+}
+.md-theme-preview-pane[data-md-preview="minimal"][data-preview-mode="dark"] {
+  --preview-bg: #1e1e1e; --preview-fg: #e4e4e4; --preview-muted: #a8a8a8;
+  --preview-accent: #9aacaa; --preview-code: #242727;
+}
+
+@media (max-width: 760px) {
+  .settings-item-control .theme-picker { width: 100%; max-width: none; }
 }
 
 /* Global search dialog */
@@ -2680,8 +3091,7 @@ html[data-theme="dark"] .toast-error {
   color: var(--fg);
   font-size: 12px;
 }
-/* 语言标签与复制按钮浮在右上角，悬停或编辑时才出现（Typora 风格：
-   静止状态下代码块是干净的一块，没有常驻工具条） */
+/* 右上角只保留复制操作，悬停或编辑时出现。 */
 .md-codeblock-header {
   position: absolute;
   top: 4px;
@@ -2689,10 +3099,9 @@ html[data-theme="dark"] .toast-error {
   z-index: 1;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 2px 4px;
-  border-radius: var(--radius-sm);
-  background: var(--code-bg);
+  padding: 0;
+  border-radius: 6px;
+  background: transparent;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.12s ease;
@@ -2703,15 +3112,64 @@ html[data-theme="dark"] .toast-error {
   pointer-events: auto;
 }
 .md-codeblock-copy {
-  padding: 2px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 9px;
   font-size: 11px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
+  font-family: var(--font-ui);
+  border: 0;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--md-code-bg) 88%, var(--bg-editor));
   color: var(--fg-muted);
-  cursor: default;
+  box-shadow: none;
+  cursor: pointer;
 }
-.md-codeblock-copy:hover { background: var(--bg-hover); color: var(--fg); }
+.md-codeblock-copy::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  box-shadow: -3px -3px 0 -2px var(--md-code-bg), -3px -3px 0 -1px currentColor;
+}
+.md-codeblock-copy:hover {
+  background: color-mix(in srgb, var(--md-panel-bg) 82%, var(--bg-editor));
+  color: var(--fg);
+}
+.md-codeblock-copy:focus { outline: none; box-shadow: none; }
+
+/* 语言选择位于代码框内部左上角，与右上角复制按钮组成轻量工具行。 */
+.md-codeblock-language-control {
+  position: absolute;
+  top: 8px;
+  left: 10px;
+  z-index: 2;
+  line-height: 1;
+}
+.md-codeblock-language-control::after {
+  content: "";
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 5px;
+  height: 5px;
+  border-right: 1px solid var(--fg-muted);
+  border-bottom: 1px solid var(--fg-muted);
+  transform: rotate(45deg);
+  pointer-events: none;
+}
+html[data-md-theme="github"] .md-codeblock-header {
+  top: 8px;
+  right: 10px;
+  padding: 0;
+  border: 0;
+}
+html[data-md-theme="github"] .md-codeblock-copy {
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--md-panel-bg) 72%, transparent);
+}
 .md-codeblock-copy-only {
   position: absolute;
   top: 6px;

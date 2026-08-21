@@ -17,7 +17,7 @@ function resolvePreviewTheme(pref: ThemePref): "light" | "dark" {
   return pref;
 }
 
-function ThemePreviewMock({ theme }: { theme: "light" | "dark" }) {
+function ThemePreviewMock({ theme, locale }: { theme: "light" | "dark"; locale: Locale }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = ref.current;
@@ -37,8 +37,8 @@ function ThemePreviewMock({ theme }: { theme: "light" | "dark" }) {
       <div className="theme-preview-main">
         <div className="theme-preview-bar" />
         <div className="theme-preview-editor">
-          <div className="theme-preview-h">Heading</div>
-          <div className="theme-preview-p">Body text sample</div>
+          <div className="theme-preview-h">{t(locale, "themePreview.heading")}</div>
+          <div className="theme-preview-p">{t(locale, "themePreview.body")}</div>
           <div className="theme-preview-code">code</div>
         </div>
       </div>
@@ -67,7 +67,7 @@ export default function ThemePicker({ locale, value, onChange }: Props) {
           onClick={() => onChange(opt)}
           aria-pressed={value === opt}
         >
-          <ThemePreviewMock theme={resolvePreviewTheme(opt)} />
+          <ThemePreviewMock theme={resolvePreviewTheme(opt)} locale={locale} />
           <span className="theme-picker-label">{tr(LABEL_KEYS[opt])}</span>
         </button>
       ))}

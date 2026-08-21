@@ -1,15 +1,17 @@
 export type ThemePref = "light" | "dark" | "system";
 export type ResolvedTheme = "light" | "dark";
 
+import { getStoredValue, setStoredValue } from "./settingsStore";
+
 const KEY = "mdnote.theme";
 
 export function getThemePref(): ThemePref {
-  const v = localStorage.getItem(KEY);
+  const v = getStoredValue(KEY);
   return v === "light" || v === "dark" || v === "system" ? v : "system";
 }
 
 export function setThemePref(p: ThemePref) {
-  localStorage.setItem(KEY, p);
+  setStoredValue(KEY, p);
   apply();
 }
 

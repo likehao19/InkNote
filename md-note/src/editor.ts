@@ -16,7 +16,12 @@ import {
   type Extension,
   type Range,
 } from "@codemirror/state";
-import { HighlightStyle, syntaxHighlighting, syntaxTree } from "@codemirror/language";
+import {
+  HighlightStyle,
+  ensureSyntaxTree,
+  syntaxHighlighting,
+  syntaxTree,
+} from "@codemirror/language";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { search, searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { markdown, markdownKeymap, markdownLanguage } from "@codemirror/lang-markdown";
@@ -36,6 +41,11 @@ import {
 import { ImageWidget, parseImage } from "./editor/widgets/image";
 import { MermaidWidget } from "./editor/widgets/mermaid";
 import { FrontMatterWidget } from "./editor/widgets/frontmatter";
+import {
+  EditableMetadataWidget,
+  HtmlBlockWidget,
+  InlinePreviewWidget,
+} from "./editor/widgets/preview";
 import { tableTab, tableShiftTab } from "./editor/commands/table";
 import { enterAdjacentBlock, focusBlockStartingAt } from "./editor/widgets/editableSource";
 import { bracketExtensions } from "./editor/commands/brackets";
@@ -51,8 +61,20 @@ import {
   editorShowMessage,
 } from "./lib/editorBridge";
 import { getLocale, t as tr } from "./lib/i18n";
+import { currentBlockRange } from "./editor/widgets/blockRange";
 
 export type EditorMode = "preview" | "source";
+
+/** 同一个 CodeMirror 文档版本只物化一次字符串，供预览构建和 onChange 复用。 */
+const docTextCache = new WeakMap<object, string>();
+
+function documentText(doc: EditorState["doc"]): string {
+  const cached = docTextCache.get(doc);
+  if (cached !== undefined) return cached;
+  const text = doc.toString();
+  docTextCache.set(doc, text);
+  return text;
+}
 
 const markdownHighlight = HighlightStyle.define([
   { tag: t.heading1, class: "cm-md-h1" },
@@ -94,11 +116,11 @@ function headingLevel(name: string): number {
 const HIDE_MARK = Decoration.replace({});
 
 /**
- * 自带编辑能力的块级 Widget：只有光标严格落在内部才算「进入源码」。
- * 边界位置（块的首尾）不触发，否则紧贴块前后放光标就会把整块翻成源码。
+ * 块级 Widget 都有自己的原位编辑器，CodeMirror 光标即使恢复到其源码范围内，
+ * 也不能撤掉组件并露出整块 Markdown（表格会因此退回一排 `|` 源码）。
  */
-function blockReveal(from: number, to: number) {
-  return { revealFrom: from + 1, revealTo: to - 1 };
+function blockReveal(_from: number, _to: number) {
+  return { revealFrom: 1, revealTo: 0 };
 }
 
 /**
@@ -115,7 +137,7 @@ const TASK_LINE_RE = /^(\s*(?:[-*+]|\d+[.)])\s+)\[([ xX])\](\s|$)/;
 
 /** 行内包裹语法：Lezer 不认或不给配对信息，但导出链路支持，预览必须跟上 */
 function tagWrap(tag: string, cls: string) {
-  return { re: new RegExp(`<${tag}>([^\\n]*?)</${tag}>`, "gi"), cls };
+  return { re: new RegExp(`<${tag}(?:\\s+[^>\\n]*)?>([^\\n]*?)</${tag}>`, "gi"), cls };
 }
 
 const INLINE_WRAPS: Array<{ re: RegExp; cls: string }> = [
@@ -163,6 +185,50 @@ function isInCode(tree: ReturnType<typeof syntaxTree>, from: number, to: number)
   return inside;
 }
 
+interface LinkDefinition {
+  url: string;
+  title: string;
+}
+
+function normalizeLinkLabel(label: string): string {
+  return label.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function linkTitleText(raw: string): string {
+  if (raw.length >= 2 && /["'(]/.test(raw[0])) return raw.slice(1, -1);
+  return raw;
+}
+
+function collectLinkDefinitions(
+  tree: ReturnType<typeof syntaxTree>,
+  doc: EditorState["doc"],
+): Map<string, LinkDefinition> {
+  const definitions = new Map<string, LinkDefinition>();
+  tree.iterate({
+    enter(node) {
+      if (node.name !== "LinkReference") return;
+      const label = node.node.getChild("LinkLabel");
+      const url = node.node.getChild("URL");
+      if (!label || !url) return false;
+      const rawLabel = doc.sliceString(label.from + 1, label.to - 1);
+      if (rawLabel.startsWith("^")) return false;
+      const title = node.node.getChild("LinkTitle");
+      definitions.set(normalizeLinkLabel(rawLabel), {
+        url: doc.sliceString(url.from, url.to).replace(/^<|>$/g, ""),
+        title: title ? linkTitleText(doc.sliceString(title.from, title.to)) : "",
+      });
+      return false;
+    },
+  });
+  return definitions;
+}
+
+function decodeEntity(raw: string): string {
+  const textarea = document.createElement("textarea");
+  textarea.innerHTML = raw;
+  return textarea.value;
+}
+
 interface PreviewSets {
   /** 行装饰：引用/列表/任务，不随光标隐藏 */
   lines: DecorationSet;
@@ -189,8 +255,11 @@ function buildPreviewSets(
   const decos: Range<Decoration>[] = [];
   const atomicBlocks: TableRange[] = [];
   const doc = state.doc;
-  const tree = syntaxTree(state);
-  const text = doc.toString();
+  // 长文档初始化时 Lezer 可能只同步解析前半段。若直接拿这棵临时树构建
+  // 装饰，靠后的表格、围栏代码和 Mermaid 就会永久停留为源码。
+  const tree = ensureSyntaxTree(state, doc.length, 100) ?? syntaxTree(state);
+  const text = documentText(doc);
+  const linkDefinitions = collectLinkDefinitions(tree, doc);
 
   const fm = parseFrontMatter(text);
   const fmEnd = fm ? fm.to : 0;
@@ -259,6 +328,10 @@ function buildPreviewSets(
         // 标题上方留白：Typora 里标题与前文之间有明显间距
         addLineClass(doc.lineAt(from).from, `md-heading md-heading-${headingLevel(n)}`);
         for (const c of node.node.getChildren("HeaderMark")) {
+          decos.push(
+            Decoration.mark({ class: "cm-md-heading-mark", ...blockReveal(c.from, c.to) })
+              .range(c.from, c.to),
+          );
           // ATX：`## ` 在行首；Setext：`===` 单独占下一行，连同换行一起吃掉
           if (c.from > from) {
             hide(c.from - 1, c.to, { from, to });
@@ -297,6 +370,37 @@ function buildPreviewSets(
 
       if (n === "InlineCode") {
         hideChildren(node, "CodeMark");
+        return;
+      }
+
+      if (n === "Subscript" || n === "Superscript") {
+        const markName = n === "Subscript" ? "SubscriptMark" : "SuperscriptMark";
+        const marks = node.node.getChildren(markName);
+        if (marks.length >= 2) {
+          const reveal = { from, to };
+          hide(marks[0].from, marks[0].to, reveal);
+          decos.push(
+            Decoration.mark({ class: n === "Subscript" ? "md-sub" : "md-sup" })
+              .range(marks[0].to, marks[marks.length - 1].from),
+          );
+          hide(marks[marks.length - 1].from, marks[marks.length - 1].to, reveal);
+        }
+        return;
+      }
+
+      if (n === "Entity") {
+        decos.push(
+          Decoration.replace({
+            widget: new InlinePreviewWidget(from, to, decodeEntity(doc.sliceString(from, to)), "md-entity"),
+            revealFrom: from,
+            revealTo: to,
+          }).range(from, to),
+        );
+        return;
+      }
+
+      if (n === "HardBreak") {
+        hide(from, Math.max(from, to - 1), { from, to });
         return;
       }
 
@@ -366,6 +470,7 @@ function buildPreviewSets(
       }
 
       if (n === "Link") {
+        if (doc.sliceString(from, Math.min(to, from + 2)) === "[^") return false;
         hideChildren(node, "LinkMark");
         hideChildren(node, "URL");
         hideChildren(node, "LinkTitle");
@@ -376,14 +481,14 @@ function buildPreviewSets(
       }
 
       if (n === "Image") {
-        const { alt, url } = parseImage(node, doc);
+        const { alt, url, title } = parseImage(node, doc, linkDefinitions);
         const resolved = resolveAssetPath(filePath, url);
         // 行内图片必须用行内装饰，否则会把整行从中间截断
         const block = coversWholeLines(from, to);
         if (block) atomicBlocks.push({ from, to });
         decos.push(
           Decoration.replace({
-            widget: new ImageWidget(from, to, url, alt, resolved, !block),
+            widget: new ImageWidget(from, to, url, alt, resolved, !block, title),
             block,
             ...(block ? blockReveal(from, to) : null),
           }).range(from, to),
@@ -396,6 +501,68 @@ function buildPreviewSets(
         hideChildren(node, "LinkMark");
         decos.push(Decoration.mark({ class: "cm-md-link" }).range(from, to));
         return;
+      }
+
+      if (n === "URL" && node.node.parent?.name === "Paragraph") {
+        decos.push(Decoration.mark({ class: "cm-md-link" }).range(from, to));
+        return;
+      }
+
+      if (n === "LinkReference") {
+        const labelNode = node.node.getChild("LinkLabel");
+        const rawLabel = labelNode ? doc.sliceString(labelNode.from + 1, labelNode.to - 1) : "";
+        if (rawLabel.startsWith("^")) return false;
+        if (!coversWholeLines(from, to)) return false;
+        const definition = linkDefinitions.get(normalizeLinkLabel(rawLabel));
+        atomicBlocks.push({ from, to });
+        decos.push(
+          Decoration.replace({
+            widget: new EditableMetadataWidget(
+              from,
+              to,
+              doc.sliceString(from, to),
+              tr(getLocale(), "editor.linkDefinition", {
+                label: rawLabel,
+                url: definition?.url ?? "",
+              }),
+              "reference",
+            ),
+            block: true,
+            ...blockReveal(from, to),
+          }).range(from, to),
+        );
+        return false;
+      }
+
+      if (n === "HTMLBlock") {
+        if (!coversWholeLines(from, to)) return false;
+        atomicBlocks.push({ from, to });
+        decos.push(
+          Decoration.replace({
+            widget: new HtmlBlockWidget(from, to, doc.sliceString(from, to)),
+            block: true,
+            ...blockReveal(from, to),
+          }).range(from, to),
+        );
+        return false;
+      }
+
+      if (n === "CodeBlock") {
+        const blockFrom = doc.lineAt(from).from;
+        const blockTo = doc.lineAt(to).to;
+        if (!coversWholeLines(blockFrom, blockTo)) return false;
+        const code = node.node.getChildren("CodeText")
+          .map((child) => doc.sliceString(child.from, child.to))
+          .join("");
+        atomicBlocks.push({ from: blockFrom, to: blockTo });
+        decos.push(
+          Decoration.replace({
+            widget: new CodeBlockWidget(blockFrom, blockTo, code, "", true),
+            block: true,
+            ...blockReveal(blockFrom, blockTo),
+          }).range(blockFrom, blockTo),
+        );
+        return false;
       }
 
       if (n === "HorizontalRule") {
@@ -454,14 +621,16 @@ function buildPreviewSets(
 
   // 数学公式（$...$ / $$...$$）
   const inCode = (from: number, to: number) => isInCode(tree, from, to);
-  for (const math of scanMath(doc, inCode)) {
+  for (const math of scanMath(doc, inCode, text)) {
     if (fm && math.from < fmEnd) continue;
+    if (math.block) atomicBlocks.push({ from: math.from, to: math.to });
     decos.push(
       Decoration.replace({
         widget: math.block
           ? new BlockMathWidget(math.from, math.to, math.tex)
           : new InlineMathWidget(math.from, math.to, math.tex),
         block: math.block,
+        ...(math.block ? blockReveal(math.from, math.to) : null),
       }).range(math.from, math.to),
     );
   }
@@ -514,25 +683,82 @@ function buildPreviewSets(
     }
   }
 
-  // 脚注引用 [^label] → 上标；脚注定义 [^label]: 保持原样
+  // 脚注引用 → 编号上标；定义 → 可点击编辑的摘要块
   const fnRe = /\[\^([^\]\n]+)\]/g;
+  const footnoteNumbers = new Map<string, number>();
+  const footnoteMatches: RegExpExecArray[] = [];
   let fnm: RegExpExecArray | null;
   while ((fnm = fnRe.exec(text))) {
-    const from = fnm.index;
-    const to = from + fnm[0].length;
+    footnoteMatches.push(fnm);
+    const label = normalizeLinkLabel(fnm[1]);
+    const line = doc.lineAt(fnm.index);
+    const definition = /^\s{0,3}\[\^([^\]]+)\]:/.exec(line.text);
+    if (!definition && !footnoteNumbers.has(label)) footnoteNumbers.set(label, footnoteNumbers.size + 1);
+  }
+  for (const match of footnoteMatches) {
+    const label = normalizeLinkLabel(match[1]);
+    if (!footnoteNumbers.has(label)) footnoteNumbers.set(label, footnoteNumbers.size + 1);
+  }
+
+  const handledFootnoteLines = new Set<number>();
+  for (const match of footnoteMatches) {
+    const label = normalizeLinkLabel(match[1]);
+    const number = footnoteNumbers.get(label) ?? 1;
+    const from = match.index;
+    const to = from + match[0].length;
     if (fm && from < fmEnd) continue;
     if (inCode(from, to)) continue;
 
     const line = doc.lineAt(from);
-    const isDefinition = from === line.from && text.slice(to, to + 1) === ":";
-    if (isDefinition) {
-      decos.push(Decoration.mark({ class: "cm-md-footnote-def" }).range(from, to));
+    const definition = /^\s{0,3}\[\^([^\]]+)\]:\s*(.*)$/.exec(line.text);
+    if (definition && normalizeLinkLabel(definition[1]) === label) {
+      if (handledFootnoteLines.has(line.number)) continue;
+      handledFootnoteLines.add(line.number);
+      atomicBlocks.push({ from: line.from, to: line.to });
+      decos.push(
+        Decoration.replace({
+          widget: new EditableMetadataWidget(
+            line.from,
+            line.to,
+            line.text,
+            tr(getLocale(), "editor.footnote", {
+              number,
+              text: definition[2],
+            }),
+            "footnote",
+          ),
+          block: true,
+          ...blockReveal(line.from, line.to),
+        }).range(line.from, line.to),
+      );
       continue;
     }
-    const reveal = { from, to };
-    hide(from, from + 2, reveal);
-    decos.push(Decoration.mark({ class: "cm-md-footnote" }).range(from + 2, to - 1));
-    hide(to - 1, to, reveal);
+    decos.push(
+      Decoration.replace({
+        widget: new InlinePreviewWidget(from, to, String(number), "cm-md-footnote", "sup"),
+        revealFrom: from,
+        revealTo: to,
+      }).range(from, to),
+    );
+  }
+
+  // Markdown 的空白源码行只用于分隔块，不应该在所见即所得模式中继续占满
+  // 一整行高度；连续空行在渲染语义上也不会制造多份段间距。
+  const sortedBlocks = [...atomicBlocks].sort((a, b) => a.from - b.from);
+  let blockIndex = 0;
+  let previousBlank = false;
+  for (let number = 1; number <= doc.lines; number++) {
+    const line = doc.line(number);
+    while (blockIndex < sortedBlocks.length && sortedBlocks[blockIndex].to < line.from) {
+      blockIndex++;
+    }
+    const block = sortedBlocks[blockIndex];
+    const insideBlock = Boolean(block && line.from >= block.from && line.to <= block.to);
+    const blank = !insideBlock && line.text.trim().length === 0;
+    if (blank) {
+      addLineClass(line.from, previousBlank ? "md-blank-line md-blank-line-extra" : "md-blank-line");
+    }
+    previousBlank = blank;
   }
 
   return {
@@ -778,21 +1004,67 @@ function openBlockOnEnter(view: EditorView): boolean {
   return true;
 }
 
-function urlAtPos(doc: string, pos: number): string | null {
-  const lineStart = doc.lastIndexOf("\n", pos - 1) + 1;
-  const lineEnd = doc.indexOf("\n", pos);
-  const line = doc.slice(lineStart, lineEnd === -1 ? doc.length : lineEnd);
-  const offset = pos - lineStart;
-  const linkRe = /\[([^\]]*)\]\(([^)]+)\)/g;
-  let m: RegExpExecArray | null;
-  while ((m = linkRe.exec(line))) {
-    const start = m.index;
-    const end = start + m[0].length;
-    if (offset >= start && offset <= end) return m[2];
+/** 文档首尾没有相邻正文行时，在原子组件边界回车也要能创建空段落。 */
+function insertParagraphAtBlockBoundary(view: EditorView): boolean {
+  const sel = view.state.selection.main;
+  if (!sel.empty) return false;
+
+  const blocks = view.dom.querySelectorAll<HTMLElement>(
+    ".md-codeblock-widget, .md-table-widget",
+  );
+  for (const block of blocks) {
+    const range = currentBlockRange(view, block);
+    if (!range) continue;
+    if (sel.head === range.from) {
+      view.dispatch({
+        changes: { from: range.from, insert: "\n" },
+        selection: { anchor: range.from },
+        userEvent: "input",
+        scrollIntoView: true,
+      });
+      return true;
+    }
+    if (sel.head === range.to) {
+      view.dispatch({
+        changes: { from: range.to, insert: "\n" },
+        selection: { anchor: range.to + 1 },
+        userEvent: "input",
+        scrollIntoView: true,
+      });
+      return true;
+    }
   }
-  const urlRe = /https?:\/\/[^\s)<>"]+/g;
-  while ((m = urlRe.exec(line))) {
-    if (offset >= m.index && offset <= m.index + m[0].length) return m[0];
+  return false;
+}
+
+function urlAtPos(state: EditorState, pos: number): string | null {
+  const tree = syntaxTree(state);
+  const definitions = collectLinkDefinitions(tree, state.doc);
+  const asUrl = (value: string) => {
+    const url = value.replace(/^<|>$/g, "");
+    return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(url) ? `mailto:${url}` : url;
+  };
+
+  let node: SyntaxNode | null = tree.resolveInner(pos, -1);
+  for (; node; node = node.parent) {
+    if (node.name === "URL" || node.name === "Autolink") {
+      return asUrl(state.doc.sliceString(node.from, node.to));
+    }
+    if (node.name !== "Link") continue;
+    if (state.doc.sliceString(node.from, Math.min(node.to, node.from + 2)) === "[^") return null;
+
+    const direct = node.getChild("URL");
+    if (direct) return asUrl(state.doc.sliceString(direct.from, direct.to));
+
+    const marks = node.getChildren("LinkMark");
+    const visibleLabel = marks.length >= 2
+      ? state.doc.sliceString(marks[0].to, marks[1].from)
+      : "";
+    const reference = node.getChild("LinkLabel");
+    const rawReference = reference
+      ? state.doc.sliceString(reference.from + 1, reference.to - 1) || visibleLabel
+      : visibleLabel;
+    return definitions.get(normalizeLinkLabel(rawReference))?.url ?? null;
   }
   return null;
 }
@@ -874,7 +1146,7 @@ function mediaHandlers(
       const target = event.target as HTMLElement;
       // 与 Typora 一致：普通点击是定位光标，Ctrl/Cmd + 点击才打开链接
       if (pos != null && (event.ctrlKey || event.metaKey) && target.closest(".cm-md-link")) {
-        const url = urlAtPos(view.state.doc.toString(), pos);
+        const url = urlAtPos(view.state, pos);
         if (url) {
           event.preventDefault();
           void openUrl(url).catch(() => editorShowError(url));
@@ -1005,6 +1277,8 @@ export function createEditor(
         // 与 App 的全局 Ctrl+/ 冲突：不阻断冒泡的话会被切回来
         { key: "Mod-/", run: () => { toggleMode(); return true; }, stopPropagation: true },
         ...editorActionKeymap(),
+        // 组件位于文档首尾时，边界没有相邻正文行可承接原生回车
+        { key: "Enter", run: (v: EditorView) => mode === "preview" && insertParagraphAtBlockBoundary(v) },
         // ```java + 回车 直接生成 java 代码块（$$ 同理）
         { key: "Enter", run: (v: EditorView) => mode === "preview" && openBlockOnEnter(v) },
         // 块级组件是原子区间，光标会整块跳过；在边界上把焦点交给组件内部编辑器
@@ -1030,7 +1304,7 @@ export function createEditor(
       typewriterCompartment.of(typewriterExt(typewriter)),
       mediaHandlers(assetContext, opts.onOpenMarkdown),
       EditorView.updateListener.of((u) => {
-        if (u.docChanged) opts.onChange(u.state.doc.toString());
+        if (u.docChanged) opts.onChange(documentText(u.state.doc));
         if (u.selectionSet) {
           const line = u.state.doc.lineAt(u.state.selection.main.head).number;
           opts.onCursorLine?.(line);

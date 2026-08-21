@@ -7,7 +7,7 @@ import type { SyntaxNode, SyntaxNodeRef } from "@lezer/common";
 import { askConfirm } from "../../lib/confirmBridge";
 import { getLocale, t } from "../../lib/i18n";
 import { getConfirmDelete } from "../../lib/preferences";
-import { currentBlockRange, stampBlockRange } from "./blockRange";
+import { bindBlockBoundaryCursor, currentBlockRange, stampBlockRange } from "./blockRange";
 import { clickedOnBlockPadding } from "./editableSource";
 
 export type TableAlign = "left" | "center" | "right";
@@ -723,8 +723,12 @@ function targetColumns(wrap: HTMLElement): number[] {
     if (pos) cols.add(pos.col);
   }
   if (cols.size) return [...cols].sort((a, b) => a - b);
-  const info = getFocusedCellInfo(wrap);
-  return [info?.col ?? 0];
+  const count = Math.max(
+    wrap.querySelectorAll("thead th").length,
+    ...Array.from(wrap.querySelectorAll("tbody tr"), (row) => row.querySelectorAll("td").length),
+    1,
+  );
+  return Array.from({ length: count }, (_, index) => index);
 }
 
 function rowCount(wrap: HTMLElement): number {
@@ -907,7 +911,7 @@ function applyTableEdit(wrap: HTMLElement, view: EditorView, action: TableEditAc
   applyTableData(wrap, view, result.data, result.focus);
 }
 
-/** 对齐：作用于框选覆盖的所有列（Markdown 只支持按列对齐） */
+/** 对齐：未框选时作用于整表；框选后作用于所选单元格覆盖的列。 */
 function applyAlign(wrap: HTMLElement, view: EditorView, align: TableAlign) {
   const cols = targetColumns(wrap);
   const data = readTableFromDom(wrap);
@@ -1194,6 +1198,14 @@ function attachCellEvents(wrap: HTMLElement) {
 
     if (mod) {
       const key = event.key.toLowerCase();
+      if (key === "a") {
+        event.preventDefault();
+        event.stopPropagation();
+        clearCellSelection(wrap);
+        getEditableCells(wrap).forEach((item) => item.classList.add("md-table-cell-selected"));
+        window.getSelection()?.removeAllRanges();
+        return;
+      }
       // 浏览器原生富文本命令会往单元格里塞 <b>/<i>/<u>
       if (key === "b" || key === "i" || key === "u") {
         event.preventDefault();
@@ -1496,6 +1508,7 @@ export class TableWidget extends WidgetType {
     table.appendChild(tbody);
     body.appendChild(table);
     wrap.appendChild(body);
+    bindBlockBoundaryCursor(wrap, body);
 
     attachToolbarEvents(wrap);
     attachCellEvents(wrap);
