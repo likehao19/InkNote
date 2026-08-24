@@ -86,6 +86,44 @@
             </div>
             <div class="status-bar"><span data-i18n="preview">预览</span><span>Ln 18</span><span>128 words</span><span>UTF-8</span></div>
           </div>
+          <div class="screen-gallery-heading">
+            <span class="section-index">UI</span>
+            <div>
+              <h2 data-i18n="galleryTitle">编辑细节，一目了然</h2>
+              <p data-i18n="galleryLead">常用组件保持接近最终排版，同时提供恰到好处的编辑控件。</p>
+            </div>
+          </div>
+          <div class="screen-gallery">
+            <article class="screen-card screen-card-wide">
+              <div class="screen-card-copy"><span>01</span><h3 data-i18n="galleryTableTitle">表格直接编辑</h3><p data-i18n="galleryTableText">选择单元格后完成对齐、增删行列，未选中时可操作整张表格。</p></div>
+              <div class="mini-window table-shot" aria-hidden="true">
+                <div class="mini-titlebar"><i></i><i></i><i></i><span>project-plan.md</span></div>
+                <div class="table-toolbar"><button>↔</button><button>≡</button><button>＋</button><button>⌫</button></div>
+                <table><thead><tr><th>模块</th><th>状态</th><th>说明</th></tr></thead><tbody><tr><td>编辑器</td><td><b>已完成</b></td><td>实时预览</td></tr><tr><td>文件树</td><td>进行中</td><td>多根目录</td></tr><tr><td>导出</td><td>已完成</td><td>HTML / PDF</td></tr></tbody></table>
+              </div>
+            </article>
+            <article class="screen-card">
+              <div class="screen-card-copy"><span>02</span><h3 data-i18n="galleryCodeTitle">清晰的代码块</h3><p data-i18n="galleryCodeText">行号、语法高亮、语言选择与独立横向滚动互不干扰。</p></div>
+              <div class="mini-window code-shot" aria-hidden="true">
+                <div class="mini-titlebar"><i></i><i></i><i></i><span>example.md</span></div>
+                <div class="code-head"><span>typescript⌄</span><button>复制</button></div>
+                <pre><em>1</em><code><b>type</b> Note = { title: <i>string</i> };</code>
+<em>2</em><code><b>const</b> note: Note = {</code>
+<em>3</em><code>  title: <s>"InkNote"</s>,</code>
+<em>4</em><code>};</code></pre>
+              </div>
+            </article>
+            <article class="screen-card">
+              <div class="screen-card-copy"><span>03</span><h3 data-i18n="gallerySearchTitle">工作区全文检索</h3><p data-i18n="gallerySearchText">按文件名或正文查找，点击结果即可展开文件树并定位到对应行。</p></div>
+              <div class="mini-window search-shot" aria-hidden="true">
+                <div class="mini-titlebar"><i></i><i></i><i></i><span>Workspace search</span></div>
+                <div class="search-box"><span>所见即所得</span><kbd>⌘⇧F</kbd></div>
+                <div class="search-summary">3 results in 2 files</div>
+                <div class="result-group"><strong>guide/quick-start.md</strong><p><span>18</span> 开启所见即所得编辑模式</p><p><span>42</span> 所见即所得组件说明</p></div>
+                <div class="result-group"><strong>README.md</strong><p><span>6</span> 所见即所得 Markdown 编辑器</p></div>
+              </div>
+            </article>
+          </div>
         </div>
       </section>
 
@@ -122,9 +160,6 @@
         </div>
       </section>
 
-      <section class="repo-section">
-        <div class="container repo-inner"><div><span class="repo-label">GitHub</span><h2>likehao19/InkNote</h2><p data-i18n="repoText">查看源码、提交问题，或跟踪版本发布。</p></div><a class="button button-dark" href="https://github.com/likehao19/InkNote" target="_blank" rel="noreferrer"><span data-i18n="openRepo">打开代码仓库</span><span>↗</span></a></div>
-      </section>
     </main>
 
     <footer><div class="container footer-inner"><div class="brand"><img src="./assets/inknote-icon.png" alt="" width="28" height="28" /><span><strong data-i18n="brandZh">墨笺</strong> InkNote</span></div><p>© <span data-current-year></span> InkNote. <span data-i18n="footerText">为专注的 Markdown 写作而设计。</span></p><div><a href="https://github.com/likehao19/InkNote/issues" target="_blank" rel="noreferrer" data-i18n="issues">问题反馈</a><a href="https://github.com/likehao19/InkNote/releases" target="_blank" rel="noreferrer">Releases</a></div></div></footer>
