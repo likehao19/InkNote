@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta
+      name="description"
+      content="墨笺 InkNote，一款本地优先、所见即所得的跨平台 Markdown 编辑器。"
+    />
+    <title>墨笺 InkNote — 专注写作的 Markdown 编辑器</title>
+    <link rel="icon" href="./assets/inknote-icon.png" />
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main" data-i18n="skip">跳到主要内容</a>
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="#top" aria-label="InkNote home">
+          <img src="./assets/inknote-icon.png" alt="" width="36" height="36" />
+          <span><strong data-i18n="brandZh">墨笺</strong> InkNote</span>
+        </a>
+        <nav class="desktop-nav" aria-label="Main navigation">
+          <a href="#features" data-i18n="navFeatures">功能</a>
+          <a href="#screens" data-i18n="navScreens">界面</a>
+          <a href="#download" data-i18n="navDownload">下载</a>
+          <a href="https://github.com/likehao19/InkNote" target="_blank" rel="noreferrer">GitHub</a>
+        </nav>
+        <div class="header-actions">
+          <div class="language-switch" role="group" aria-label="Language">
+            <button type="button" data-lang="zh" aria-pressed="true">中文</button>
+            <button type="button" data-lang="en" aria-pressed="false">EN</button>
+          </div>
+          <a class="github-icon" href="https://github.com/likehao19/InkNote" target="_blank" rel="noreferrer" aria-label="GitHub repository">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.87c-2.78.6-3.37-1.18-3.37-1.18-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.9 1.53 2.35 1.09 2.92.83.09-.65.35-1.09.64-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.55 9.55 0 0 1 12 6.82c.85 0 1.7.11 2.5.34 1.91-1.3 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.86v2.76c0 .27.18.58.69.48A10 10 0 0 0 12 2Z" /></svg>
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero" id="top">
+        <div class="container hero-grid">
+          <div class="hero-copy">
+            <div class="eyebrow"><span class="status-dot"></span><span data-i18n="eyebrow">本地优先 · 跨平台</span></div>
+            <h1 data-i18n="heroTitle">写 Markdown，<br />只看内容本身。</h1>
+            <p class="hero-lead" data-i18n="heroLead">墨笺是一款所见即所得的桌面 Markdown 编辑器。没有割裂的双栏预览，点击即可编辑，移开焦点即呈现最终排版。</p>
+            <div class="hero-actions">
+              <a class="button button-primary recommended-download" href="#download"><span data-i18n="downloadNow">立即下载</span><span aria-hidden="true">↓</span></a>
+              <a class="button button-secondary" href="https://github.com/likehao19/InkNote" target="_blank" rel="noreferrer"><span data-i18n="viewGithub">查看 GitHub</span><span aria-hidden="true">↗</span></a>
+            </div>
+            <p class="release-note"><span data-i18n="latest">最新版本</span> <strong data-release-version>v0.2.0</strong><span class="dot-separator">·</span><span data-i18n="freeDownload">免费下载</span></p>
+          </div>
+          <div class="hero-aside" aria-label="InkNote application icon">
+            <div class="icon-card"><img src="./assets/inknote-icon.png" alt="InkNote" /></div>
+            <dl class="platform-list">
+              <div><dt>Windows</dt><dd>x64</dd></div>
+              <div><dt>macOS</dt><dd>Universal</dd></div>
+              <div><dt>Linux</dt><dd>x86_64</dd></div>
+            </dl>
+          </div>
+        </div>
+      </section>
+
+      <section class="product-shot" id="screens">
+        <div class="container">
+          <div class="window-frame">
+            <div class="window-bar"><div class="window-brand"><img src="./assets/inknote-icon.png" alt="" /><span>InkNote</span></div><span>project-notes.md</span><div class="window-controls"><i></i><i></i><i></i></div></div>
+            <div class="app-layout">
+              <aside class="app-sidebar">
+                <div class="sidebar-tabs"><b data-i18n="files">文件</b><span data-i18n="outline">大纲</span><span data-i18n="recent">最近</span></div>
+                <div class="search-placeholder" data-i18n="filterFiles">筛选文件…</div>
+                <ul class="file-tree"><li class="folder">⌄ &nbsp;InkNote Docs</li><li>&nbsp;&nbsp;&nbsp;⌄ &nbsp;guide</li><li class="selected">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;quick-start.md</li><li>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;shortcuts.md</li><li>&nbsp;&nbsp;&nbsp;release-notes.md</li></ul>
+              </aside>
+              <article class="editor-preview">
+                <h2><span>##</span> InkNote</h2>
+                <p data-i18n="mockIntro">专注于内容的本地 Markdown 编辑器。</p>
+                <blockquote><strong data-i18n="mockQuoteTitle">所见即所得</strong><br /><span data-i18n="mockQuote">编辑时显示语法，完成后恢复清晰排版。</span></blockquote>
+                <h3 data-i18n="mockFeatures">核心能力</h3>
+                <div class="mock-columns"><ul><li data-i18n="mockItem1">表格与任务列表</li><li data-i18n="mockItem2">数学公式与图表</li></ul><pre><span class="code-lang">typescript</span><code><em>1</em> const note = "InkNote";
+<em>2</em> save(note);
+<em>3</em> // local first</code></pre></div>
+                <table><thead><tr><th data-i18n="mockTableFeature">功能</th><th data-i18n="mockTableSupport">支持</th></tr></thead><tbody><tr><td>Markdown / GFM</td><td>✓</td></tr><tr><td>KaTeX / Mermaid</td><td>✓</td></tr></tbody></table>
+              </article>
+            </div>
+            <div class="status-bar"><span data-i18n="preview">预览</span><span>Ln 18</span><span>128 words</span><span>UTF-8</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="features">
+        <div class="container">
+          <div class="section-heading"><span class="section-index">01</span><div><h2 data-i18n="featuresTitle">完整能力，安静呈现</h2><p data-i18n="featuresLead">围绕 Markdown 写作本身设计，每项功能都留在需要它的位置。</p></div></div>
+          <div class="feature-grid">
+            <article><span class="feature-icon">Aa</span><h3 data-i18n="feature1Title">无缝实时预览</h3><p data-i18n="feature1Text">标题、列表、引用、代码与表格在同一编辑面中完成输入和排版。</p></article>
+            <article><span class="feature-icon">⌘</span><h3 data-i18n="feature2Title">组件化编辑</h3><p data-i18n="feature2Text">代码块、表格、任务列表、公式与图表均可直接点击编辑。</p></article>
+            <article><span class="feature-icon">⌕</span><h3 data-i18n="feature3Title">文档与工作区检索</h3><p data-i18n="feature3Text">支持当前文档查找替换，以及跨工作区按文件名和内容搜索。</p></article>
+            <article><span class="feature-icon">∑</span><h3 data-i18n="feature4Title">专业 Markdown</h3><p data-i18n="feature4Text">支持 GFM、KaTeX 数学公式、Mermaid 图表与 YAML Front Matter。</p></article>
+            <article><span class="feature-icon">◫</span><h3 data-i18n="feature5Title">本地工作区</h3><p data-i18n="feature5Text">多根目录文件树、大纲、最近文档与本地设置，内容始终由你掌控。</p></article>
+            <article><span class="feature-icon">⇧</span><h3 data-i18n="feature6Title">导出与更新</h3><p data-i18n="feature6Text">直接导出 HTML/PDF，并可在应用内检查、下载和安装新版本。</p></article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section workflow-section">
+        <div class="container workflow-grid">
+          <div><span class="section-index">02</span><h2 data-i18n="workflowTitle">从打开到交付，保持一条写作流</h2><p data-i18n="workflowText">使用文件关联快速预览，切换到编辑模式继续修改；需要交付时直接导出 HTML 或 PDF。源文件始终是标准 Markdown。</p></div>
+          <ol><li><span>1</span><div><strong data-i18n="flow1Title">打开</strong><p data-i18n="flow1Text">文件、文件夹或最近文档</p></div></li><li><span>2</span><div><strong data-i18n="flow2Title">写作</strong><p data-i18n="flow2Text">实时预览或源码模式</p></div></li><li><span>3</span><div><strong data-i18n="flow3Title">交付</strong><p data-i18n="flow3Text">保存 Markdown，导出 HTML/PDF</p></div></li></ol>
+        </div>
+      </section>
+
+      <section class="section download-section" id="download">
+        <div class="container">
+          <div class="section-heading"><span class="section-index">03</span><div><h2 data-i18n="downloadTitle">选择你的平台</h2><p><span data-i18n="downloadLead">按钮将直接下载 GitHub 最新 Release 中的安装包。</span> <span class="release-state" data-release-state data-i18n="checking">正在检查最新版本…</span></p></div></div>
+          <div class="download-grid">
+            <article class="download-card featured"><div class="platform-mark windows"><span></span><span></span><span></span><span></span></div><div><h3>Windows</h3><p data-i18n="windowsMeta">Windows 10/11 · x64 · EXE</p></div><a class="button button-primary download-link" data-platform="windows" href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote_0.2.0_x64-setup.exe"><span data-i18n="downloadWindows">下载 Windows 版</span><span>↓</span></a></article>
+            <article class="download-card"><div class="platform-mark apple">●</div><div><h3>macOS</h3><p data-i18n="macMeta">Intel 与 Apple 芯片 · DMG</p></div><a class="button button-secondary download-link" data-platform="macos" href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote_0.2.0_universal.dmg"><span data-i18n="downloadMac">下载 macOS 版</span><span>↓</span></a></article>
+            <article class="download-card"><div class="platform-mark linux">⌁</div><div><h3>Linux</h3><p data-i18n="linuxMeta">x86_64 · AppImage</p></div><a class="button button-secondary download-link" data-platform="linux" href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote_0.2.0_amd64.AppImage"><span data-i18n="downloadLinux">下载 Linux 版</span><span>↓</span></a></article>
+          </div>
+          <p class="download-footnote"><span data-i18n="otherPackages">需要 MSI、DEB 或历史版本？</span> <a href="https://github.com/likehao19/InkNote/releases" target="_blank" rel="noreferrer" data-i18n="allReleases">查看全部 Releases ↗</a></p>
+        </div>
+      </section>
+
+      <section class="repo-section">
+        <div class="container repo-inner"><div><span class="repo-label">GitHub</span><h2>likehao19/InkNote</h2><p data-i18n="repoText">查看源码、提交问题，或跟踪版本发布。</p></div><a class="button button-dark" href="https://github.com/likehao19/InkNote" target="_blank" rel="noreferrer"><span data-i18n="openRepo">打开代码仓库</span><span>↗</span></a></div>
+      </section>
+    </main>
+
+    <footer><div class="container footer-inner"><div class="brand"><img src="./assets/inknote-icon.png" alt="" width="28" height="28" /><span><strong data-i18n="brandZh">墨笺</strong> InkNote</span></div><p>© <span data-current-year></span> InkNote. <span data-i18n="footerText">为专注的 Markdown 写作而设计。</span></p><div><a href="https://github.com/likehao19/InkNote/issues" target="_blank" rel="noreferrer" data-i18n="issues">问题反馈</a><a href="https://github.com/likehao19/InkNote/releases" target="_blank" rel="noreferrer">Releases</a></div></div></footer>
+  </body>
+</html>
