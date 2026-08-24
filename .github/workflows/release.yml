@@ -2,6 +2,11 @@ name: Release InkNote
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to build or repair"
+        required: true
+        default: "v0.2.0"
   push:
     tags:
       - "v*"
@@ -17,7 +22,7 @@ jobs:
           - platform: windows-latest
             args: "--bundles nsis,msi"
           - platform: macos-latest
-            args: "--target universal-apple-darwin --bundles dmg"
+            args: "--target universal-apple-darwin --bundles app,dmg"
           - platform: ubuntu-22.04
             args: "--bundles appimage,deb"
     runs-on: ${{ matrix.platform }}
@@ -64,7 +69,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         with:
           projectPath: InkNote
-          tagName: ${{ github.ref_name }}
+          tagName: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
           releaseName: "InkNote v__VERSION__"
           releaseBody: |
             InkNote v__VERSION__
@@ -74,7 +79,7 @@ jobs:
             - Linux: AppImage / Debian package
           releaseDraft: false
           prerelease: false
-          uploadUpdaterJson: true
+          includeUpdaterJson: true
           updaterJsonPreferNsis: true
           retryAttempts: 2
           args: ${{ matrix.args }}
