@@ -10,9 +10,9 @@
 
 | 平台 | 安装包 | 架构 |
 | --- | --- | --- |
-| Windows | [EXE 安装程序](https://github.com/likehao19/InkNote/releases/latest/download/InkNote_0.2.0_x64-setup.exe) | x64 |
-| macOS | [DMG 镜像](https://github.com/likehao19/InkNote/releases/latest/download/InkNote_0.2.0_universal.dmg) | Intel / Apple 芯片 |
-| Linux | [AppImage](https://github.com/likehao19/InkNote/releases/latest/download/InkNote_0.2.0_amd64.AppImage) | x86_64 |
+| Windows | [EXE 安装程序](https://github.com/likehao19/InkNote/releases/latest/download/InkNote_0.2.1_x64-setup.exe) | x64 |
+| macOS | [DMG 镜像](https://github.com/likehao19/InkNote/releases/latest/download/InkNote_0.2.1_universal.dmg) | Intel / Apple 芯片 |
+| Linux | [AppImage](https://github.com/likehao19/InkNote/releases/latest/download/InkNote_0.2.1_amd64.AppImage) | x86_64 |
 
 其他格式（MSI、DEB）与历史版本可在 [Releases](https://github.com/likehao19/InkNote/releases) 页面获取。应用内的“检查更新”会读取最新 Release，并在有新版本时下载和安装更新。
 

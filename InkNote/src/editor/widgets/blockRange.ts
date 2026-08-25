@@ -133,6 +133,7 @@ export function bindBlockClickEdit(
 
     const view = EditorView.findFromDOM(el);
     if (!view) return;
+    if (view.state.readOnly) return;
 
     const range = currentBlockRange(view, el);
     if (!range) return;

@@ -25,10 +25,6 @@ export function pendingImageUrl(relPath: string): string | null {
   return pending.get(relPath)?.url ?? null;
 }
 
-export function pendingImageCount(): number {
-  return pending.size;
-}
-
 export function clearPendingImages(): void {
   for (const item of pending.values()) URL.revokeObjectURL(item.url);
   pending.clear();

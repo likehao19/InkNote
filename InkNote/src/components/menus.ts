@@ -41,6 +41,7 @@ export interface MenuState {
   typewriterMode: boolean;
   recentFiles: string[];
   canReopenClosed?: boolean;
+  documentEditable: boolean;
 }
 
 export function buildMenuGroups(
@@ -51,7 +52,7 @@ export function buildMenuGroups(
   const { onEditorAction: run } = cb;
   const tr = (key: Parameters<typeof t>[1]) => t(locale, key);
 
-  return [
+  const groups: MenuGroupDef[] = [
     {
       label: tr("menu.file"),
       items: [
@@ -235,4 +236,27 @@ export function buildMenuGroups(
       ],
     },
   ];
+
+  if (!state.documentEditable) {
+    const disableItems = (items: MenuGroupDef["items"]) => {
+      for (const item of items) {
+        if (item.separator) continue;
+        item.disabled = true;
+        if (item.children) disableItems(item.children);
+      }
+    };
+
+    const allowedEditLabels = new Set([tr("menu.copy"), tr("menu.selectAll"), tr("menu.find")]);
+    for (const item of groups[1].items) {
+      if (!item.separator && !allowedEditLabels.has(item.label)) item.disabled = true;
+    }
+    disableItems(groups[2].items);
+    for (const item of groups[3].items) {
+      if (!item.separator && item.label !== tr("menu.copyHtml")) item.disabled = true;
+    }
+    const sourceItem = groups[4].items.find((item) => item.label === tr("menu.source"));
+    if (sourceItem) sourceItem.disabled = true;
+  }
+
+  return groups;
 }

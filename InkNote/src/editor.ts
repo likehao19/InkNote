@@ -831,19 +831,25 @@ function atomicBlockRanges(sets: PreviewSets): DecorationSet {
   );
 }
 
-function livePreview(ctx: { filePath: string | null }): Extension {
+function visiblePreview(statics: DecorationSet, state: EditorState, readOnly: boolean): DecorationSet {
+  return readOnly ? statics : applySelection(statics, state);
+}
+
+function livePreview(ctx: { filePath: string | null; readOnly: boolean }): Extension {
   return StateField.define<PreviewSets>({
     create(state) {
       const built = buildPreviewSets(state, ctx.filePath);
-      return { ...built, visible: applySelection(built.statics, state) };
+      return { ...built, visible: visiblePreview(built.statics, state, ctx.readOnly) };
     },
     update(value, tr) {
       if (tr.docChanged || tr.effects.some((e) => e.is(rebuildPreviewEffect))) {
         const built = buildPreviewSets(tr.state, ctx.filePath);
-        return { ...built, visible: applySelection(built.statics, tr.state) };
+        return { ...built, visible: visiblePreview(built.statics, tr.state, ctx.readOnly) };
       }
       if (!tr.startState.selection.eq(tr.state.selection)) {
-        return { ...value, visible: applySelection(value.statics, tr.state) };
+        return ctx.readOnly
+          ? value
+          : { ...value, visible: applySelection(value.statics, tr.state) };
       }
       return value;
     },
@@ -870,7 +876,7 @@ function spellCheckExt(enabled: boolean): Extension {
   return EditorView.contentAttributes.of({ spellcheck: enabled ? "true" : "false" });
 }
 
-function previewExt(mode: EditorMode, ctx: { filePath: string | null }): Extension {
+function previewExt(mode: EditorMode, ctx: { filePath: string | null; readOnly: boolean }): Extension {
   return mode === "preview"
     ? [livePreview(ctx), tableSelectionSnap()]
     : [];
@@ -1329,9 +1335,10 @@ export function createEditor(
   let mode = opts.mode;
   let typewriter = opts.typewriter;
   let readOnly = Boolean(opts.readOnly);
-  const assetContext = { filePath: opts.filePath };
+  const assetContext = { filePath: opts.filePath, readOnly };
 
   function toggleMode() {
+    if (readOnly) return;
     mode = mode === "preview" ? "source" : "preview";
     view.dispatch({
       effects: previewCompartment.reconfigure(previewExt(mode, assetContext)),
@@ -1356,7 +1363,9 @@ export function createEditor(
         EditorView.editable.of(!readOnly),
       ]),
       EditorState.transactionFilter.of((transaction) => (
-        readOnly && transaction.docChanged ? [] : transaction
+        readOnly && transaction.docChanged && !transaction.isUserEvent("input.toggleTask")
+          ? []
+          : transaction
       )),
       markdown({ base: markdownLanguage }),
       syntaxHighlighting(markdownHighlight),
@@ -1413,6 +1422,7 @@ export function createEditor(
   return {
     view,
     setMode: (m: EditorMode) => {
+      if (readOnly && m === "source") return;
       if (m !== mode) toggleMode();
     },
     setFilePath: (path: string | null) => {
@@ -1455,12 +1465,23 @@ export function createEditor(
     setReadOnly: (on: boolean) => {
       if (on === readOnly) return;
       readOnly = on;
+      assetContext.readOnly = on;
+      const forcePreview = on && mode === "source";
+      if (forcePreview) mode = "preview";
       view.dispatch({
-        effects: readOnlyCompartment.reconfigure([
-          EditorState.readOnly.of(on),
-          EditorView.editable.of(!on),
-        ]),
+        effects: [
+          readOnlyCompartment.reconfigure([
+            EditorState.readOnly.of(on),
+            EditorView.editable.of(!on),
+          ]),
+          ...(forcePreview
+            ? [previewCompartment.reconfigure(previewExt("preview", assetContext))]
+            : mode === "preview"
+              ? [rebuildPreviewEffect.of()]
+              : []),
+        ],
       });
+      if (forcePreview) opts.onModeChange("preview");
     },
     scrollToLine: (line: number) => {
       const n = Math.max(1, Math.min(line, view.state.doc.lines));

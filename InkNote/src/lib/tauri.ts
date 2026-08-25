@@ -99,6 +99,12 @@ export function unwatchDir(): Promise<void> {
 export function copyFileToDir(src: string, destDir: string): Promise<string> {
   return invokeLocalized("copy_file_to_dir", { src, destDir });
 }
+export function copyFileToDirStrict(src: string, destDir: string): Promise<string> {
+  return invokeLocalized("copy_file_to_dir_strict", { src, destDir });
+}
+export function copyFileToDirOverwrite(src: string, destDir: string): Promise<string> {
+  return invokeLocalized("copy_file_to_dir_overwrite", { src, destDir });
+}
 export function moveFileToDir(src: string, destDir: string): Promise<string> {
   return invokeLocalized("move_file_to_dir", { src, destDir });
 }

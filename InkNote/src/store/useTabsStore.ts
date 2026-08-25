@@ -16,7 +16,7 @@ interface DocState {
   activeId: string;
   focusMode: boolean;
   typewriterMode: boolean;
-  newTab: () => string;
+  newTab: (content?: string) => string;
   openTab: (path: string, content: string) => string;
   closeTab: (id: string) => void;
   restoreTab: (snap: {
@@ -62,8 +62,10 @@ export const useTabsStore = create<DocState>((set, get) => ({
   focusMode: false,
   typewriterMode: false,
 
-  newTab: () => {
+  newTab: (content = "") => {
     const tab = emptyTab();
+    tab.content = content;
+    tab.dirty = Boolean(content);
     set({ tabs: [tab], activeId: tab.id });
     return tab.id;
   },

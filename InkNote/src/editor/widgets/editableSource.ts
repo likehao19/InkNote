@@ -260,6 +260,7 @@ export function attachSourceEditing(wrap: HTMLElement, opts: SourceEditingOption
 
   wrap.addEventListener("focusin", (event) => {
     if (!inSource(event)) return;
+    if (viewOf()?.state.readOnly) return;
     wrap.classList.add("md-block--editing");
     opts.onEditingChange?.(true);
   });
@@ -293,6 +294,7 @@ export function attachSourceEditing(wrap: HTMLElement, opts: SourceEditingOption
 
   wrap.addEventListener("input", (event) => {
     if (blockSyncing || composing) return;
+    if (viewOf()?.state.readOnly) return;
     const el = inSource(event);
     if (!el) return;
     opts.onInput?.(sourceText(el), el);
@@ -302,6 +304,10 @@ export function attachSourceEditing(wrap: HTMLElement, opts: SourceEditingOption
   wrap.addEventListener("paste", (event) => {
     const el = inSource(event);
     if (!el) return;
+    if (viewOf()?.state.readOnly) {
+      event.preventDefault();
+      return;
+    }
     event.preventDefault();
     const text = event.clipboardData?.getData("text/plain") ?? "";
     const sel = window.getSelection();
@@ -324,6 +330,20 @@ export function attachSourceEditing(wrap: HTMLElement, opts: SourceEditingOption
     if (!el) return;
     const view = viewOf();
     if (!view) return;
+    if (view.state.readOnly) {
+      if (event.ctrlKey || event.metaKey) {
+        const key = event.key.toLowerCase();
+        if (key === "c") return;
+        if (key === "a") {
+          event.preventDefault();
+          event.stopPropagation();
+          selectEditableContents(el);
+          return;
+        }
+      }
+      event.preventDefault();
+      return;
+    }
 
     if (
       event.key === "Enter" &&
@@ -501,6 +521,7 @@ export function enterAdjacentBlock(
   forward: boolean,
   requireLineEdge: boolean,
 ): boolean {
+  if (view.state.readOnly) return false;
   const sel = view.state.selection.main;
   if (!sel.empty) return false;
 
@@ -558,6 +579,7 @@ export function attachBlockSelection(wrap: HTMLElement, opts: BlockSelectionOpti
   wrap.addEventListener("dblclick", (event) => {
     const view = viewOf();
     if (!view || !opts.onEdit) return;
+    if (view.state.readOnly) return;
     event.preventDefault();
     opts.onEdit(view, wrap);
   });

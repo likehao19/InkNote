@@ -18,6 +18,7 @@ interface Props {
   sidebarVisible: boolean;
   sidebarTab: SidebarTab;
   editorMode: EditorMode;
+  documentEditable: boolean;
   onOpen: () => void;
   onOpenFolder: () => void;
   onNewFile: () => void;
@@ -54,6 +55,7 @@ export default function Titlebar({
   sidebarVisible,
   sidebarTab,
   editorMode,
+  documentEditable,
   onOpen,
   onOpenFolder,
   onNewFile,
@@ -116,6 +118,7 @@ export default function Titlebar({
           typewriterMode,
           recentFiles,
           canReopenClosed,
+          documentEditable,
         },
         locale,
       ),
@@ -151,6 +154,7 @@ export default function Titlebar({
       editorMode,
       focusMode,
       typewriterMode,
+      documentEditable,
     ],
   );
 

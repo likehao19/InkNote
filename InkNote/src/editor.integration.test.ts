@@ -5,10 +5,11 @@ import sampleMarkdown from "../sample.md?raw";
 
 const handles: EditorHandle[] = [];
 
-function mount(markdown: string) {
+function mount(markdown: string, readOnly = false) {
   const parent = document.createElement("div");
   document.body.appendChild(parent);
   const onChange = vi.fn();
+  const onModeChange = vi.fn();
   const handle = createEditor(parent, markdown, {
     mode: "preview",
     filePath: null,
@@ -17,11 +18,12 @@ function mount(markdown: string) {
     wordWrap: true,
     tabSize: 2,
     spellCheck: false,
+    readOnly,
     onChange,
-    onModeChange: vi.fn(),
+    onModeChange,
   });
   handles.push(handle);
-  return { parent, handle, onChange };
+  return { parent, handle, onChange, onModeChange };
 }
 
 function nextFrame() {
@@ -84,7 +86,7 @@ describe("Markdown 所见即所得预览", () => {
     ].join("\n"));
 
     expect(parent.querySelector(".md-metadata-reference")?.textContent).toContain("site → https://openai.com");
-    expect(parent.querySelector(".md-metadata-footnote")?.textContent).toContain("Footnote 1 · explanation");
+    expect(parent.querySelector(".md-metadata-footnote")?.textContent).toContain("脚注 1 · explanation");
     expect(parent.querySelector("sup.cm-md-footnote")?.textContent).toBe("1");
     expect(parent.querySelector(".md-html-preview")?.textContent).toContain("HTML preview");
     expect(parent.querySelector(".md-codeblock-widget")?.textContent).toContain("const answer = 42;");
@@ -495,5 +497,137 @@ describe("Markdown 所见即所得预览", () => {
     handle.setReadOnly(false);
     handle.view.dispatch({ changes: { from: 0, to: 4, insert: "edit" } });
     expect(handle.view.state.doc.toString()).toBe("edit only");
+  });
+
+  it("keeps Markdown syntax hidden while allowing task toggles in read-only preview", () => {
+    const markdown = "### Release checklist\n\n- [ ] Publish packages";
+    const { parent, handle } = mount(markdown, true);
+
+    handle.view.dispatch({ selection: { anchor: 5 } });
+    expect(parent.textContent).not.toContain("###");
+
+    const task = parent.querySelector<HTMLElement>(".cm-line.md-task-item")!;
+    task.style.paddingLeft = "40px";
+    task.style.fontSize = "16px";
+    task.style.setProperty("--editor-list-marker-offset", "1.35em");
+    task.getBoundingClientRect = () => ({
+      x: 0,
+      y: 20,
+      top: 20,
+      right: 400,
+      bottom: 40,
+      left: 0,
+      width: 400,
+      height: 20,
+      toJSON: () => ({}),
+    });
+    task.dispatchEvent(new MouseEvent("mousedown", {
+      bubbles: true,
+      button: 0,
+      clientX: 20,
+      clientY: 30,
+    }));
+
+    expect(handle.view.state.doc.toString()).toContain("- [x] Publish packages");
+    expect(parent.textContent).not.toContain("###");
+  });
+
+  it("keeps block components rendered and non-editable throughout read-only preview", () => {
+    const markdown = [
+      "## Architecture",
+      "",
+      "> Stable release notes",
+      "",
+      "Inline formula $E = mc^2$.",
+      "",
+      "$$",
+      "x^2 + y^2 = z^2",
+      "$$",
+      "",
+      "```typescript",
+      "const ready = true;",
+      "```",
+      "",
+      "| Component | State |",
+      "| --- | --- |",
+      "| Preview | Ready |",
+    ].join("\n");
+    const { parent, handle } = mount(markdown, true);
+
+    for (const anchor of [
+      markdown.indexOf("Architecture"),
+      markdown.indexOf("Stable"),
+      markdown.indexOf("E ="),
+      markdown.indexOf("x^2"),
+      markdown.indexOf("const ready"),
+      markdown.indexOf("Component"),
+    ]) {
+      handle.view.dispatch({ selection: { anchor } });
+    }
+
+    expect(parent.querySelector(".md-math-block .katex")).not.toBeNull();
+    expect(parent.querySelector(".md-codeblock-widget code")?.textContent).toContain("const ready = true;");
+    expect(parent.querySelector(".md-codeblock-copy")).not.toBeNull();
+    expect(parent.querySelector(".md-table-widget table")).not.toBeNull();
+    expect(parent.textContent).not.toContain("##");
+    expect(parent.textContent).not.toContain("$$");
+    expect(parent.textContent).not.toContain("```");
+    expect(parent.textContent).not.toContain("| --- | --- |");
+
+    const code = parent.querySelector<HTMLElement>(".md-codeblock-widget code")!;
+    const cell = parent.querySelector<HTMLElement>(".md-table-widget tbody td")!;
+    code.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    cell.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    expect(handle.view.state.doc.toString()).toBe(markdown);
+  });
+
+  it("forces source mode back to preview when read-only is enabled", () => {
+    const { parent, handle, onModeChange } = mount("## Protected heading");
+
+    handle.setMode("source");
+    expect(parent.textContent).toContain("##");
+
+    handle.setReadOnly(true);
+    expect(onModeChange).toHaveBeenLastCalledWith("preview");
+    expect(parent.textContent).not.toContain("##");
+
+    handle.setMode("source");
+    expect(parent.textContent).not.toContain("##");
+  });
+
+  it("allows native text selection in a read-only table without editing it", () => {
+    const markdown = [
+      "| Name | State |",
+      "| --- | --- |",
+      "| Preview | Ready |",
+    ].join("\n");
+    const { parent, handle } = mount(markdown, true);
+    const cell = parent.querySelector<HTMLElement>(".md-table-widget tbody td")!;
+    const event = new MouseEvent("mousedown", { bubbles: true, button: 0, cancelable: true });
+
+    cell.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(cell.contentEditable).toBe("false");
+    expect(handle.view.state.doc.toString()).toBe(markdown);
+  });
+
+  it("allows selecting and copying part of a read-only code block", () => {
+    const markdown = "```typescript\nconst ready = true;\nconst count = 2;\n```";
+    const { parent, handle } = mount(markdown, true);
+    const code = parent.querySelector<HTMLElement>(".md-codeblock-widget code")!;
+    const pointer = new MouseEvent("mousedown", { bubbles: true, button: 0, cancelable: true });
+    const copy = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ctrlKey: true, key: "c" });
+    const selectAll = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ctrlKey: true, key: "a" });
+
+    code.dispatchEvent(pointer);
+    code.dispatchEvent(copy);
+    code.dispatchEvent(selectAll);
+
+    expect(pointer.defaultPrevented).toBe(false);
+    expect(copy.defaultPrevented).toBe(false);
+    expect(selectAll.defaultPrevented).toBe(true);
+    expect(window.getSelection()?.toString()).toBe("const ready = true;\nconst count = 2;");
+    expect(handle.view.state.doc.toString()).toBe(markdown);
   });
 });

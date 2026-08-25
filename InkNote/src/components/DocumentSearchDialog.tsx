@@ -27,6 +27,15 @@ function escapeRegex(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function isValidRegex(value: string) {
+  try {
+    new RegExp(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function collectDocumentMatches(content: string, query: string, caseSensitive: boolean, useRegex: boolean): DocumentSearchMatch[] {
   if (!query) return [];
   let expression: RegExp;
@@ -95,6 +104,7 @@ export default function DocumentSearchDialog({
     () => collectDocumentMatches(content, query, caseSensitive, useRegex),
     [content, query, caseSensitive, useRegex],
   );
+  const invalidRegex = useRegex && Boolean(query) && !isValidRegex(query);
 
   useModalEscape(true, onClose);
 
@@ -213,6 +223,8 @@ export default function DocumentSearchDialog({
         <div className="global-search-body">
           {!query ? (
             <div className="global-search-hint">{tr("documentSearch.hint")}</div>
+          ) : invalidRegex ? (
+            <div className="global-search-empty global-search-error">{tr("globalSearch.invalidRegex")}</div>
           ) : matches.length === 0 ? (
             <div className="global-search-empty">{tr("globalSearch.noResults")}</div>
           ) : (

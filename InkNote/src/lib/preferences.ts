@@ -29,6 +29,9 @@ const KEYS = {
   showStatusBar: "mdnote.showStatusBar",
   typewriterPadding: "mdnote.typewriterPadding",
   externalOpenReadOnly: "mdnote.externalOpenReadOnly",
+  newDocumentMetadata: "mdnote.newDocumentMetadata",
+  metadataTitle: "mdnote.metadataTitle",
+  metadataAuthor: "mdnote.metadataAuthor",
 } as const;
 
 function readBool(key: string, defaultOn = true): boolean {
@@ -262,6 +265,30 @@ export function getExternalOpenReadOnly(): boolean {
 
 export function setExternalOpenReadOnly(on: boolean) {
   writeBool(KEYS.externalOpenReadOnly, on);
+}
+
+export function getNewDocumentMetadata(): boolean {
+  return readBool(KEYS.newDocumentMetadata, false);
+}
+
+export function setNewDocumentMetadata(on: boolean) {
+  writeBool(KEYS.newDocumentMetadata, on);
+}
+
+export function getMetadataTitle(): string {
+  return getStoredValue(KEYS.metadataTitle) ?? "title";
+}
+
+export function setMetadataTitle(value: string) {
+  setStoredValue(KEYS.metadataTitle, value);
+}
+
+export function getMetadataAuthor(): string {
+  return getStoredValue(KEYS.metadataAuthor) ?? "author";
+}
+
+export function setMetadataAuthor(value: string) {
+  setStoredValue(KEYS.metadataAuthor, value);
 }
 
 /** 将偏好写入 CSS 变量，供全局样式使用 */

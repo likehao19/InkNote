@@ -9,6 +9,8 @@ import { getLocale, t } from "../../lib/i18n";
 import { getConfirmDelete } from "../../lib/preferences";
 import { bindBlockBoundaryCursor, currentBlockRange, stampBlockRange } from "./blockRange";
 import { clickedOnBlockPadding } from "./editableSource";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { extractMarkdownOutline } from "../../lib/markdownOutline";
 
 export type TableAlign = "left" | "center" | "right";
 
@@ -501,7 +503,10 @@ export function renderInlineMarkdown(src: string): string {
     .map((part, i) => {
       if (i % 2 === 1) return `<code>${part.slice(1, -1)}</code>`;
       return part
-        .replace(/\[([^\]]*)\]\(([^)\s]+)\)/g, '<a class="md-table-link">$1</a>')
+        .replace(/\[([^\]]*)\]\(([^)\s]+)\)/g, (_match, label: string, target: string) => {
+          if (/^(?:javascript|data|vbscript):/i.test(target)) return label;
+          return `<a class="md-table-link" data-href="${target}">${label}</a>`;
+        })
         .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
         .replace(/__([^_]+)__/g, "<strong>$1</strong>")
         .replace(/(^|[^*])\*([^*]+)\*/g, "$1<em>$2</em>")
@@ -1115,13 +1120,50 @@ function attachCellEvents(wrap: HTMLElement) {
   const viewOf = () => EditorView.findFromDOM(wrap);
   const cellOf = (event: Event) =>
     (event.target as HTMLElement | null)?.closest<HTMLElement>(
-      "th[contenteditable], td[contenteditable]",
+      "th, td",
     ) ?? null;
+
+  const openRenderedLink = (event: MouseEvent, view: EditorView) => {
+    if (!(event.ctrlKey || event.metaKey)) return false;
+    const link = (event.target as HTMLElement | null)?.closest<HTMLElement>(".md-table-link");
+    const target = link?.dataset.href;
+    if (!target) return false;
+
+    event.preventDefault();
+    event.stopPropagation();
+    if (target.startsWith("#")) {
+      let anchor = target.slice(1);
+      try {
+        anchor = decodeURIComponent(anchor);
+      } catch {
+        // Malformed fragments remain usable as literal anchors.
+      }
+      const heading = extractMarkdownOutline(view.state.doc.toString()).find(
+        (item) => item.anchor === anchor,
+      );
+      if (heading) {
+        const line = view.state.doc.line(heading.line);
+        view.dispatch({ selection: { anchor: line.from }, scrollIntoView: true });
+        view.focus();
+      }
+    } else {
+      void openUrl(target).catch(() => {});
+    }
+    return true;
+  };
 
   wrap.addEventListener("mousedown", (event) => {
     if (event.button !== 0) return;
+    const view = viewOf();
+    if (view && openRenderedLink(event, view)) return;
     const cell = cellOf(event);
     if (!cell) return;
+    if (view?.state.readOnly) {
+      // 预览状态仍允许浏览器原生框选和复制；在默认聚焦发生前关闭编辑能力。
+      cell.contentEditable = "false";
+      return;
+    }
+    cell.contentEditable = "true";
     wrap.classList.add("md-table-widget--focused");
     // 不做整列高亮：点一下就把一整列刷上底色，看着像「整列被选中」
     // 在浏览器放置光标之前换成源码文本，否则改写 textContent 会把光标打掉
@@ -1147,6 +1189,7 @@ function attachCellEvents(wrap: HTMLElement) {
   wrap.addEventListener("mouseleave", endDrag);
 
   wrap.addEventListener("focusin", (event) => {
+    if (viewOf()?.state.readOnly) return;
     wrap.classList.add("md-table-widget--focused");
     const cell = cellOf(event);
     if (cell) showCellSource(cell);
@@ -1184,6 +1227,7 @@ function attachCellEvents(wrap: HTMLElement) {
 
   wrap.addEventListener("input", (event) => {
     if (tableSyncing) return;
+    if (viewOf()?.state.readOnly) return;
     // 输入法组合期间同步会打断候选词
     if (composing) return;
     const cell = cellOf(event);
@@ -1197,6 +1241,10 @@ function attachCellEvents(wrap: HTMLElement) {
     const cell = cellOf(event);
     const view = viewOf();
     if (!cell || !view) return;
+    if (view.state.readOnly) {
+      event.preventDefault();
+      return;
+    }
 
     event.preventDefault();
     const text = (event.clipboardData?.getData("text/plain") ?? "").replace(/\r?\n/g, " ");
@@ -1220,6 +1268,10 @@ function attachCellEvents(wrap: HTMLElement) {
     if (!cell) return;
     const view = viewOf();
     if (!view) return;
+    if (view.state.readOnly) {
+      event.preventDefault();
+      return;
+    }
 
     const mod = event.ctrlKey || event.metaKey;
 

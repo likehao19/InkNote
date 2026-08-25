@@ -28,6 +28,9 @@ interface Props {
   onRemoveFolder?: (path: string) => void;
   onError?: (e: unknown) => void;
   revealRequest?: { path: string; id: number } | null;
+  renameRequest?: { path: string; id: number } | null;
+  onRenameRequestHandled?: (id: number) => void;
+  dropTargetDir?: string | null;
 }
 
 export default function Sidebar({
@@ -52,6 +55,9 @@ export default function Sidebar({
   onRemoveFolder,
   onError,
   revealRequest,
+  renameRequest,
+  onRenameRequestHandled,
+  dropTargetDir,
 }: Props) {
   const tr = (key: Parameters<typeof t>[1]) => t(locale, key);
   const outlineListRef = useRef<HTMLUListElement>(null);
@@ -145,6 +151,9 @@ export default function Sidebar({
                     onDelete={onDeletePath ?? (() => false)}
                     onRemoveRoot={onRemoveFolder}
                     onError={onError}
+                    renameRequest={renameRequest}
+                    onRenameRequestHandled={onRenameRequestHandled}
+                    dropTargetDir={dropTargetDir}
                   />
                 ))}
               </>

@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import type { Locale } from "../lib/i18n";
 import { t } from "../lib/i18n";
 import { useModalEscape } from "../lib/useModalEscape";
@@ -10,8 +12,13 @@ interface Props {
 }
 
 export default function AboutDialog({ locale, onClose }: Props) {
+  const [version, setVersion] = useState("");
   useModalEscape(true, onClose);
   const tr = (key: Parameters<typeof t>[1]) => t(locale, key);
+
+  useEffect(() => {
+    void getVersion().then(setVersion).catch(() => {});
+  }, []);
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -21,7 +28,7 @@ export default function AboutDialog({ locale, onClose }: Props) {
         </div>
         <div className="modal-body">
           <p className="modal-text">{tr("about.body")}</p>
-          <p className="modal-text-muted">{t(locale, "about.version", { v: "0.2.0" })}</p>
+          {version && <p className="modal-text-muted">{t(locale, "about.version", { v: version })}</p>}
           <p className="modal-text-muted">{tr("about.tech")}</p>
           <button type="button" className="about-github-link" onClick={() => void openUrl(GITHUB_URL).catch(() => {})}>
             {tr("about.github")} · github.com/likehao19/InkNote

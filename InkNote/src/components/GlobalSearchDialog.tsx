@@ -32,6 +32,15 @@ function HighlightedLine({ text, start, end }: { text: string; start: number; en
   );
 }
 
+function isValidRegex(value: string) {
+  try {
+    new RegExp(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export default function GlobalSearchDialog({
   locale,
   folderPaths,
@@ -56,12 +65,13 @@ export default function GlobalSearchDialog({
   useModalEscape(true, onClose);
 
   const scoped = hasSearchScope(folderPaths, []);
+  const invalidRegex = useRegex && Boolean(query.trim()) && !isValidRegex(query.trim());
 
   const runSearch = useCallback(
     async (q: string) => {
       const request = ++requestRef.current;
       const trimmed = q.trim();
-      if (!trimmed || !scoped) {
+      if (!trimmed || !scoped || (useRegex && !isValidRegex(trimmed))) {
         setMatches([]);
         setFileCount(0);
         setSearching(false);
@@ -90,7 +100,7 @@ export default function GlobalSearchDialog({
   );
 
   useEffect(() => {
-    if (!query.trim() || !scoped) {
+    if (!query.trim() || !scoped || invalidRegex) {
       requestRef.current++;
       setSearching(false);
       setMatches([]);
@@ -100,7 +110,7 @@ export default function GlobalSearchDialog({
     setSearching(true);
     const timer = setTimeout(() => void runSearch(query), 280);
     return () => clearTimeout(timer);
-  }, [query, runSearch, scoped]);
+  }, [query, runSearch, scoped, invalidRegex]);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -186,6 +196,8 @@ export default function GlobalSearchDialog({
                 {tr("globalSearch.openFolder")}
               </button>
             </div>
+          ) : invalidRegex ? (
+            <div className="global-search-empty global-search-error">{tr("globalSearch.invalidRegex")}</div>
           ) : query.trim() && !searching && matches.length === 0 ? (
             <div className="global-search-empty">{tr("globalSearch.noResults")}</div>
           ) : matches.length > 0 ? (

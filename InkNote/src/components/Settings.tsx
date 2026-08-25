@@ -63,7 +63,9 @@ export interface SettingsValues {
   typewriterPadding: number;
   showStatusBar: boolean;
   externalOpenReadOnly: boolean;
-  frontMatter: Record<string, string>;
+  newDocumentMetadata: boolean;
+  metadataTitle: string;
+  metadataAuthor: string;
 }
 
 export interface SettingsHandlers {
@@ -93,7 +95,9 @@ export interface SettingsHandlers {
   onTypewriterPadding: (vh: number) => void;
   onShowStatusBar: (on: boolean) => void;
   onExternalOpenReadOnly: (on: boolean) => void;
-  onFrontMatter: (data: Record<string, string>) => void;
+  onNewDocumentMetadata: (on: boolean) => void;
+  onMetadataTitle: (value: string) => void;
+  onMetadataAuthor: (value: string) => void;
 }
 
 interface Props {
@@ -153,13 +157,14 @@ function buildSearchIndex(): { category: SettingsCategory; keys: MessageKey[] }[
     {
       category: "document",
       keys: [
-        "settings.yamlTitle", "settings.yamlAuthor", "settings.yamlDate", "settings.yamlDesc",
+        "settings.yamlEnable", "settings.yamlEnableDesc",
+        "settings.yamlTitle", "settings.yamlAuthor", "settings.yamlDate", "settings.yamlDateDesc", "settings.yamlDesc",
       ],
     },
     {
       category: "about",
       keys: [
-        "settings.defaultApp", "settings.defaultAppMac", "settings.defaultAppWin", "settings.aboutText",
+        "settings.defaultApp", "settings.defaultAppMac", "settings.defaultAppWin", "settings.aboutText", "settings.aboutPrivacy",
       ],
     },
   ];
@@ -168,7 +173,7 @@ function buildSearchIndex(): { category: SettingsCategory; keys: MessageKey[] }[
 const SEARCH_INDEX = buildSearchIndex();
 
 export default function Settings({ values, handlers, onClose }: Props) {
-  const { locale, frontMatter, ...rest } = values;
+  const { locale, ...rest } = values;
   const [category, setCategory] = useState<SettingsCategory>("general");
   const [query, setQuery] = useState("");
   const [cssTick, setCssTick] = useState(0);
@@ -455,28 +460,37 @@ export default function Settings({ values, handlers, onClose }: Props) {
                 {activeCategory === "document" && (
                   <SettingsPage title={tr("settings.section.document")}>
                     <p className="settings-page-desc">{tr("settings.yamlDesc")}</p>
+                    <SettingItem label={tr("settings.yamlEnable")} desc={tr("settings.yamlEnableDesc")}>
+                      <Toggle
+                        checked={values.newDocumentMetadata}
+                        onChange={handlers.onNewDocumentMetadata}
+                      />
+                    </SettingItem>
                     <SettingItem label={tr("settings.yamlTitle")}>
                       <input
                         type="text"
                         className="settings-text"
-                        value={frontMatter.title ?? ""}
-                        onChange={(e) => handlers.onFrontMatter({ ...frontMatter, title: e.target.value })}
+                        value={values.metadataTitle}
+                        disabled={!values.newDocumentMetadata}
+                        onChange={(e) => handlers.onMetadataTitle(e.target.value)}
                       />
                     </SettingItem>
                     <SettingItem label={tr("settings.yamlAuthor")}>
                       <input
                         type="text"
                         className="settings-text"
-                        value={frontMatter.author ?? ""}
-                        onChange={(e) => handlers.onFrontMatter({ ...frontMatter, author: e.target.value })}
+                        value={values.metadataAuthor}
+                        disabled={!values.newDocumentMetadata}
+                        onChange={(e) => handlers.onMetadataAuthor(e.target.value)}
                       />
                     </SettingItem>
-                    <SettingItem label={tr("settings.yamlDate")}>
+                    <SettingItem label={tr("settings.yamlDate")} desc={tr("settings.yamlDateDesc")}>
                       <input
                         type="text"
-                        className="settings-text"
-                        value={frontMatter.date ?? ""}
-                        onChange={(e) => handlers.onFrontMatter({ ...frontMatter, date: e.target.value })}
+                        className="settings-text settings-date"
+                        value={tr("settings.yamlDateAutomatic")}
+                        disabled
+                        readOnly
                       />
                     </SettingItem>
                   </SettingsPage>
@@ -485,9 +499,7 @@ export default function Settings({ values, handlers, onClose }: Props) {
                 {activeCategory === "about" && (
                   <SettingsPage title={tr("settings.section.about")}>
                     <p className="settings-page-desc">{tr("settings.aboutText")}</p>
-                    <SettingItem label={tr("settings.version")}>
-                      <span className="settings-muted">0.1.0</span>
-                    </SettingItem>
+                    <p className="settings-page-desc">{tr("settings.aboutPrivacy")}</p>
                     <SettingItem label={tr("settings.defaultApp")}>
                       <p className="settings-hint-block">
                         {isMac ? tr("settings.defaultAppMac") : tr("settings.defaultAppWin")}

@@ -495,6 +495,30 @@ fn copy_file_to_dir(src: String, dest_dir: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn copy_file_to_dir_strict(src: String, dest_dir: String) -> Result<String, String> {
+    let src_path = Path::new(&src);
+    let name = src_path.file_name().ok_or("invalid_source_file")?;
+    let dest = Path::new(&dest_dir).join(name);
+    if dest.exists() || dest == src_path {
+        return Err("file_exists".to_string());
+    }
+    std::fs::copy(src_path, &dest).map_err(|error| error.to_string())?;
+    Ok(dest.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn copy_file_to_dir_overwrite(src: String, dest_dir: String) -> Result<String, String> {
+    let src_path = Path::new(&src);
+    let name = src_path.file_name().ok_or("invalid_source_file")?;
+    let dest = Path::new(&dest_dir).join(name);
+    if dest == src_path {
+        return Err("invalid_source_file".to_string());
+    }
+    std::fs::copy(src_path, &dest).map_err(|error| error.to_string())?;
+    Ok(dest.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 fn move_file_to_dir(src: String, dest_dir: String) -> Result<String, String> {
     let src_path = Path::new(&src);
     let dest = available_destination(Path::new(&dest_dir), src_path)?;
@@ -605,6 +629,8 @@ pub fn run() {
             watch_dirs,
             unwatch_dir,
             copy_file_to_dir,
+            copy_file_to_dir_strict,
+            copy_file_to_dir_overwrite,
             move_file_to_dir,
             create_dir,
             create_file,

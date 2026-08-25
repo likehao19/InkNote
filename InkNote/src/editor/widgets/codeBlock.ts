@@ -209,6 +209,7 @@ export class CodeBlockWidget extends WidgetType {
       const view = EditorView.findFromDOM(wrap);
       const range = view && currentBlockRange(view, wrap);
       if (!view || !range) return;
+      if (view.state.readOnly) return;
       const code = codeEl.textContent ?? "";
       view.dispatch({
         changes: { from: range.from, to: range.to, insert: this.serialize(code, select.value) },
@@ -253,6 +254,15 @@ export class CodeBlockWidget extends WidgetType {
 
     // 点在代码区以外的盒内留白也进入编辑；外层留白不抢点击
     wrap.addEventListener("mousedown", (event) => {
+      const view = EditorView.findFromDOM(wrap);
+      if (view?.state.readOnly) {
+        // 只读预览不进入源码编辑，但必须保留浏览器原生文本框选。
+        // 点击按钮以外的代码区时不能 preventDefault，否则无法选择单词或多行。
+        if (codeEl.contains(event.target as Node)) return;
+        if ((event.target as HTMLElement).closest(".md-codeblock-header")) return;
+        event.preventDefault();
+        return;
+      }
       const target = event.target as HTMLElement;
       if (target.closest(".md-codeblock-header")) return;
       if (!box.contains(target)) return;

@@ -9,18 +9,19 @@ export interface SearchMatch {
   matchEnd: number;
 }
 
-const MD_EXT = /\.(md|markdown|txt)$/i;
-const MAX_FILES = 2000;
-const MAX_FILE_BYTES = 512_000;
-const MAX_MATCHES = 80;
+const MD_EXT = /\.(md|markdown)$/i;
 const FILE_CACHE_MS = 5000;
 let fileCache: { key: string; time: number; value: Promise<string[]> } | null = null;
+
+export function invalidateWorkspaceFileCache() {
+  fileCache = null;
+}
 
 async function collectMarkdownFiles(root: string): Promise<string[]> {
   const out: string[] = [];
   const queue = [root];
 
-  while (queue.length > 0 && out.length < MAX_FILES) {
+  while (queue.length > 0) {
     const dir = queue.shift()!;
     try {
       const entries = await listDir(dir);
@@ -29,7 +30,6 @@ async function collectMarkdownFiles(root: string): Promise<string[]> {
           if (!e.name.startsWith(".")) queue.push(e.path);
         } else if (MD_EXT.test(e.name)) {
           out.push(e.path);
-          if (out.length >= MAX_FILES) break;
         }
       }
     } catch {
@@ -143,11 +143,11 @@ function findMatchesInText(
           });
         }
       }
-      for (let i = 0; i < lines.length && matches.length < MAX_MATCHES; i++) {
+      for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         re.lastIndex = 0;
         let m: RegExpExecArray | null;
-        while ((m = re.exec(line)) && matches.length < MAX_MATCHES) {
+        while ((m = re.exec(line))) {
           matches.push({
             path,
             line: i + 1,
@@ -176,11 +176,11 @@ function findMatchesInText(
     });
   }
 
-  for (let i = 0; i < lines.length && matches.length < MAX_MATCHES; i++) {
+  for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const lower = line.toLowerCase();
     let from = 0;
-    while (from < lower.length && matches.length < MAX_MATCHES) {
+    while (from < lower.length) {
       const idx = lower.indexOf(q, from);
       if (idx === -1) break;
       matches.push({
@@ -212,20 +212,16 @@ export async function searchWorkspace(
   if (opts.filenameOnly) {
     for (const path of files) {
       const fileMatches = findMatchesInText(path, "", q, opts);
-      for (const m of fileMatches) {
-        matches.push(m);
-        if (matches.length >= MAX_MATCHES) break;
-      }
-      if (matches.length >= MAX_MATCHES) break;
+      matches.push(...fileMatches);
     }
   } else {
     const batchSize = 12;
-    for (let from = 0; from < files.length && matches.length < MAX_MATCHES; from += batchSize) {
+    for (let from = 0; from < files.length; from += batchSize) {
       const batch = files.slice(from, from + batchSize);
       const contents = await Promise.all(batch.map(async (path) => {
         try {
           const text = await readFile(path);
-          return text.length <= MAX_FILE_BYTES ? { path, text } : null;
+          return { path, text };
         } catch {
           return null;
         }
@@ -233,11 +229,7 @@ export async function searchWorkspace(
       for (const item of contents) {
         if (!item) continue;
         const fileMatches = findMatchesInText(item.path, item.text, q, opts);
-        for (const match of fileMatches) {
-          matches.push(match);
-          if (matches.length >= MAX_MATCHES) break;
-        }
-        if (matches.length >= MAX_MATCHES) break;
+        matches.push(...fileMatches);
       }
     }
   }

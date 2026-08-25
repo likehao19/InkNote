@@ -2,7 +2,6 @@
   "app": {
     "windows": [
       {
-        "label": "main",
         "title": "InkNote",
         "width": 1080,
         "height": 720,
@@ -10,15 +9,10 @@
         "minHeight": 420,
         "center": true,
         "decorations": true,
+        "titleBarStyle": "Visible",
         "shadow": true,
-        "dragDropEnabled": true,
-        "titleBarStyle": "Visible"
+        "dragDropEnabled": true
       }
     ]
-  },
-  "bundle": {
-    "macOS": {
-      "signingIdentity": "-"
-    }
   }
 }
