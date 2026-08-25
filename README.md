@@ -126,4 +126,4 @@ Use `pnpm test`, `pnpm build`, and `pnpm tauri build` to verify and package the 
 
 ## License
 
-Copyright © InkNote contributors. All rights reserved unless a separate license is added to this repository.
+Copyright © likehao19. All rights reserved unless a separate license is added to this repository.
