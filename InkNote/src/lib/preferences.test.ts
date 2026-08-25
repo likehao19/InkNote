@@ -3,10 +3,16 @@ import {
   applyEditorLayoutPrefs,
   getEditorWidthPreset,
   getExternalOpenReadOnly,
+  getMetadataAuthor,
+  getMetadataTitle,
+  getNewDocumentMetadata,
   setEditorZoom,
   setEditorWidthPreset,
   setFontSize,
   setExternalOpenReadOnly,
+  setMetadataAuthor,
+  setMetadataTitle,
+  setNewDocumentMetadata,
 } from "./preferences";
 import { resetSettingsStoreForTests } from "./settingsStore";
 
@@ -43,5 +49,19 @@ describe("editor content layout", () => {
     expect(getExternalOpenReadOnly()).toBe(true);
     setExternalOpenReadOnly(false);
     expect(getExternalOpenReadOnly()).toBe(false);
+  });
+
+  it("keeps automatic metadata off by default and persists its template", () => {
+    expect(getNewDocumentMetadata()).toBe(false);
+    expect(getMetadataTitle()).toBe("title");
+    expect(getMetadataAuthor()).toBe("author");
+
+    setNewDocumentMetadata(true);
+    setMetadataTitle("My title");
+    setMetadataAuthor("My author");
+
+    expect(getNewDocumentMetadata()).toBe(true);
+    expect(getMetadataTitle()).toBe("My title");
+    expect(getMetadataAuthor()).toBe("My author");
   });
 });

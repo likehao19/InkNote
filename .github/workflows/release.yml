@@ -6,7 +6,7 @@ on:
       tag:
         description: "Existing release tag to build or repair"
         required: true
-        default: "v0.2.0"
+        default: "v0.2.1"
   push:
     tags:
       - "v*"
@@ -79,7 +79,85 @@ jobs:
             - Linux: AppImage / Debian package
           releaseDraft: false
           prerelease: false
-          includeUpdaterJson: true
-          updaterJsonPreferNsis: true
+          includeUpdaterJson: false
           retryAttempts: 2
           args: ${{ matrix.args }}
+
+  publish-updater-manifest:
+    name: Publish updater manifest
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build latest.json from all platform assets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="$(jq -r '.version' InkNote/src-tauri/tauri.conf.json)"
+          published_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          asset_names="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" --jq '.assets[].name')"
+
+          pick_asset() {
+            local pattern="$1"
+            printf '%s\n' "$asset_names" | grep -E -- "$pattern" | head -n 1
+          }
+
+          read_signature() {
+            local signature_name="${1}.sig"
+            local asset_id
+            asset_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" \
+              --jq ".assets[] | select(.name == \"${signature_name}\") | .id")"
+            if [[ -z "$asset_id" ]]; then
+              echo "Missing updater signature: ${signature_name}" >&2
+              exit 1
+            fi
+            gh api "repos/${GITHUB_REPOSITORY}/releases/assets/${asset_id}" \
+              -H 'Accept: application/octet-stream'
+          }
+
+          windows_asset="$(pick_asset '-setup\.exe$')"
+          linux_asset="$(pick_asset '\.AppImage$')"
+          macos_asset="$(pick_asset '\.app\.tar\.gz$')"
+          for asset in "$windows_asset" "$linux_asset" "$macos_asset"; do
+            if [[ -z "$asset" ]]; then
+              echo "Missing one or more updater archives in release ${RELEASE_TAG}" >&2
+              printf '%s\n' "$asset_names" >&2
+              exit 1
+            fi
+          done
+
+          windows_signature="$(read_signature "$windows_asset")"
+          linux_signature="$(read_signature "$linux_asset")"
+          macos_signature="$(read_signature "$macos_asset")"
+          base_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}"
+
+          jq -n \
+            --arg version "$version" \
+            --arg notes "InkNote ${RELEASE_TAG}" \
+            --arg pub_date "$published_at" \
+            --arg windows_signature "$windows_signature" \
+            --arg windows_url "${base_url}/${windows_asset}" \
+            --arg linux_signature "$linux_signature" \
+            --arg linux_url "${base_url}/${linux_asset}" \
+            --arg macos_signature "$macos_signature" \
+            --arg macos_url "${base_url}/${macos_asset}" \
+            '{
+              version: $version,
+              notes: $notes,
+              pub_date: $pub_date,
+              platforms: {
+                "windows-x86_64": { signature: $windows_signature, url: $windows_url },
+                "linux-x86_64": { signature: $linux_signature, url: $linux_url },
+                "darwin-x86_64": { signature: $macos_signature, url: $macos_url },
+                "darwin-aarch64": { signature: $macos_signature, url: $macos_url }
+              }
+            }' > latest.json
+
+          gh release upload "$RELEASE_TAG" latest.json --clobber

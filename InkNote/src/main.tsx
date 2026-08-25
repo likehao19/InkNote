@@ -7,7 +7,6 @@ import { applyEditorLayoutPrefs } from "./lib/preferences";
 import { applyMarkdownTheme } from "./lib/markdownTheme";
 import { apply as applyTheme } from "./lib/theme";
 import { initializeSettingsStore } from "./lib/settingsStore";
-import "katex/dist/katex.min.css";
 import "./App.css";
 
 document.addEventListener(

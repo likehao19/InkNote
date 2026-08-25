@@ -12,7 +12,6 @@ const SETTINGS_PATHS: Record<string, string> = {
   "mdnote.lastFile": "workspace.lastFile",
   "mdnote.sidebarTab": "workspace.sidebarTab",
   "mdnote.recent": "workspace.recentFiles",
-  "mdnote.sessionRecovery": "recovery.snapshot",
   "mdnote.treeExpansion": "workspace.treeExpansion",
 };
 
@@ -83,6 +82,11 @@ export async function initializeSettingsStore() {
   }
 
   let migrated = false;
+  // 会话恢复已移除：清理旧设置，避免历史草稿再次覆盖用户刚打开的文件。
+  if (readPath(["recovery", "snapshot"]) !== undefined) {
+    removePath(["recovery", "snapshot"]);
+    migrated = true;
+  }
   if (typeof localStorage !== "undefined") {
     const legacyKeys = [
       "inknote.locale",
@@ -117,7 +121,9 @@ export async function initializeSettingsStore() {
       "mdnote.showStatusBar",
       "mdnote.typewriterPadding",
       "mdnote.externalOpenReadOnly",
-      "mdnote.sessionRecovery",
+      "mdnote.newDocumentMetadata",
+      "mdnote.metadataTitle",
+      "mdnote.metadataAuthor",
       "mdnote.treeExpansion",
     ];
     for (const key of legacyKeys) {
@@ -128,6 +134,7 @@ export async function initializeSettingsStore() {
       }
       localStorage.removeItem(key);
     }
+    localStorage.removeItem("mdnote.sessionRecovery");
   }
   if (migrated) persist();
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import * as api from "../lib/tauri";
 import { basename, dirOf, isPathUnder, joinPath, remapPath, relativeToWorkspace } from "../lib/paths";
@@ -27,6 +27,9 @@ interface Props {
   onDelete: (path: string, isDir: boolean) => boolean | Promise<boolean>;
   onRemoveRoot?: (path: string) => void;
   onError?: (e: unknown) => void;
+  renameRequest?: { path: string; id: number } | null;
+  onRenameRequestHandled?: (id: number) => void;
+  dropTargetDir?: string | null;
 }
 
 type CreatingState = {
@@ -101,6 +104,34 @@ function FileIcon() {
       />
       <path d="M9 1.5v3.5h3.5" fill="none" stroke="currentColor" strokeWidth="1" strokeLinejoin="round" />
     </svg>
+  );
+}
+
+function HighlightedTreeName({ text, query }: { text: string; query: string }) {
+  const needle = query.trim();
+  if (!needle) return <>{text}</>;
+  const lowerText = text.toLowerCase();
+  const lowerNeedle = needle.toLowerCase();
+  const parts: Array<{ text: string; match: boolean }> = [];
+  let from = 0;
+  while (from < text.length) {
+    const index = lowerText.indexOf(lowerNeedle, from);
+    if (index < 0) {
+      parts.push({ text: text.slice(from), match: false });
+      break;
+    }
+    if (index > from) parts.push({ text: text.slice(from, index), match: false });
+    parts.push({ text: text.slice(index, index + needle.length), match: true });
+    from = index + needle.length;
+  }
+  return (
+    <>
+      {parts.map((part, index) => (
+        <Fragment key={`${index}:${part.text}`}>
+          {part.match ? <mark className="tree-filter-highlight">{part.text}</mark> : part.text}
+        </Fragment>
+      ))}
+    </>
   );
 }
 
@@ -201,6 +232,9 @@ export default function FileTree({
   onDelete,
   onRemoveRoot,
   onError,
+  renameRequest,
+  onRenameRequestHandled,
+  dropTargetDir,
 }: Props) {
   const [rootExpanded, setRootExpanded] = useState(() => getTreeExpansion(rootPath).rootExpanded);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(getTreeExpansion(rootPath).expanded));
@@ -209,6 +243,8 @@ export default function FileTree({
   const [creating, setCreating] = useState<CreatingState | null>(null);
   const [renaming, setRenaming] = useState<RenamingState | null>(null);
   const [filteredPaths, setFilteredPaths] = useState<string[]>([]);
+  const filterQuery = filter.trim();
+  const filterActive = Boolean(filterQuery);
   const tr = useCallback(
     (key: Parameters<typeof t>[1]) => t(locale, key),
     [locale],
@@ -291,24 +327,73 @@ export default function FileTree({
   }, [dirTick, reloadVisibleDirectories]);
 
   useEffect(() => {
+    const path = renameRequest?.path;
+    if (!path || !isPathUnder(path, rootPath)) return;
+    const parent = dirOf(path);
+    const relativeParent = relativeToWorkspace(rootPath, parent);
+    const separator = rootPath.includes("\\") ? "\\" : "/";
+    const ancestors: string[] = [];
+    if (relativeParent !== parent && relativeParent !== ".") {
+      let current = rootPath.replace(/[\\/]+$/, "");
+      for (const part of relativeParent.split(/[\\/]/).filter(Boolean)) {
+        current = `${current}${separator}${part}`;
+        ancestors.push(current);
+      }
+    }
+    setRootExpanded(true);
+    setExpanded((value) => {
+      const next = new Set(value);
+      ancestors.forEach((ancestor) => next.add(ancestor));
+      return next;
+    });
+    void loadDir(parent).then(() => {
+      onSelectedPathChange(path);
+      setCreating(null);
+      setRenaming({
+        path,
+        isDir: false,
+        depth: relativeToWorkspace(rootPath, path).split(/[\\/]/).length,
+      });
+      onRenameRequestHandled?.(renameRequest.id);
+    });
+  }, [renameRequest, rootPath, loadDir, onSelectedPathChange, onRenameRequestHandled]);
+
+  useEffect(() => {
     const query = filter.trim().toLowerCase();
     if (!query) {
       setFilteredPaths([]);
       return;
     }
+    setFilteredPaths([]);
     let cancelled = false;
     void listWorkspaceFiles([rootPath], []).then((paths) => {
       if (cancelled) return;
       setFilteredPaths(
         paths
-          .filter((path) => relativeToWorkspace(rootPath, path).toLowerCase().includes(query))
-          .slice(0, 200),
+          .filter((path) => relativeToWorkspace(rootPath, path).toLowerCase().includes(query)),
       );
     });
     return () => {
       cancelled = true;
     };
   }, [filter, rootPath, dirTick]);
+
+  const filteredPathSet = useMemo(() => new Set(filteredPaths), [filteredPaths]);
+  const filterVisibleDirs = useMemo(() => {
+    const directories = new Set<string>();
+    const separator = rootPath.includes("\\") ? "\\" : "/";
+    const root = rootPath.replace(/[\\/]+$/, "");
+    for (const path of filteredPaths) {
+      const relative = relativeToWorkspace(rootPath, path);
+      if (relative === path) continue;
+      let current = root;
+      for (const part of relative.split(/[\\/]/).slice(0, -1).filter(Boolean)) {
+        current = `${current}${separator}${part}`;
+        directories.add(current);
+      }
+    }
+    return directories;
+  }, [filteredPaths, rootPath]);
 
   const toggle = useCallback(
     (path: string) => {
@@ -734,7 +819,8 @@ export default function FileTree({
     return entries.map((entry) => {
       const pad = 4 + depth * 12;
       if (entry.is_dir) {
-        const open = expanded.has(entry.path);
+        if (filterActive && !filterVisibleDirs.has(entry.path)) return null;
+        const open = filterActive ? true : expanded.has(entry.path);
         const isRenaming = renaming?.path === entry.path;
         const isSelected = selectedPath === entry.path;
         return (
@@ -745,13 +831,19 @@ export default function FileTree({
                 "tree-row",
                 isSelected ? "active" : "",
                 isRenaming ? "tree-inline-input-row" : "",
+                dropTargetDir === entry.path ? "tree-drop-target" : "",
               ]
                 .filter(Boolean)
                 .join(" ")}
               style={{ paddingLeft: pad }}
+              data-tree-drop-dir={entry.path}
               onClick={() => {
                 if (isRenaming) return;
                 selectNode(entry.path);
+              }}
+              onDoubleClick={(event) => {
+                if (isRenaming || (event.target as HTMLElement).closest("button,input")) return;
+                if (!filterActive) toggle(entry.path);
               }}
               onContextMenu={(e) => openContextMenu(e, entry.path, true, depth)}
             >
@@ -765,17 +857,19 @@ export default function FileTree({
                     aria-label={open ? tr("tree.collapseFolder") : tr("tree.expandFolder")}
                     onClick={(e) => {
                       e.stopPropagation();
-                      toggle(entry.path);
+                      if (!filterActive) toggle(entry.path);
                     }}
                   >
                     <TreeChevron expanded={open} />
                   </button>
-                  <span className="file-name">{entry.name}</span>
+                  <span className="file-name">
+                    <HighlightedTreeName text={entry.name} query={filterQuery} />
+                  </span>
                 </>
               )}
             </div>
             {open && (
-              <ul className="file-list tree-children">
+              <ul className="file-list tree-children" data-tree-drop-dir={entry.path}>
                 {creating?.parentDir === entry.path && renderInlineCreate(creating)}
                 {renderDir(entry.path, depth + 1)}
               </ul>
@@ -787,8 +881,7 @@ export default function FileTree({
       const isMd = /\.(md|markdown|txt)$/i.test(entry.name);
       if (!isMd) return null;
 
-      const fq = filter.trim().toLowerCase();
-      if (fq && !entry.name.toLowerCase().includes(fq)) return null;
+      if (filterActive && !filteredPathSet.has(entry.path)) return null;
 
       const isSelected = selectedPath === entry.path;
       const isRenaming = renaming?.path === entry.path;
@@ -816,7 +909,9 @@ export default function FileTree({
           ) : (
             <>
               <FileIcon />
-              <span className="file-name">{entry.name}</span>
+              <span className="file-name">
+                <HighlightedTreeName text={entry.name} query={filterQuery} />
+              </span>
             </>
           )}
         </li>
@@ -825,12 +920,18 @@ export default function FileTree({
   };
 
   const workspaceName = basename(rootPath);
-  const rootOpen = rootExpanded;
+  const rootOpen = filterActive ? true : rootExpanded;
   const rootSelected = selectedPath === rootPath;
 
   return (
     <>
-      <ul ref={treeRef} className="file-list file-tree" tabIndex={0} onKeyDown={handleTreeKeyDown}>
+      <ul
+        ref={treeRef}
+        className="file-list file-tree"
+        tabIndex={0}
+        onKeyDown={handleTreeKeyDown}
+        data-tree-drop-dir={rootPath}
+      >
         <li className="tree-group tree-root">
           <div
             className={[
@@ -838,11 +939,17 @@ export default function FileTree({
               "tree-row",
               "tree-root-row",
               rootSelected ? "active" : "",
+              dropTargetDir === rootPath ? "tree-drop-target" : "",
             ]
               .filter(Boolean)
               .join(" ")}
             style={{ paddingLeft: 4 }}
+            data-tree-drop-dir={rootPath}
             onClick={() => selectNode(rootPath)}
+            onDoubleClick={(event) => {
+              if ((event.target as HTMLElement).closest("button,input")) return;
+              if (!filterActive) setRootExpanded((value) => !value);
+            }}
             onContextMenu={(e) => openContextMenu(e, rootPath, true, 0)}
           >
             <button
@@ -851,13 +958,13 @@ export default function FileTree({
               aria-label={rootOpen ? tr("tree.collapseWorkspace") : tr("tree.expandWorkspace")}
               onClick={(e) => {
                 e.stopPropagation();
-                setRootExpanded((v) => !v);
+                if (!filterActive) setRootExpanded((v) => !v);
               }}
             >
               <TreeChevron expanded={rootOpen} />
             </button>
             <span className="file-name workspace-name" title={rootPath}>
-              {workspaceName}
+              <HighlightedTreeName text={workspaceName} query={filterQuery} />
             </span>
             <div className="tree-row-actions">
               <button
@@ -896,26 +1003,9 @@ export default function FileTree({
             </div>
           </div>
           {rootOpen && (
-            <ul className="file-list tree-children">
+            <ul className="file-list tree-children" data-tree-drop-dir={rootPath}>
               {creating?.parentDir === rootPath && renderInlineCreate(creating)}
-              {filter.trim()
-                ? filteredPaths.map((path) => (
-                    <li
-                      key={path}
-                      className={`file-item tree-row tree-filter-result${selectedPath === path ? " active" : ""}`}
-                      style={{ paddingLeft: 16 }}
-                      title={path}
-                      onClick={() => {
-                        selectNode(path);
-                        onOpenFile(path);
-                      }}
-                      onContextMenu={(event) => openContextMenu(event, path, false, depthOf(path))}
-                    >
-                      <FileIcon />
-                      <span className="file-name">{relativeToWorkspace(rootPath, path)}</span>
-                    </li>
-                  ))
-                : renderDir(rootPath, 1)}
+              {renderDir(rootPath, 1)}
             </ul>
           )}
         </li>

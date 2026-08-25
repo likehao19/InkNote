@@ -1,10 +1,12 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { Text } from "@codemirror/state";
 import { createEditor, type EditorAction, type EditorMode } from "../editor";
 import { applyCustomCssToHost, removeCustomCssFromHost } from "../lib/customTheme";
 import ContextMenu, { type ContextMenuItem } from "./ContextMenu";
 import { modShortcut, redoShortcut } from "../lib/shortcuts";
 import type { Locale } from "../lib/i18n";
 import { t } from "../lib/i18n";
+import "katex/dist/katex.min.css";
 
 export interface EditorRef {
   scrollToLine: (line: number) => void;
@@ -60,7 +62,7 @@ const Editor = forwardRef<EditorRef, Props>(function Editor(
   const onOpenMarkdownRef = useRef(onOpenMarkdown);
   const onViewportRangeRef = useRef(onViewportRange);
   const lastEmittedRef = useRef(value);
-  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; selectedText: string } | null>(null);
 
   onChangeRef.current = onChange;
   onModeRef.current = onModeChange;
@@ -76,13 +78,23 @@ const Editor = forwardRef<EditorRef, Props>(function Editor(
     setCtxMenu(null);
   };
 
+  const copyCurrentSelection = () => {
+    const selectedText = ctxMenu?.selectedText ?? "";
+    if (selectedText) {
+      void navigator.clipboard.writeText(selectedText);
+      setCtxMenu(null);
+      return;
+    }
+    run("copy");
+  };
+
   const ctxItems: ContextMenuItem[] = [
-    { label: tr("menu.undo"), shortcut: modShortcut("Z"), accelerator: "Mod+z", onClick: () => run("undo") },
-    { label: tr("menu.redo"), shortcut: redoShortcut(), accelerator: "Mod+Shift+z", onClick: () => run("redo") },
+    { label: tr("menu.undo"), shortcut: modShortcut("Z"), accelerator: "Mod+z", disabled: readOnly, onClick: () => run("undo") },
+    { label: tr("menu.redo"), shortcut: redoShortcut(), accelerator: "Mod+Shift+z", disabled: readOnly, onClick: () => run("redo") },
     { separator: true, label: "" },
-    { label: tr("menu.cut"), shortcut: modShortcut("X"), accelerator: "Mod+x", onClick: () => run("cut") },
-    { label: tr("menu.copy"), shortcut: modShortcut("C"), accelerator: "Mod+c", onClick: () => run("copy") },
-    { label: tr("menu.paste"), shortcut: modShortcut("V"), accelerator: "Mod+v", onClick: () => run("paste") },
+    { label: tr("menu.cut"), shortcut: modShortcut("X"), accelerator: "Mod+x", disabled: readOnly, onClick: () => run("cut") },
+    { label: tr("menu.copy"), shortcut: modShortcut("C"), accelerator: "Mod+c", onClick: copyCurrentSelection },
+    { label: tr("menu.paste"), shortcut: modShortcut("V"), accelerator: "Mod+v", disabled: readOnly, onClick: () => run("paste") },
     { label: tr("menu.copyHtml"), onClick: () => run("copyHtml") },
     { separator: true, label: "" },
     { label: tr("menu.find"), shortcut: modShortcut("F"), onClick: () => run("find") },
@@ -127,7 +139,11 @@ const Editor = forwardRef<EditorRef, Props>(function Editor(
     if (!host) return;
     const onCtx = (e: MouseEvent) => {
       e.preventDefault();
-      setCtxMenu({ x: e.clientX, y: e.clientY });
+      const selection = window.getSelection();
+      const selectedText = selection?.anchorNode && host.contains(selection.anchorNode)
+        ? selection.toString()
+        : "";
+      setCtxMenu({ x: e.clientX, y: e.clientY, selectedText });
     };
     host.addEventListener("contextmenu", onCtx);
     return () => host.removeEventListener("contextmenu", onCtx);
@@ -216,11 +232,14 @@ const Editor = forwardRef<EditorRef, Props>(function Editor(
       return;
     }
     const { anchor, head } = view.state.selection.main;
-    const newLen = value.length;
+    // CodeMirror 会把 CRLF/CR 统一成内部换行符。使用原字符串 length 会让
+    // 搜索跳转到 CRLF 文档时的选区落到新文档末尾之外。
+    const nextDoc = Text.of(value.split(/\r\n?|\n/));
+    const newLen = nextDoc.length;
     lastEmittedRef.current = value;
     if (readOnly) handle.setReadOnly(false);
     view.dispatch({
-      changes: { from: 0, to: cur.length, insert: value },
+      changes: { from: 0, to: cur.length, insert: nextDoc },
       selection: {
         anchor: Math.min(anchor, newLen),
         head: Math.min(head, newLen),

@@ -91,7 +91,9 @@ function MenuSubmenuItem({
       ref={rowRef}
       className={`menubar-submenu-row${open ? " is-open" : ""}`}
       role="none"
-      onMouseEnter={() => setOpen(true)}
+      onMouseEnter={() => {
+        if (!item.disabled) setOpen(true);
+      }}
       onMouseLeave={() => setOpen(false)}
     >
       <button
@@ -107,7 +109,7 @@ function MenuSubmenuItem({
         <span className="menubar-item-label">{item.label}</span>
         <SubmenuArrow />
       </button>
-      {open && item.children && (
+      {open && !item.disabled && item.children && (
         <ul className="menubar-submenu" role="menu">
           {item.children.map((child, j) =>
             child.separator ? (

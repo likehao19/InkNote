@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
-import Editor, { type EditorRef } from "./components/Editor";
+import type { EditorRef } from "./components/Editor";
 import Titlebar from "./components/Titlebar";
 import Sidebar, { type SidebarTab } from "./components/Sidebar";
 import { SidebarPanel } from "./components/SidebarPanel";
@@ -21,6 +21,7 @@ import GlobalSearchDialog from "./components/GlobalSearchDialog";
 import QuickOpenDialog from "./components/QuickOpenDialog";
 import DocumentSearchDialog from "./components/DocumentSearchDialog";
 import PromptDialog from "./components/PromptDialog";
+import FileConflictDialog from "./components/FileConflictDialog";
 import * as api from "./lib/tauri";
 import { initPlatform, isMac } from "./lib/platform";
 import { setConfirmHandler } from "./lib/confirmBridge";
@@ -70,8 +71,14 @@ import {
   getRestoreLastFile,
   getEditorZoom,
   getExternalOpenReadOnly,
+  getNewDocumentMetadata,
+  getMetadataTitle,
+  getMetadataAuthor,
   setEditorZoom as persistEditorZoom,
   setExternalOpenReadOnly as persistExternalOpenReadOnly,
+  setNewDocumentMetadata as persistNewDocumentMetadata,
+  setMetadataTitle as persistMetadataTitle,
+  setMetadataAuthor as persistMetadataAuthor,
   getFontFamily,
   setFontFamily as persistFontFamily,
   getMonoFontFamily,
@@ -105,23 +112,28 @@ import {
   type DefaultEditorMode,
   type EditorWidthPreset,
 } from "./lib/preferences";
-import { parseFrontMatter, updateFrontMatter } from "./lib/frontmatter";
+import { formatFrontMatter } from "./lib/frontmatter";
 import { dirOf, joinPath, basename, relativePath } from "./lib/paths";
-import { useTabsStore } from "./store/useTabsStore";
+import { useTabsStore, type TabDoc } from "./store/useTabsStore";
 import type { EditorAction } from "./editor";
 import { setTableInsertRequestHandler } from "./editor/tableInsertBridge";
 import { useToast } from "./lib/useToast";
 import { countWords, estimateReadMinutes } from "./lib/wordCount";
-import { clearPendingImages, commitPendingImages, pendingImageCount, preparePendingImages } from "./lib/pendingImages";
+import { clearPendingImages, commitPendingImages, preparePendingImages } from "./lib/pendingImages";
 import { removeTreeExpansion } from "./lib/treeState";
 import { extractMarkdownOutline } from "./lib/markdownOutline";
 import { NATIVE_MENU_EVENT, setupMacNativeMenu } from "./lib/nativeMenu";
-import {
-  clearSessionRecovery,
-  getSessionRecovery,
-  stashSessionRecovery,
-  type SessionRecoverySnapshot,
-} from "./lib/sessionRecovery";
+import { invalidateWorkspaceFileCache } from "./lib/workspaceSearch";
+
+const Editor = lazy(() => import("./components/Editor"));
+
+function formatLocalDate(timestamp: number): string {
+  const date = new Date(timestamp);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 export default function App() {
   const editorRef = useRef<EditorRef>(null);
@@ -186,11 +198,14 @@ export default function App() {
   });
   const [fileRevealRequest, setFileRevealRequest] = useState<{ path: string; id: number } | null>(null);
   const fileRevealIdRef = useRef(0);
-  const [sessionRecovery, setSessionRecovery] = useState<SessionRecoverySnapshot | null>(() => {
-    const recovery = getSessionRecovery();
-    return recovery?.dirty ? recovery : null;
-  });
-  const [dragOver, setDragOver] = useState(false);
+  const [fileRenameRequest, setFileRenameRequest] = useState<{ path: string; id: number } | null>(null);
+  const fileRenameIdRef = useRef(0);
+  const [treeDropTarget, setTreeDropTarget] = useState<string | null>(null);
+  const [importConflict, setImportConflict] = useState<{ path: string; targetDir: string } | null>(null);
+  const handleRenameRequestHandled = useCallback((id: number) => {
+    setFileRenameRequest((request) => request?.id === id ? null : request);
+  }, []);
+
   const [canReopenClosed, setCanReopenClosed] = useState(false);
   const [cursorLine, setCursorLine] = useState(1);
   const [viewportRange, setViewportRange] = useState({ from: 1, to: 1 });
@@ -216,8 +231,12 @@ export default function App() {
   const [tabSize, setTabSize] = useState(getTabSize);
   const [spellCheck, setSpellCheck] = useState(getSpellCheck);
   const [externalOpenReadOnly, setExternalOpenReadOnly] = useState(getExternalOpenReadOnly);
+  const [newDocumentMetadata, setNewDocumentMetadata] = useState(getNewDocumentMetadata);
+  const [metadataTitle, setMetadataTitle] = useState(getMetadataTitle);
+  const [metadataAuthor, setMetadataAuthor] = useState(getMetadataAuthor);
   const [externalDocument, setExternalDocument] = useState(false);
   const [documentEditable, setDocumentEditable] = useState(true);
+  const [welcomeDismissed, setWelcomeDismissed] = useState(false);
 
   const showOutlineForExternalOpen = useCallback(() => {
     const editorState = useTabsStore.getState();
@@ -230,6 +249,39 @@ export default function App() {
   }, []);
   const [typewriterPadding, setTypewriterPadding] = useState(getTypewriterPadding);
   const [showStatusBar, setShowStatusBar] = useState(getShowStatusBar);
+
+  const createNewDocumentContent = useCallback(() => {
+    if (!newDocumentMetadata) return "";
+    return formatFrontMatter({
+      title: metadataTitle,
+      author: metadataAuthor,
+      date: formatLocalDate(Date.now()),
+    });
+  }, [newDocumentMetadata, metadataTitle, metadataAuthor]);
+
+  const finishImportedFile = useCallback((path: string, rename: boolean) => {
+    setDirTick((value) => value + 1);
+    if (rename) {
+      setFileRenameRequest({ path, id: ++fileRenameIdRef.current });
+      show(t(locale, "toast.fileImportedRename"));
+    } else {
+      showSuccess(t(locale, "toast.fileImported"));
+    }
+  }, [locale, show, showSuccess]);
+
+  const resolveImportConflict = useCallback(async (action: "overwrite" | "rename" | "cancel") => {
+    const conflict = importConflict;
+    setImportConflict(null);
+    if (!conflict || action === "cancel") return;
+    try {
+      const copiedPath = action === "overwrite"
+        ? await api.copyFileToDirOverwrite(conflict.path, conflict.targetDir)
+        : await api.copyFileToDir(conflict.path, conflict.targetDir);
+      finishImportedFile(copiedPath, action === "rename");
+    } catch (error) {
+      showError(error);
+    }
+  }, [importConflict, finishImportedFile, showError]);
 
   const fileName = useMemo(() => {
     if (!active?.path) return t(locale, "title.untitled");
@@ -257,12 +309,27 @@ export default function App() {
     setConfirmMessage(null);
   }, []);
 
+  const saveExistingTab = useCallback(async (tab: TabDoc): Promise<boolean> => {
+    if (!tab.path) return false;
+    try {
+      const preparedImages = await preparePendingImages(tab.path);
+      await api.writeFile(tab.path, tab.content);
+      commitPendingImages(preparedImages);
+      markSaved(tab.id, tab.path, tab.content);
+      return true;
+    } catch (error) {
+      showError(error);
+      return false;
+    }
+  }, [markSaved, showError]);
+
   const confirmDiscardIfNeeded = useCallback(async () => {
     const tab = getActive();
     if (!tab?.dirty) return true;
+    if (tab.path) return saveExistingTab(tab);
     if (!confirmDiscard) return true;
     return askConfirm(t(locale, "confirm.discard"));
-  }, [getActive, confirmDiscard, locale, askConfirm]);
+  }, [getActive, saveExistingTab, confirmDiscard, locale, askConfirm]);
 
   const loadFile = useCallback(
     async (path: string, options: { external?: boolean } = {}) => {
@@ -350,7 +417,6 @@ export default function App() {
         setRecentFiles(getRecentFiles());
         setTitle(path);
         setLastFile(path);
-        clearSessionRecovery();
         await api.watchFile(path);
         showSuccess(t(locale, "toast.saved"));
         return path;
@@ -376,7 +442,6 @@ export default function App() {
       setRecentFiles(getRecentFiles());
       setTitle(p);
       setLastFile(p);
-      clearSessionRecovery();
       await api.watchFile(p);
       showSuccess(t(locale, "toast.saved"));
     } catch (e) {
@@ -421,32 +486,40 @@ export default function App() {
     clearPendingImages();
     setExternalDocument(false);
     setDocumentEditable(true);
-    newTab();
+    setWelcomeDismissed(true);
+    newTab(createNewDocumentContent());
     setTitle(null);
-  }, [newTab, setTitle, confirmDiscardIfNeeded]);
+    show(t(locale, "toast.newDocument"));
+  }, [newTab, createNewDocumentContent, setTitle, confirmDiscardIfNeeded, show, locale]);
 
   const handleCloseFile = useCallback(async () => {
     const tab = getActive();
     if (!tab) return;
-    if (tab.dirty && confirmDiscard) {
+    let savedBeforeClose = false;
+    if (tab.dirty && tab.path) {
+      savedBeforeClose = await saveExistingTab(tab);
+      if (!savedBeforeClose) return;
+    }
+    if (tab.dirty && !tab.path && confirmDiscard) {
       const ok = await askConfirm(t(locale, "confirm.close"));
       if (!ok) return;
     }
     clearPendingImages();
     setExternalDocument(false);
     setDocumentEditable(true);
+    setWelcomeDismissed(false);
     if (tab.path || tab.content.trim()) {
       closedDocRef.current = {
         path: tab.path,
         content: tab.content,
-        diskContent: tab.diskContent,
-        dirty: tab.dirty,
+        diskContent: savedBeforeClose ? tab.content : tab.diskContent,
+        dirty: savedBeforeClose ? false : tab.dirty,
       };
       setCanReopenClosed(true);
     }
     closeTab(tab.id);
     setTitle(null);
-  }, [getActive, closeTab, setTitle, confirmDiscard, locale, askConfirm]);
+  }, [getActive, closeTab, setTitle, saveExistingTab, confirmDiscard, locale, askConfirm]);
 
   const handleReopenClosed = useCallback(async () => {
     const snap = closedDocRef.current;
@@ -470,21 +543,6 @@ export default function App() {
     }
     show(t(locale, "toast.reopened"));
   }, [confirmDiscardIfNeeded, restoreTab, setTitle, show, showError, locale]);
-
-  const handleSessionRecovery = useCallback(() => {
-    const snap = sessionRecovery;
-    if (!snap) return;
-    restoreTab({
-      path: snap.path,
-      content: snap.content,
-      diskContent: snap.diskContent,
-      dirty: snap.dirty,
-    });
-    clearSessionRecovery();
-    setSessionRecovery(null);
-    setTitle(snap.path);
-    show(t(locale, "toast.recoveryRestored"));
-  }, [sessionRecovery, restoreTab, setTitle, show, locale]);
 
   const handleRenamePath = useCallback(
     async (path: string, newName: string, _isDir: boolean) => {
@@ -555,14 +613,14 @@ export default function App() {
     async (parentDir: string, name: string) => {
       const path = joinPath(parentDir, name);
       try {
-        await api.createFile(path, "");
+        await api.createFile(path, createNewDocumentContent());
         setDirTick((t) => t + 1);
         await loadFile(path);
       } catch (e) {
         showError(e);
       }
     },
-    [loadFile, showError],
+    [loadFile, showError, createNewDocumentContent],
   );
 
   const handleCreateFolderInDir = useCallback(
@@ -576,20 +634,6 @@ export default function App() {
       }
     },
     [showError],
-  );
-
-  const frontMatterData = useMemo(() => {
-    if (!active?.content) return {};
-    return parseFrontMatter(active.content)?.data ?? {};
-  }, [active?.content]);
-
-  const handleFrontMatter = useCallback(
-    (data: Record<string, string>) => {
-      if (!activeTabId || !active) return;
-      const next = updateFrontMatter(active.content, data);
-      updateContent(activeTabId, next);
-    },
-    [activeTabId, active, updateContent],
   );
 
   const handleChange = useCallback(
@@ -607,10 +651,14 @@ export default function App() {
   );
 
   const toggleEditorMode = useCallback(() => {
+    if (!documentEditable) {
+      show(t(locale, "toast.previewMode"));
+      return;
+    }
     const tab = getActive();
     if (!tab || !activeTabId) return;
     setMode(activeTabId, tab.mode === "preview" ? "source" : "preview");
-  }, [getActive, activeTabId, setMode]);
+  }, [documentEditable, show, locale, getActive, activeTabId, setMode]);
 
   const handleSidebarTab = useCallback((tab: SidebarTab) => {
     if (focusMode) toggleFocusMode();
@@ -643,8 +691,12 @@ export default function App() {
       openDocumentSearch(action === "findReplace");
       return;
     }
+    if (!documentEditable && !["copy", "selectAll", "copyHtml"].includes(action)) {
+      show(t(locale, "toast.previewReadOnly"));
+      return;
+    }
     editorRef.current?.runAction(action);
-  }, [openDocumentSearch]);
+  }, [openDocumentSearch, documentEditable, show, locale]);
 
   useEffect(() => {
     setTableInsertRequestHandler(() => setTablePickerOpen(true));
@@ -963,16 +1015,50 @@ export default function App() {
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | undefined;
-    void getCurrentWindow().onDragDropEvent(({ payload }) => {
+    let hoverRequest = 0;
+    const win = getCurrentWindow();
+    const scaleFactor = win.scaleFactor();
+    const directoryAt = async (position: { x: number; y: number }) => {
+      const factor = await scaleFactor;
+      const element = document.elementFromPoint(position.x / factor, position.y / factor);
+      return element?.closest<HTMLElement>("[data-tree-drop-dir]")?.dataset.treeDropDir ?? null;
+    };
+    const updateDropTarget = async (position: { x: number; y: number }) => {
+      const request = ++hoverRequest;
+      const target = await directoryAt(position);
+      if (!disposed && request === hoverRequest) setTreeDropTarget(target);
+    };
+
+    void win.onDragDropEvent(({ payload }) => {
       if (disposed) return;
-      if (payload.type === "enter") {
-        setDragOver(payload.paths.some((path) => /\.(md|markdown|txt)$/i.test(path)));
+      if (payload.type === "enter" || payload.type === "over") {
+        void updateDropTarget(payload.position);
       } else if (payload.type === "leave") {
-        setDragOver(false);
+        hoverRequest++;
+        setTreeDropTarget(null);
       } else if (payload.type === "drop") {
-        setDragOver(false);
+        hoverRequest++;
+        setTreeDropTarget(null);
         const path = payload.paths.find((candidate) => /\.(md|markdown|txt)$/i.test(candidate));
-        if (path) void loadFile(path);
+        if (!path) return;
+        void directoryAt(payload.position).then(async (targetDir) => {
+          if (disposed) return;
+          if (targetDir) {
+            try {
+              const copiedPath = await api.copyFileToDirStrict(path, targetDir);
+              finishImportedFile(copiedPath, true);
+            } catch (error) {
+              if (error instanceof Error && error.message === t(locale, "error.fileExists")) {
+                setImportConflict({ path, targetDir });
+              } else {
+                showError(error);
+              }
+            }
+            return;
+          }
+          showOutlineForExternalOpen();
+          await loadFile(path, { external: true });
+        });
       }
     }).then((fn) => {
       if (disposed) fn();
@@ -982,50 +1068,30 @@ export default function App() {
       disposed = true;
       unlisten?.();
     };
-  }, [loadFile]);
+  }, [loadFile, showOutlineForExternalOpen, finishImportedFile, locale, showError]);
 
   useEffect(() => {
     const win = getCurrentWindow();
     let unlisten: (() => void) | undefined;
     void win.onCloseRequested(async (event) => {
       const tab = getActive();
-      if (!tab?.dirty) {
-        clearSessionRecovery();
-        return;
-      }
+      if (!tab?.dirty) return;
+      event.preventDefault();
+
       if (!tab.path) {
-        if (pendingImageCount() > 0) {
-          event.preventDefault();
-          const path = await saveTab(tab.id);
-          if (path) await win.destroy();
-          return;
-        }
-        stashSessionRecovery({
-          path: null,
-          content: tab.content,
-          diskContent: tab.diskContent,
-          dirty: true,
-          time: Date.now(),
-        });
+        const shouldSave = await askConfirm(t(locale, "confirm.saveBeforeClose"));
+        if (!shouldSave) return;
+        const path = await saveTab(tab.id);
+        if (path) await win.destroy();
         return;
       }
 
-      event.preventDefault();
-      try {
-        const preparedImages = await preparePendingImages(tab.path);
-        await api.writeFile(tab.path, tab.content);
-        commitPendingImages(preparedImages);
-        markSaved(tab.id, tab.path, tab.content);
-        clearSessionRecovery();
-        await win.destroy();
-      } catch (error) {
-        showError(error);
-      }
+      if (await saveExistingTab(tab)) await win.destroy();
     }).then((fn) => {
       unlisten = fn;
     });
     return () => unlisten?.();
-  }, [getActive, markSaved, saveTab, showError]);
+  }, [getActive, saveExistingTab, saveTab, askConfirm, locale]);
 
   useEffect(() => {
     const modalOpen =
@@ -1036,30 +1102,34 @@ export default function App() {
       linkDialogText !== null ||
       imageDialogAlt !== null ||
       promptDialog ||
+      importConflict ||
       shortcutsOpen ||
       aboutOpen ||
       globalSearchOpen ||
       quickOpenOpen ||
-      documentSearch.open ||
-      sessionRecovery !== null;
+      documentSearch.open;
 
     const onKey = (e: KeyboardEvent) => {
       if (isMac && e.ctrlKey && e.metaKey && e.key.toLowerCase() === "f") {
+        if (modalOpen) return;
         e.preventDefault();
         void getCurrentWindow().isFullscreen().then((fs) => getCurrentWindow().setFullscreen(!fs));
         return;
       }
       if (e.key === "F8") {
+        if (modalOpen) return;
         e.preventDefault();
         handleToggleFocus();
         return;
       }
       if (e.key === "F9") {
+        if (modalOpen) return;
         e.preventDefault();
         handleToggleTypewriter();
         return;
       }
       if (e.key === "F11") {
+        if (modalOpen) return;
         e.preventDefault();
         void getCurrentWindow().isFullscreen().then((fs) => getCurrentWindow().setFullscreen(!fs));
         return;
@@ -1142,33 +1212,14 @@ export default function App() {
     linkDialogText,
     imageDialogAlt,
     promptDialog,
+    importConflict,
     shortcutsOpen,
     aboutOpen,
     globalSearchOpen,
     quickOpenOpen,
     documentSearch.open,
     openDocumentSearch,
-    sessionRecovery,
   ]);
-
-  useEffect(() => {
-    if (sessionRecovery) return;
-    const tab = getActive();
-    if (!tab?.dirty) {
-      clearSessionRecovery();
-      return;
-    }
-    const timer = setTimeout(() => {
-      stashSessionRecovery({
-        path: tab.path,
-        content: tab.content,
-        diskContent: tab.diskContent,
-        dirty: tab.dirty,
-        time: Date.now(),
-      });
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [tabs, getActive, sessionRecovery]);
 
   useEffect(() => {
     const paths = [...folderPaths];
@@ -1285,6 +1336,10 @@ export default function App() {
   }, [externalOpenReadOnly]);
 
   useEffect(() => {
+    invalidateWorkspaceFileCache();
+  }, [dirTick, folderPaths, recentFiles]);
+
+  useEffect(() => {
     setTitle(active?.path ?? null);
     if (active?.path) api.watchFile(active.path).catch(showError);
     else api.unwatchFile();
@@ -1306,7 +1361,14 @@ export default function App() {
     [active?.content],
   );
 
-  const showWelcome = !active?.path && !active?.content.trim();
+  const setDocumentAccessMode = useCallback((editable: boolean) => {
+    if (documentEditable === editable) return;
+    if (!editable && activeTabId) setMode(activeTabId, "preview");
+    setDocumentEditable(editable);
+    show(t(locale, editable ? "toast.editMode" : "toast.previewMode"));
+  }, [documentEditable, activeTabId, setMode, show, locale]);
+
+  const showWelcome = !welcomeDismissed && !active?.path && !active?.content.trim();
   const wasWelcomeRef = useRef(showWelcome);
 
   useEffect(() => {
@@ -1377,6 +1439,7 @@ export default function App() {
         sidebarVisible={sidebarVisible}
         sidebarTab={sidebarTab}
         editorMode={active?.mode ?? "preview"}
+        documentEditable={documentEditable}
         onOpen={openFile}
         onOpenFolder={openFolder}
         onNewFile={handleNewFile}
@@ -1403,7 +1466,7 @@ export default function App() {
         canReopenClosed={canReopenClosed}
         recentFiles={recentFiles}
       />
-      <div className={dragOver ? "app-body drag-over" : "app-body"}>
+      <div className="app-body">
         {sidebarVisible && !focusMode && (
           <SidebarPanel
             locale={locale}
@@ -1433,6 +1496,9 @@ export default function App() {
               onOpenFolder={() => void openFolder()}
               onError={showError}
               revealRequest={fileRevealRequest}
+              renameRequest={fileRenameRequest}
+              onRenameRequestHandled={handleRenameRequestHandled}
+              dropTargetDir={treeDropTarget}
             />
           </SidebarPanel>
         )}
@@ -1442,14 +1508,14 @@ export default function App() {
               <button
                 type="button"
                 className={!documentEditable ? "active" : ""}
-                onClick={() => setDocumentEditable(false)}
+                onClick={() => setDocumentAccessMode(false)}
               >
                 {t(locale, "documentAccess.preview")}
               </button>
               <button
                 type="button"
                 className={documentEditable ? "active" : ""}
-                onClick={() => setDocumentEditable(true)}
+                onClick={() => setDocumentAccessMode(true)}
               >
                 {t(locale, "documentAccess.edit")}
               </button>
@@ -1468,25 +1534,27 @@ export default function App() {
             />
           )}
           {active && !showWelcome && (
-            <Editor
-              ref={editorRef}
-              locale={locale}
-              key={active.id}
-              value={active.content}
-              mode={active.mode}
-              filePath={active.path}
-              typewriter={typewriterMode}
-              lineNumbers={lineNumbers}
-              wordWrap={wordWrap}
-              tabSize={tabSize}
-              spellCheck={spellCheck}
-              readOnly={!documentEditable}
-              onChange={handleChange}
-              onModeChange={handleModeChange}
-              onCursorLine={setCursorLine}
-              onViewportRange={(from, to) => setViewportRange({ from, to })}
-              onOpenMarkdown={(content, path) => void handleDroppedMarkdown(content, path)}
-            />
+            <Suspense fallback={<div className="editor-loading" aria-hidden="true" />}>
+              <Editor
+                ref={editorRef}
+                locale={locale}
+                key={active.id}
+                value={active.content}
+                mode={active.mode}
+                filePath={active.path}
+                typewriter={typewriterMode}
+                lineNumbers={lineNumbers}
+                wordWrap={wordWrap}
+                tabSize={tabSize}
+                spellCheck={spellCheck}
+                readOnly={!documentEditable}
+                onChange={handleChange}
+                onModeChange={handleModeChange}
+                onCursorLine={setCursorLine}
+                onViewportRange={(from, to) => setViewportRange({ from, to })}
+                onOpenMarkdown={(content, path) => void handleDroppedMarkdown(content, path)}
+              />
+            </Suspense>
           )}
         </main>
       </div>
@@ -1532,7 +1600,9 @@ export default function App() {
             typewriterPadding,
             showStatusBar,
             externalOpenReadOnly,
-            frontMatter: frontMatterData,
+            newDocumentMetadata,
+            metadataTitle,
+            metadataAuthor,
           }}
           handlers={{
             onLocale: (next) => {
@@ -1581,7 +1651,19 @@ export default function App() {
             onTypewriterPadding: setTypewriterPadding,
             onShowStatusBar: setShowStatusBar,
             onExternalOpenReadOnly: setExternalOpenReadOnly,
-            onFrontMatter: handleFrontMatter,
+            onNewDocumentMetadata: (on) => {
+              setNewDocumentMetadata(on);
+              persistNewDocumentMetadata(on);
+              show(t(locale, on ? "toast.newDocumentMetadataOn" : "toast.newDocumentMetadataOff"));
+            },
+            onMetadataTitle: (value) => {
+              setMetadataTitle(value);
+              persistMetadataTitle(value);
+            },
+            onMetadataAuthor: (value) => {
+              setMetadataAuthor(value);
+              persistMetadataAuthor(value);
+            },
           }}
         />
       )}
@@ -1605,6 +1687,15 @@ export default function App() {
           message={confirmMessage}
           onConfirm={() => resolveConfirm(true)}
           onCancel={() => resolveConfirm(false)}
+        />
+      )}
+      {importConflict && (
+        <FileConflictDialog
+          locale={locale}
+          fileName={basename(importConflict.path)}
+          onOverwrite={() => void resolveImportConflict("overwrite")}
+          onRename={() => void resolveImportConflict("rename")}
+          onCancel={() => void resolveImportConflict("cancel")}
         />
       )}
       {linkDialogText !== null && (
@@ -1703,17 +1794,6 @@ export default function App() {
           currentPath={active?.path ?? null}
           onOpen={(p) => void loadFile(p)}
           onClose={() => setQuickOpenOpen(false)}
-        />
-      )}
-      {sessionRecovery && (
-        <ConfirmDialog
-          locale={locale}
-          message={t(locale, "recovery.prompt")}
-          onConfirm={() => handleSessionRecovery()}
-          onCancel={() => {
-            clearSessionRecovery();
-            setSessionRecovery(null);
-          }}
         />
       )}
     </div>

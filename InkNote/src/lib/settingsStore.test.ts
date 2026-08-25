@@ -24,7 +24,7 @@ describe("settings store", () => {
   });
 
   it("uses English when no language has been selected", () => {
-    expect(getLocale()).toBe("en");
+    expect(getLocale()).toBe("zh");
   });
 
   it("preserves an explicitly selected legacy language", async () => {
@@ -43,6 +43,15 @@ describe("settings store", () => {
 
     expect(getStoredValue("mdnote.lastFolder")).toBe("D:\\notes");
     expect(localStorage.getItem("mdnote.lastFolder")).toBeNull();
+  });
+
+  it("removes the retired session recovery snapshot", async () => {
+    localStorage.setItem("mdnote.sessionRecovery", "stale draft");
+
+    await initializeSettingsStore();
+
+    expect(localStorage.getItem("mdnote.sessionRecovery")).toBeNull();
+    expect(getStoredValue("mdnote.sessionRecovery")).toBeNull();
   });
 
   it("upgrades a legacy single folder and persists multiple workspace roots", () => {
