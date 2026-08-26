@@ -25,6 +25,7 @@ interface Props {
   onCreateFile: (parentDir: string, name: string) => void | Promise<void>;
   onCreateFolder: (parentDir: string, name: string) => void | Promise<void>;
   onRenamePath: (path: string, newName: string, isDir: boolean) => boolean | Promise<boolean>;
+  onTransferPath?: (path: string, destinationDir: string, mode: TreeClipboard["mode"]) => Promise<string | null>;
   onMovePath?: (oldPath: string, newPath: string) => void;
   onDelete: (path: string, isDir: boolean) => boolean | Promise<boolean>;
   onRemoveRoot?: (path: string) => void;
@@ -231,6 +232,7 @@ export default function FileTree({
   onCreateFile,
   onCreateFolder,
   onRenamePath,
+  onTransferPath,
   onMovePath,
   onDelete,
   onRemoveRoot,
@@ -592,10 +594,13 @@ export default function FileTree({
       if (!clipboard) return;
       const { mode, path } = clipboard;
       try {
-        if (mode === "copy") {
-          await api.copyFileToDir(path, destDir);
-        } else {
-          const movedPath = await api.moveFileToDir(path, destDir);
+        const movedPath = onTransferPath
+          ? await onTransferPath(path, destDir, mode)
+          : mode === "copy"
+            ? await api.copyFileToDir(path, destDir)
+            : await api.moveFileToDir(path, destDir);
+        if (!movedPath) return;
+        if (mode === "cut") {
           onMovePath?.(path, movedPath);
           if (selectedPath === path) onSelectedPathChange(movedPath);
           onClipboardChange(null);
@@ -605,7 +610,7 @@ export default function FileTree({
         onError?.(e);
       }
     },
-    [clipboard, onMovePath, selectedPath, onSelectedPathChange, onClipboardChange, onRefresh, onError],
+    [clipboard, onTransferPath, onMovePath, selectedPath, onSelectedPathChange, onClipboardChange, onRefresh, onError],
   );
 
   const clipboardMenuItems = useCallback(

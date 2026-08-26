@@ -2531,6 +2531,32 @@ html[data-md-theme="minimal"] .md-table-widget th {
 }
 .about-github-link:hover { text-decoration: underline; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.image-dialog { width: 440px; }
+.image-dialog .modal-body { padding-top: 14px; }
+.image-dialog-field { margin-bottom: 14px; }
+.image-dialog-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--fg-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+.image-dialog-control { width: 100%; }
+.image-dialog-control > input {
+  width: 100%;
+  height: 32px;
+  padding: 5px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--fg);
+  font: 13px var(--font-ui);
+}
+.image-dialog-control > input:focus {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--border-strong));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent);
+  outline: none;
+}
 
 /* ---------- 表格尺寸选择器 ---------- */
 .table-size-picker {

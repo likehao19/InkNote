@@ -1,6 +1,6 @@
 # 墨笺 InkNote
 
-一款本地优先、所见即所得的跨平台 Markdown 编辑器。InkNote 使用 Tauri 2、React 与 CodeMirror 6 构建，源文件始终保持为标准 Markdown。
+一款面向 Windows 与 macOS、本地优先、所见即所得的 Markdown 编辑器。InkNote 使用 Tauri 2、React 与 CodeMirror 6 构建，源文件始终保持为标准 Markdown。
 
 [官方网站](https://likehao19.github.io/InkNote/) · [下载最新版本](https://github.com/likehao19/InkNote/releases/latest) · [问题反馈](https://github.com/likehao19/InkNote/issues)
 
@@ -10,11 +10,11 @@
 
 | 平台 | 安装包 | 架构 |
 | --- | --- | --- |
-| Windows | [EXE 安装程序](https://github.com/likehao19/InkNote/releases/latest/download/InkNote_0.2.1_x64-setup.exe) | x64 |
-| macOS | [DMG 镜像](https://github.com/likehao19/InkNote/releases/latest/download/InkNote_0.2.1_universal.dmg) | Intel / Apple 芯片 |
-| Linux | [AppImage](https://github.com/likehao19/InkNote/releases/latest/download/InkNote_0.2.1_amd64.AppImage) | x86_64 |
+| Windows | [中文 EXE 安装程序](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Windows-x64-Setup.exe) | x64 |
+| macOS | [Intel DMG](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-macOS-x86_64.dmg) | x86_64 |
+| macOS | [Apple 芯片 DMG](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-macOS-arm64.dmg) | ARM64 |
 
-其他格式（MSI、DEB）与历史版本可在 [Releases](https://github.com/likehao19/InkNote/releases) 页面获取。应用内的“检查更新”会读取最新 Release，并在有新版本时下载和安装更新。
+历史版本可在 [Releases](https://github.com/likehao19/InkNote/releases) 页面获取。应用内的“检查更新”会读取最新 Release，并按 Windows、Mac Intel 或 Mac ARM 架构下载对应更新。
 
 ## 主要功能
 
@@ -27,12 +27,12 @@
 - 预览 / 编辑、源码 / 实时预览、专注与打字机模式
 - 导出 HTML 与 PDF
 - 亮色 / 暗色界面、Markdown 组件主题、自定义 CSS
-- 中英文界面与 Windows、macOS、Linux 快捷键适配
+- 中英文界面与 Windows、macOS 快捷键适配
 - 系统文件关联与应用内自动更新
 
 ## 常用快捷键
 
-| 功能 | Windows / Linux | macOS |
+| 功能 | Windows | macOS |
 | --- | --- | --- |
 | 新建文档 | `Ctrl+N` | `⌘N` |
 | 打开文件 | `Ctrl+O` | `⌘O` |
@@ -106,7 +106,7 @@ InkNote/
 
 ## English
 
-InkNote is a local-first, WYSIWYG Markdown editor for Windows, macOS, and Linux. It keeps one standard Markdown source file while providing seamless live preview, direct component editing, workspace search, HTML/PDF export, themes, and in-app updates.
+InkNote is a local-first WYSIWYG Markdown editor for Windows and macOS. It keeps one standard Markdown source file while providing seamless live preview, direct component editing, workspace search, HTML/PDF export, themes, and in-app updates.
 
 - [Official website](https://likehao19.github.io/InkNote/)
 - [Latest release](https://github.com/likehao19/InkNote/releases/latest)

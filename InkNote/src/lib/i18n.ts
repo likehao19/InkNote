@@ -263,7 +263,7 @@ export const messages = {
 
     "toast.saved": "已保存",
     "toast.fileImportedRename": "文件已复制，请确认名称",
-    "toast.fileImported": "文件已覆盖",
+    "toast.fileImported": "文件已复制到目标文件夹",
     "toast.newDocumentMetadataOn": "已开启：以后新建的文档会自动带有元数据",
     "toast.newDocumentMetadataOff": "已关闭：以后新建的文档将不再自动添加元数据",
     "toast.newDocument": "已新建空白文档",
@@ -674,7 +674,7 @@ export const messages = {
 
     "toast.saved": "Saved",
     "toast.fileImportedRename": "File copied. Confirm its name",
-    "toast.fileImported": "File overwritten",
+    "toast.fileImported": "File copied to the target folder",
     "toast.newDocumentMetadataOn": "Enabled: future documents will include metadata automatically",
     "toast.newDocumentMetadataOff": "Disabled: future documents will no longer include metadata",
     "toast.newDocument": "New blank document created",

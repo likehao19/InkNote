@@ -29,4 +29,19 @@ describe("markdownToBodyHtml", () => {
     expect(html).toContain(".hljs-keyword");
     expect(html).toContain(".task-list-item");
   });
+
+  it("embeds a pending image even before the document has a disk path", async () => {
+    const dataUrl = "data:image/png;base64,cGVuZGluZw==";
+    const html = await markdownToHtml(
+      "![pending](.inknote-assets/pending.png)",
+      "light",
+      "zh",
+      null,
+      true,
+      "github",
+      new Map([[".inknote-assets/pending.png", dataUrl]]),
+    );
+
+    expect(html).toContain(`src="${dataUrl}"`);
+  });
 });

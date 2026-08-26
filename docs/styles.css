@@ -171,7 +171,6 @@ h1 { margin: 0; max-width: 760px; font-size: clamp(48px, 6.3vw, 78px); line-heig
 .platform-mark.windows { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 2px; transform: skewY(-5deg); }
 .platform-mark.windows span { width: 15px; height: 15px; background: var(--blue); }
 .platform-mark.apple { font-size: 24px; }
-.platform-mark.linux { font: 700 34px ui-monospace, monospace; }
 .download-footnote { margin: 24px 0 0; color: var(--muted); text-align: center; font-size: 13px; }
 .download-footnote a { color: var(--blue); font-weight: 650; }
 

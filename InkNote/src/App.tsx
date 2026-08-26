@@ -125,6 +125,7 @@ import { nextUpdatePercent } from "./lib/updateProgress";
 import {
   clearPendingImages,
   commitPendingImages,
+  pendingImageDataUrls,
   preparePendingImages,
   restorePendingImages,
   snapshotPendingImages,
@@ -135,6 +136,15 @@ import { extractMarkdownOutline } from "./lib/markdownOutline";
 import { NATIVE_MENU_EVENT, setupMacNativeMenu } from "./lib/nativeMenu";
 import { invalidateWorkspaceFileCache } from "./lib/workspaceSearch";
 import { flushSettingsStore } from "./lib/settingsStore";
+import {
+  cleanupRemovedManagedImages,
+  prepareManagedImagesForSaveAs,
+  removeDocumentWithManagedImages,
+  transferDocumentWithManagedImages,
+  type DocumentTransferMode,
+  type FileConflictAction,
+} from "./lib/documentAssets";
+import { rewriteManagedImageReferences } from "./lib/imageAssets";
 
 const Editor = lazy(() => import("./components/Editor"));
 
@@ -168,6 +178,7 @@ export default function App() {
   const confirmResolveRef = useRef<((v: boolean) => void) | null>(null);
   const linkResolveRef = useRef<((v: { text: string; url: string } | null) => void) | null>(null);
   const imageResolveRef = useRef<((v: { alt: string; path: string } | null) => void) | null>(null);
+  const fileConflictResolveRef = useRef<((v: FileConflictAction | "cancel") => void) | null>(null);
   const promptResolveRef = useRef<((v: string | null) => void) | null>(null);
   const {
     tabs,
@@ -205,7 +216,7 @@ export default function App() {
   const [tablePickerOpen, setTablePickerOpen] = useState(false);
   const [confirmMessage, setConfirmMessage] = useState<string | null>(null);
   const [linkDialogText, setLinkDialogText] = useState<string | null>(null);
-  const [imageDialogAlt, setImageDialogAlt] = useState<string | null>(null);
+  const [imageDialog, setImageDialog] = useState<{ alt: string; path: string } | null>(null);
   const [promptDialog, setPromptDialog] = useState<PromptRequest | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -290,19 +301,38 @@ export default function App() {
     }
   }, [locale, show, showSuccess]);
 
-  const resolveImportConflict = useCallback(async (action: "overwrite" | "rename" | "cancel") => {
-    const conflict = importConflict;
+  const askFileConflict = useCallback((path: string, targetDir: string) => (
+    new Promise<FileConflictAction | "cancel">((resolve) => {
+      fileConflictResolveRef.current = resolve;
+      setImportConflict({ path, targetDir });
+    })
+  ), []);
+
+  const resolveImportConflict = useCallback((action: FileConflictAction | "cancel") => {
+    fileConflictResolveRef.current?.(action);
+    fileConflictResolveRef.current = null;
     setImportConflict(null);
-    if (!conflict || action === "cancel") return;
+  }, []);
+
+  const handleTransferPath = useCallback(async (
+    path: string,
+    targetDir: string,
+    mode: "copy" | "cut",
+  ): Promise<string | null> => {
+    const transferMode: DocumentTransferMode = mode === "cut" ? "move" : "copy";
     try {
-      const copiedPath = action === "overwrite"
-        ? await api.copyFileToDirOverwrite(conflict.path, conflict.targetDir)
-        : await api.copyFileToDir(conflict.path, conflict.targetDir);
-      finishImportedFile(copiedPath, action === "rename");
+      return await transferDocumentWithManagedImages(path, targetDir, transferMode);
     } catch (error) {
-      showError(error);
+      if (!(error instanceof Error) || error.message !== t(locale, "error.fileExists")) throw error;
+      const action = await askFileConflict(path, targetDir);
+      if (action === "cancel") return null;
+      const transferredPath = await transferDocumentWithManagedImages(path, targetDir, transferMode, action);
+      if (action === "rename") {
+        setFileRenameRequest({ path: transferredPath, id: ++fileRenameIdRef.current });
+      }
+      return transferredPath;
     }
-  }, [importConflict, finishImportedFile, showError]);
+  }, [locale, askFileConflict]);
 
   const fileName = useMemo(() => {
     if (!active?.path) return t(locale, "title.untitled");
@@ -336,6 +366,11 @@ export default function App() {
       const preparedImages = await preparePendingImages(tab.path);
       await api.writeFile(tab.path, tab.content);
       commitPendingImages(preparedImages);
+      try {
+        await cleanupRemovedManagedImages(tab.path, tab.diskContent, tab.content);
+      } catch (error) {
+        showError(error);
+      }
       markSaved(tab.id, tab.path, tab.content);
       return true;
     } catch (error) {
@@ -442,6 +477,13 @@ export default function App() {
         const preparedImages = await preparePendingImages(path);
         await api.writeFile(path, tab.content);
         commitPendingImages(preparedImages);
+        if (tab.path && tab.path === path) {
+          try {
+            await cleanupRemovedManagedImages(path, tab.diskContent, tab.content);
+          } catch (error) {
+            showError(error);
+          }
+        }
         markSaved(tab.id, path, tab.content);
         addRecentFile(path);
         setRecentFiles(getRecentFiles());
@@ -463,11 +505,20 @@ export default function App() {
     if (!tab) return;
     const p = await api.saveFileDialog(tab.path ?? undefined);
     if (!p) return;
+    let managedImages: Awaited<ReturnType<typeof prepareManagedImagesForSaveAs>> | null = null;
+    let documentWritten = false;
     try {
+      managedImages = await prepareManagedImagesForSaveAs(tab.path, p, tab.content);
       const preparedImages = await preparePendingImages(p);
-      await api.writeFile(p, tab.content);
+      await api.writeFile(p, managedImages.content);
+      documentWritten = true;
       commitPendingImages(preparedImages);
-      markSaved(tab.id, p, tab.content);
+      const currentTab = useTabsStore.getState().tabs.find((candidate) => candidate.id === tab.id);
+      if (currentTab) {
+        const currentContent = rewriteManagedImageReferences(currentTab.content, managedImages.replacements);
+        if (currentContent !== currentTab.content) updateContent(tab.id, currentContent);
+      }
+      markSaved(tab.id, p, managedImages.content);
       addRecentFile(p);
       setRecentFiles(getRecentFiles());
       setTitle(p);
@@ -475,9 +526,10 @@ export default function App() {
       await api.watchFile(p);
       showSuccess(t(locale, "toast.saved"));
     } catch (e) {
+      if (!documentWritten) await managedImages?.rollback();
       showError(e);
     }
-  }, [getActive, markSaved, setTitle, showError, showSuccess, locale]);
+  }, [getActive, markSaved, setTitle, showError, showSuccess, locale, updateContent]);
 
   const exportHtml = useCallback(async () => {
     const tab = getActive();
@@ -486,7 +538,8 @@ export default function App() {
     if (!path) return;
     try {
       const { markdownToHtml } = await import("./render/export");
-      const html = await markdownToHtml(tab.content, resolveTheme(), locale, tab.path, true, markdownTheme);
+      const pendingImages = await pendingImageDataUrls();
+      const html = await markdownToHtml(tab.content, resolveTheme(), locale, tab.path, true, markdownTheme, pendingImages);
       await api.writeFile(path, html);
       showSuccess(t(locale, "toast.exported"));
     } catch (e) {
@@ -503,7 +556,8 @@ export default function App() {
     if (!path) return;
     try {
       const { markdownToHtml } = await import("./render/export");
-      const html = await markdownToHtml(tab.content, resolveTheme(), locale, tab.path, true, markdownTheme);
+      const pendingImages = await pendingImageDataUrls();
+      const html = await markdownToHtml(tab.content, resolveTheme(), locale, tab.path, true, markdownTheme, pendingImages);
       await api.exportPdf(path, html);
       showSuccess(t(locale, "toast.exported"));
     } catch (e) {
@@ -647,7 +701,8 @@ export default function App() {
       }
       if (affectsActive) fileLoadRequestRef.current++;
       try {
-        await api.removePath(path);
+        if (!isDir && /\.(md|markdown|txt)$/i.test(path)) await removeDocumentWithManagedImages(path);
+        else await api.removePath(path);
         removeRecentFilesUnder(path);
         clearLastFileUnder(path);
         if (affectsActive) {
@@ -884,6 +939,12 @@ export default function App() {
         return;
       }
 
+      const activeTab = getActive();
+      if (activeTab?.dirty && !(await saveTab(activeTab.id))) {
+        await update.close();
+        return;
+      }
+
       let downloaded = 0;
       let total = 0;
       let percent = 0;
@@ -934,7 +995,7 @@ export default function App() {
       updateRunningRef.current = false;
       setUpdateProgress(null);
     }
-  }, [askConfirm, locale, show, showError, showSuccess]);
+  }, [askConfirm, getActive, locale, saveTab, show, showError, showSuccess]);
 
   // 初始化 effect 里用到的回调放进 ref：直接进依赖数组的话，saveTab 依赖 tabs，
   // 每敲一个字符整个 effect 就会重挂一次（重复注册监听、关掉文件监听、重载文件）
@@ -1122,10 +1183,10 @@ export default function App() {
           linkResolveRef.current = resolve;
           setLinkDialogText(defaultText);
         }),
-      pickImage: (defaultAlt) =>
+      pickImage: (defaultAlt, defaultPath = "") =>
         new Promise((resolve) => {
           imageResolveRef.current = resolve;
-          setImageDialogAlt(defaultAlt);
+          setImageDialog({ alt: defaultAlt, path: defaultPath });
         }),
       requestSave: () => saveTab(),
       requestSearch: openDocumentSearch,
@@ -1168,14 +1229,10 @@ export default function App() {
           if (disposed) return;
           if (targetDir) {
             try {
-              const copiedPath = await api.copyFileToDirStrict(path, targetDir);
-              finishImportedFile(copiedPath, true);
+              const copiedPath = await handleTransferPath(path, targetDir, "copy");
+              if (copiedPath) finishImportedFile(copiedPath, basename(copiedPath) !== basename(path));
             } catch (error) {
-              if (error instanceof Error && error.message === t(locale, "error.fileExists")) {
-                setImportConflict({ path, targetDir });
-              } else {
-                showError(error);
-              }
+              showError(error);
             }
             return;
           }
@@ -1190,7 +1247,7 @@ export default function App() {
       disposed = true;
       unlisten?.();
     };
-  }, [loadFile, showOutlineForExternalOpen, finishImportedFile, locale, showError]);
+  }, [loadFile, showOutlineForExternalOpen, finishImportedFile, handleTransferPath, showError]);
 
   useEffect(() => {
     const win = getCurrentWindow();
@@ -1234,7 +1291,7 @@ export default function App() {
       tablePickerOpen ||
       confirmMessage ||
       linkDialogText !== null ||
-      imageDialogAlt !== null ||
+      imageDialog !== null ||
       promptDialog ||
       importConflict ||
       shortcutsOpen ||
@@ -1347,7 +1404,7 @@ export default function App() {
     tablePickerOpen,
     confirmMessage,
     linkDialogText,
-    imageDialogAlt,
+    imageDialog,
     promptDialog,
     importConflict,
     shortcutsOpen,
@@ -1623,6 +1680,7 @@ export default function App() {
               onCreateFileInDir={folderPaths.length ? handleCreateFileInFolder : undefined}
               onCreateFolderInDir={folderPaths.length ? handleCreateFolderInDir : undefined}
               onRenamePath={folderPaths.length ? handleRenamePath : undefined}
+              onTransferPath={folderPaths.length ? handleTransferPath : undefined}
               onMovePath={folderPaths.length ? handleMovePath : undefined}
               onDeletePath={folderPaths.length ? handleDeletePath : undefined}
               onRemoveFolder={handleRemoveWorkspaceFolder}
@@ -1854,10 +1912,11 @@ export default function App() {
           }}
         />
       )}
-      {imageDialogAlt !== null && (
+      {imageDialog !== null && (
         <ImageInsertDialog
           locale={locale}
-          defaultAlt={imageDialogAlt}
+          defaultAlt={imageDialog.alt}
+          defaultPath={imageDialog.path}
           onBrowse={async () => {
             const picked = await api.openImageDialog();
             if (!picked) return null;
@@ -1868,12 +1927,12 @@ export default function App() {
           onConfirm={(alt, path) => {
             imageResolveRef.current?.({ alt, path });
             imageResolveRef.current = null;
-            setImageDialogAlt(null);
+            setImageDialog(null);
           }}
           onCancel={() => {
             imageResolveRef.current?.(null);
             imageResolveRef.current = null;
-            setImageDialogAlt(null);
+            setImageDialog(null);
           }}
         />
       )}

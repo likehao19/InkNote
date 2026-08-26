@@ -98,7 +98,7 @@ export class ImageWidget extends WidgetType {
     attachBlockSelection(root, {
       onEdit: (view, wrap) => {
         void (async () => {
-          const picked = await editorPickImage(this.alt);
+          const picked = await editorPickImage(this.alt, this.src);
           if (!picked || !picked.path.trim()) return;
           const range = currentBlockRange(view, wrap);
           if (!range) return;

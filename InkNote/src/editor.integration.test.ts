@@ -38,6 +38,9 @@ afterEach(() => {
 describe("Markdown 所见即所得预览", () => {
   it("keeps the complete bundled sample in live preview mode", () => {
     const { parent, handle } = mount(sampleMarkdown);
+    expect(sampleMarkdown).not.toContain("\b");
+    expect(sampleMarkdown).toContain("\\begin{aligned}");
+    expect(sampleMarkdown).toContain("\\end{aligned}");
     expect(parent.querySelector(".md-frontmatter-widget")).not.toBeNull();
     let tables = 0;
     let fencedCode = 0;

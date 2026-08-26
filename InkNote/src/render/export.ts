@@ -174,10 +174,11 @@ export async function markdownToHtml(
   mdPath?: string | null,
   embedImages = false,
   markdownTheme: MarkdownTheme = "github",
+  pendingImages: ReadonlyMap<string, string> = new Map(),
 ): Promise<string> {
   let bodyHtml = await markdownToBodyHtml(md, theme);
-  if (embedImages && mdPath) {
-    bodyHtml = await embedImagesInHtml(bodyHtml, mdPath);
+  if (embedImages) {
+    bodyHtml = await embedImagesInHtml(bodyHtml, mdPath ?? null, pendingImages);
   }
   const exportKatexCss = embedImages ? await embedFontUrlsInCss(katexCss) : katexCss;
   const themeCss = `${theme === "dark" ? DARK_CSS : ""}${markdownThemeCss(markdownTheme, theme)}`;
@@ -244,7 +245,25 @@ async function fileToDataUrl(absPath: string): Promise<string | null> {
   return urlToDataUrl(convertFileSrc(absPath));
 }
 
-export async function embedImagesInHtml(html: string, mdPath: string): Promise<string> {
+function pendingImageDataUrl(
+  pendingImages: ReadonlyMap<string, string>,
+  source: string,
+): string | null {
+  const normalized = source.replace(/^\.\//, "");
+  const decoded = (() => {
+    try { return decodeURIComponent(normalized); } catch { return normalized; }
+  })();
+  return pendingImages.get(source)
+    ?? pendingImages.get(normalized)
+    ?? pendingImages.get(decoded)
+    ?? null;
+}
+
+export async function embedImagesInHtml(
+  html: string,
+  mdPath: string | null,
+  pendingImages: ReadonlyMap<string, string> = new Map(),
+): Promise<string> {
   const re = /<img([^>]*)\ssrc="([^"]+)"([^>]*)>/gi;
   const parts: Array<{ match: string; src: string }> = [];
   let m: RegExpExecArray | null;
@@ -254,6 +273,12 @@ export async function embedImagesInHtml(html: string, mdPath: string): Promise<s
   let out = html;
   for (const { match, src } of parts) {
     if (src.startsWith("data:") || /^https?:/i.test(src)) continue;
+    const pendingDataUrl = pendingImageDataUrl(pendingImages, src);
+    if (pendingDataUrl) {
+      out = out.replace(match, match.replace(src, pendingDataUrl));
+      continue;
+    }
+    if (!mdPath) continue;
     const abs = resolveAssetPath(mdPath, src);
     const dataUrl = await fileToDataUrl(abs);
     if (dataUrl) {

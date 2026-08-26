@@ -9,7 +9,7 @@ export type EditorBridgeHandlers = {
   confirm: (message: string) => Promise<boolean>;
   prompt: (req: PromptRequest) => Promise<string | null>;
   pickLink: (defaultText: string) => Promise<{ text: string; url: string } | null>;
-  pickImage: (defaultAlt: string) => Promise<{ alt: string; path: string } | null>;
+  pickImage: (defaultAlt: string, defaultPath?: string) => Promise<{ alt: string; path: string } | null>;
   requestSave: () => Promise<string | null>;
   requestSearch: (replace: boolean) => void;
   showError: (e: unknown) => void;
@@ -41,9 +41,12 @@ export async function editorPickLink(defaultText: string): Promise<{ text: strin
   return { text, url };
 }
 
-export async function editorPickImage(defaultAlt: string): Promise<{ alt: string; path: string } | null> {
-  if (handlers) return handlers.pickImage(defaultAlt);
-  const path = window.prompt("Image path", "");
+export async function editorPickImage(
+  defaultAlt: string,
+  defaultPath = "",
+): Promise<{ alt: string; path: string } | null> {
+  if (handlers) return handlers.pickImage(defaultAlt, defaultPath);
+  const path = window.prompt("Image path", defaultPath);
   if (!path) return null;
   return { alt: defaultAlt, path };
 }

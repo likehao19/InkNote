@@ -6,7 +6,7 @@ on:
       tag:
         description: "Existing release tag to build or repair"
         required: true
-        default: "v0.2.1"
+        default: "v0.2.2"
   push:
     tags:
       - "v*"
@@ -20,21 +20,21 @@ jobs:
       matrix:
         include:
           - platform: windows-latest
-            args: "--bundles nsis,msi"
+            target: ""
+            args: "--bundles nsis"
+            asset_pattern: "InkNote-Windows-x64-Setup[ext]"
           - platform: macos-latest
-            args: "--target universal-apple-darwin --bundles app,dmg"
-          - platform: ubuntu-22.04
-            args: "--bundles appimage,deb"
+            target: x86_64-apple-darwin
+            args: "--target x86_64-apple-darwin --bundles app,dmg"
+            asset_pattern: "InkNote-macOS-x86_64[ext]"
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            args: "--target aarch64-apple-darwin --bundles app,dmg"
+            asset_pattern: "InkNote-macOS-arm64[ext]"
     runs-on: ${{ matrix.platform }}
 
     steps:
       - uses: actions/checkout@v7
-
-      - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
 
       - uses: pnpm/action-setup@v4
         with:
@@ -47,8 +47,12 @@ jobs:
           cache-dependency-path: InkNote/pnpm-lock.yaml
 
       - uses: dtolnay/rust-toolchain@stable
+        if: matrix.target == ''
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: matrix.target != ''
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.target }}
 
       - uses: swatinem/rust-cache@v2
         with:
@@ -62,7 +66,7 @@ jobs:
         working-directory: InkNote
         run: pnpm test
 
-      - uses: tauri-apps/tauri-action@v0.6.2
+      - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -74,13 +78,14 @@ jobs:
           releaseBody: |
             InkNote v__VERSION__
 
-            - Windows: NSIS / MSI
-            - macOS: Universal DMG (Intel + Apple Silicon)
-            - Linux: AppImage / Debian package
+            - Windows x64：中文安装程序
+            - macOS Intel：x86_64 DMG
+            - macOS Apple 芯片：ARM64 DMG
           releaseDraft: false
           prerelease: false
-          includeUpdaterJson: false
+          uploadUpdaterJson: false
           retryAttempts: 2
+          releaseAssetNamePattern: ${{ matrix.asset_pattern }}
           args: ${{ matrix.args }}
 
   publish-updater-manifest:
@@ -122,10 +127,10 @@ jobs:
               -H 'Accept: application/octet-stream'
           }
 
-          windows_asset="$(pick_asset '-setup\.exe$')"
-          linux_asset="$(pick_asset '\.AppImage$')"
-          macos_asset="$(pick_asset '\.app\.tar\.gz$')"
-          for asset in "$windows_asset" "$linux_asset" "$macos_asset"; do
+          windows_asset="$(pick_asset '^InkNote-Windows-x64-Setup\.exe$')"
+          macos_x86_asset="$(pick_asset '^InkNote-macOS-x86_64\.app\.tar\.gz$')"
+          macos_arm_asset="$(pick_asset '^InkNote-macOS-arm64\.app\.tar\.gz$')"
+          for asset in "$windows_asset" "$macos_x86_asset" "$macos_arm_asset"; do
             if [[ -z "$asset" ]]; then
               echo "Missing one or more updater archives in release ${RELEASE_TAG}" >&2
               printf '%s\n' "$asset_names" >&2
@@ -134,8 +139,8 @@ jobs:
           done
 
           windows_signature="$(read_signature "$windows_asset")"
-          linux_signature="$(read_signature "$linux_asset")"
-          macos_signature="$(read_signature "$macos_asset")"
+          macos_x86_signature="$(read_signature "$macos_x86_asset")"
+          macos_arm_signature="$(read_signature "$macos_arm_asset")"
           base_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}"
 
           jq -n \
@@ -144,19 +149,18 @@ jobs:
             --arg pub_date "$published_at" \
             --arg windows_signature "$windows_signature" \
             --arg windows_url "${base_url}/${windows_asset}" \
-            --arg linux_signature "$linux_signature" \
-            --arg linux_url "${base_url}/${linux_asset}" \
-            --arg macos_signature "$macos_signature" \
-            --arg macos_url "${base_url}/${macos_asset}" \
+            --arg macos_x86_signature "$macos_x86_signature" \
+            --arg macos_x86_url "${base_url}/${macos_x86_asset}" \
+            --arg macos_arm_signature "$macos_arm_signature" \
+            --arg macos_arm_url "${base_url}/${macos_arm_asset}" \
             '{
               version: $version,
               notes: $notes,
               pub_date: $pub_date,
               platforms: {
                 "windows-x86_64": { signature: $windows_signature, url: $windows_url },
-                "linux-x86_64": { signature: $linux_signature, url: $linux_url },
-                "darwin-x86_64": { signature: $macos_signature, url: $macos_url },
-                "darwin-aarch64": { signature: $macos_signature, url: $macos_url }
+                "darwin-x86_64": { signature: $macos_x86_signature, url: $macos_x86_url },
+                "darwin-aarch64": { signature: $macos_arm_signature, url: $macos_arm_url }
               }
             }' > latest.json
 

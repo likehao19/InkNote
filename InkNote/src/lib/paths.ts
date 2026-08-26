@@ -57,5 +57,11 @@ export function resolveAssetPath(mdPath: string | null, src: string): string {
   const base = dirOf(mdPath);
   const sep = mdPath.includes("\\") ? "\\" : "/";
   if (src.startsWith("/") || /^[A-Za-z]:/.test(src)) return src;
-  return `${base}${sep}${src.replace(/\//g, sep)}`;
+  let decoded = src;
+  try {
+    decoded = decodeURIComponent(src);
+  } catch {
+    // Keep malformed user-authored paths unchanged.
+  }
+  return `${base}${sep}${decoded.replace(/\//g, sep)}`;
 }

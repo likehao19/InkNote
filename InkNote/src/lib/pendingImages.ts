@@ -46,6 +46,21 @@ export function snapshotPendingImages(): PendingImageSnapshot[] {
   }));
 }
 
+/** 导出 HTML/PDF 时把尚未落盘的图片内联，避免新文档或未保存图片出现断图。 */
+export async function pendingImageDataUrls(): Promise<Map<string, string>> {
+  const result = new Map<string, string>();
+  for (const [relPath, item] of pending) {
+    const dataUrl = await new Promise<string | null>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(new Blob([item.bytes as BlobPart], { type: item.mime }));
+    });
+    if (dataUrl) result.set(relPath, dataUrl);
+  }
+  return result;
+}
+
 /** 恢复关闭文档随附的内存图片，并重新创建可显示的 blob URL。 */
 export function restorePendingImages(snapshot: PendingImageSnapshot[]): void {
   clearPendingImages();

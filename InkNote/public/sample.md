@@ -133,14 +133,14 @@ pnpm tauri build
 块级公式适合独立展示：
 
 $$
-int_{-infty}^{infty} e^{-x^2} \, dx = sqrt{pi}
+\int_{-\infty}^{\infty} e^{-x^2} \, dx = \sqrt{\pi}
 $$
 
 $$
-egin{aligned}
+\begin{aligned}
 S_n &= \frac{n(a_1 + a_n)}{2} \\
 a_n &= a_1 + (n - 1)d
-end{aligned}
+\end{aligned}
 $$
 
 ---

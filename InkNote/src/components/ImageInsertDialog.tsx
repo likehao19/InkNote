@@ -7,6 +7,7 @@ import { useModalEscape } from "../lib/useModalEscape";
 interface Props {
   locale: Locale;
   defaultAlt: string;
+  defaultPath?: string;
   onBrowse: () => Promise<string | null>;
   onConfirm: (alt: string, path: string) => void;
   onCancel: () => void;
@@ -15,12 +16,13 @@ interface Props {
 export default function ImageInsertDialog({
   locale,
   defaultAlt,
+  defaultPath = "",
   onBrowse,
   onConfirm,
   onCancel,
 }: Props) {
   const [alt, setAlt] = useState(defaultAlt);
-  const [path, setPath] = useState("");
+  const [path, setPath] = useState(defaultPath);
   useModalEscape(true, onCancel);
 
   const browse = async () => {
@@ -30,21 +32,22 @@ export default function ImageInsertDialog({
 
   return (
     <div className="modal-backdrop" onClick={onCancel}>
-      <div className="modal modal-sm" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal-sm image-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>{t(locale, "dialog.imageTitle")}</h2>
         </div>
         <div className="modal-body">
-          <div className="setting-row">
-            <div className="setting-label">{t(locale, "dialog.imageAlt")}</div>
-            <div className="setting-control">
-              <input type="text" value={alt} onChange={(e) => setAlt(e.target.value)} autoFocus />
+          <div className="image-dialog-field">
+            <label className="image-dialog-label" htmlFor="image-alt">{t(locale, "dialog.imageAlt")}</label>
+            <div className="image-dialog-control">
+              <input id="image-alt" type="text" value={alt} onChange={(e) => setAlt(e.target.value)} autoFocus />
             </div>
           </div>
-          <div className="setting-row">
-            <div className="setting-label">{t(locale, "dialog.imagePath")}</div>
-            <div className="setting-control setting-control-row">
+          <div className="image-dialog-field">
+            <label className="image-dialog-label" htmlFor="image-path">{t(locale, "dialog.imagePath")}</label>
+            <div className="image-dialog-control setting-control-row">
               <input
+                id="image-path"
                 type="text"
                 value={path}
                 onChange={(e) => setPath(e.target.value)}
