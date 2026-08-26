@@ -1,6 +1,7 @@
 import {
   altShortcut,
   deleteShortcut,
+  findReplaceShortcut,
   fullscreenShortcut,
   modShortcut,
   redoShortcut,
@@ -41,7 +42,7 @@ const SHORTCUT_GROUPS: { titleKey: MessageKey; items: [MessageKey, string][] }[]
       ["shortcuts.pastePlain", modShortcut("Shift+V")],
       ["menu.selectAll", modShortcut("A")],
       ["shortcuts.find", modShortcut("F")],
-      ["shortcuts.findReplace", modShortcut("H")],
+      ["shortcuts.findReplace", findReplaceShortcut()],
       ["shortcuts.globalSearch", modShortcut("Shift+F")],
     ],
   },

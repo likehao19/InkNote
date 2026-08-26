@@ -23,7 +23,7 @@ describe("settings store", () => {
     resetSettingsStoreForTests();
   });
 
-  it("uses English when no language has been selected", () => {
+  it("uses Chinese when no language has been selected", () => {
     expect(getLocale()).toBe("zh");
   });
 

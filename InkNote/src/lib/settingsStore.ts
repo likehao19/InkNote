@@ -154,6 +154,11 @@ export function removeStoredValue(key: string) {
   persist();
 }
 
+/** 等待已经排队的设置写入完成，供应用退出前调用。 */
+export async function flushSettingsStore(): Promise<void> {
+  await saveChain;
+}
+
 export function resetSettingsStoreForTests() {
   settings = {};
   initialized = false;

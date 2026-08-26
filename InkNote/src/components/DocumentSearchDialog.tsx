@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { isMac } from "../lib/platform";
 import type { Locale } from "../lib/i18n";
 import { t } from "../lib/i18n";
 import { useModalEscape } from "../lib/useModalEscape";
@@ -150,12 +151,16 @@ export default function DocumentSearchDialog({
   };
 
   const onKeyDown = (event: React.KeyboardEvent) => {
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
-      event.preventDefault();
-      inputRef.current?.focus();
-    } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "h") {
+    const key = event.key.toLowerCase();
+    const findReplacePressed = isMac
+      ? event.metaKey && event.altKey && key === "f" && !event.shiftKey
+      : event.ctrlKey && !event.altKey && key === "h" && !event.shiftKey;
+    if (findReplacePressed) {
       event.preventDefault();
       setShowReplace(true);
+    } else if ((event.ctrlKey || event.metaKey) && !event.altKey && key === "f") {
+      event.preventDefault();
+      inputRef.current?.focus();
     } else if (event.key === "ArrowDown") {
       event.preventDefault();
       setActiveIndex((index) => Math.min(index + 1, matches.length - 1));

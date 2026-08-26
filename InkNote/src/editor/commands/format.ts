@@ -5,6 +5,7 @@ import { insertTableAtCursor, mutateTableInView } from "../widgets/table";
 import { editorPickLink, editorPickImage, editorRequestSearch, editorShowError, editorShowMessage } from "../../lib/editorBridge";
 import { getLocale, t } from "../../lib/i18n";
 import { buildMarkdownToc } from "../../lib/markdownOutline";
+import { isMac } from "../../lib/platform";
 
 export type EditorAction =
   | "undo"
@@ -425,7 +426,7 @@ export function editorActionKeymap(): Array<{ key: string; run: (view: EditorVie
     { key: "Mod-i", run: (v) => runEditorAction(v, "italic") },
     { key: "Mod-k", run: (v) => runEditorAction(v, "link") },
     { key: "Mod-f", run: (v) => runEditorAction(v, "find") },
-    { key: "Mod-h", run: (v) => runEditorAction(v, "findReplace") },
+    { key: isMac ? "Mod-Alt-f" : "Mod-h", run: (v) => runEditorAction(v, "findReplace") },
     { key: "Mod-1", run: (v) => runEditorAction(v, "heading1") },
     { key: "Mod-2", run: (v) => runEditorAction(v, "heading2") },
     { key: "Mod-3", run: (v) => runEditorAction(v, "heading3") },

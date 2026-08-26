@@ -25,3 +25,7 @@ export function deleteShortcut(): string {
 export function fullscreenShortcut(): string {
   return isMac ? "⌃+⌘+F" : "F11";
 }
+
+export function findReplaceShortcut(): string {
+  return isMac ? "⌘+⌥+F" : modShortcut("H");
+}

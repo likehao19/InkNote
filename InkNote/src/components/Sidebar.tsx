@@ -17,6 +17,7 @@ interface Props {
   onCreateFileInDir?: (parentDir: string, name: string) => void | Promise<void>;
   onCreateFolderInDir?: (parentDir: string, name: string) => void | Promise<void>;
   onRenamePath?: (path: string, newName: string, isDir: boolean) => boolean | Promise<boolean>;
+  onMovePath?: (oldPath: string, newPath: string) => void;
   onDeletePath?: (path: string, isDir: boolean) => boolean | Promise<boolean>;
   outline: { level: number; text: string; line: number }[];
   activeOutlineLine: number | null;
@@ -44,6 +45,7 @@ export default function Sidebar({
   onCreateFileInDir,
   onCreateFolderInDir,
   onRenamePath,
+  onMovePath,
   onDeletePath,
   outline,
   activeOutlineLine,
@@ -148,6 +150,7 @@ export default function Sidebar({
                     onCreateFile={onCreateFileInDir ?? (async () => {})}
                     onCreateFolder={onCreateFolderInDir ?? (async () => {})}
                     onRenamePath={onRenamePath ?? (async () => false)}
+                    onMovePath={onMovePath}
                     onDelete={onDeletePath ?? (() => false)}
                     onRemoveRoot={onRemoveFolder}
                     onError={onError}

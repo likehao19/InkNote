@@ -24,6 +24,7 @@ interface DocState {
     content: string;
     diskContent: string;
     dirty: boolean;
+    mode: EditorMode;
   }) => void;
   updateContent: (id: string, content: string) => void;
   setMode: (id: string, mode: EditorMode) => void;
@@ -99,7 +100,7 @@ export const useTabsStore = create<DocState>((set, get) => ({
       content: snap.content,
       diskContent: snap.diskContent,
       dirty: snap.dirty,
-      mode: getDefaultEditorMode(),
+      mode: snap.mode,
     };
     set({ tabs: [tab], activeId: tab.id });
   },

@@ -53,6 +53,7 @@ import { editorActionKeymap, runEditorAction, type EditorAction } from "./editor
 import { parseFrontMatter } from "./lib/frontmatter";
 import { dirOf, resolveAssetPath } from "./lib/paths";
 import { addPendingImage } from "./lib/pendingImages";
+import { IMAGE_ASSET_DIR } from "./lib/imageAssets";
 import { htmlToMarkdown } from "./lib/htmlPaste";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import * as api from "./lib/tauri";
@@ -909,7 +910,7 @@ function typewriterExt(enabled: boolean): Extension {
 /**
  * 插入图片。
  *
- * 文档已保存 → 直接写到同目录的 assets/；还没保存 → 先在内存暂存并立刻回显，
+ * 文档已保存 → 直接写到同目录的 .inknote-assets/；还没保存 → 先在内存暂存并立刻回显，
  * 等保存时统一落盘。任何情况下都不打断书写去弹保存框。
  */
 async function insertImage(
@@ -920,7 +921,7 @@ async function insertImage(
   mime = "image/png",
 ) {
   const name = `image-${Date.now()}.${ext}`;
-  const rel = `assets/${name}`;
+  const rel = `${IMAGE_ASSET_DIR}/${name}`;
 
   if (filePath) {
     const abs = `${dirOf(filePath)}/${rel}`.replace(/\\/g, "/");

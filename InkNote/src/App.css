@@ -2003,6 +2003,66 @@ html.platform-mac .toast { bottom: calc(var(--statusbar-height) + 20px); }
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
+.update-progress {
+  position: fixed;
+  right: 18px;
+  bottom: calc(var(--statusbar-height) + 16px);
+  z-index: 290;
+  width: min(330px, calc(100vw - 36px));
+  padding: 12px 14px;
+  color: var(--fg);
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+  backdrop-filter: blur(12px);
+  animation: update-progress-in 0.18s ease-out;
+}
+.update-progress-copy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 9px;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.update-progress-detail {
+  flex: none;
+  color: var(--fg-muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.update-progress-track {
+  position: relative;
+  height: 3px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--fg) 12%, transparent);
+}
+.update-progress-track > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.16s ease-out;
+}
+.update-progress-track.indeterminate > span {
+  width: 42%;
+  animation: update-progress-indeterminate 1.15s ease-in-out infinite;
+}
+html.platform-mac .update-progress { bottom: calc(var(--statusbar-height) + 20px); }
+@keyframes update-progress-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes update-progress-indeterminate {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(340%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .update-progress,
+  .update-progress-track.indeterminate > span { animation: none; }
+}
+
 /* ---------- 设置弹窗 ---------- */
 .modal-backdrop {
   position: fixed;

@@ -1,5 +1,5 @@
 import type { EditorAction } from "../editor";
-import { modShortcut, redoShortcut, shortcut } from "../lib/shortcuts";
+import { findReplaceShortcut, modShortcut, redoShortcut, shortcut } from "../lib/shortcuts";
 import { basename } from "../lib/paths";
 import type { Locale } from "../lib/i18n";
 import { t } from "../lib/i18n";
@@ -42,6 +42,7 @@ export interface MenuState {
   recentFiles: string[];
   canReopenClosed?: boolean;
   documentEditable: boolean;
+  pdfExportSupported: boolean;
 }
 
 export function buildMenuGroups(
@@ -84,7 +85,7 @@ export function buildMenuGroups(
           : []),
         { separator: true, label: "" },
         { label: tr("menu.exportHtml"), action: cb.onExportHtml },
-        { label: tr("menu.exportPdf"), action: cb.onExportPdf },
+        { label: tr("menu.exportPdf"), action: cb.onExportPdf, disabled: !state.pdfExportSupported },
         { separator: true, label: "" },
         { label: tr("menu.settings"), shortcut: modShortcut(","), action: cb.onOpenSettings },
       ],
@@ -101,7 +102,7 @@ export function buildMenuGroups(
         { label: tr("menu.selectAll"), shortcut: modShortcut("A"), action: () => run("selectAll") },
         { separator: true, label: "" },
         { label: tr("menu.find"), shortcut: modShortcut("F"), action: () => run("find") },
-        { label: tr("menu.findReplace"), shortcut: modShortcut("H"), action: () => run("findReplace") },
+        { label: tr("menu.findReplace"), shortcut: findReplaceShortcut(), action: () => run("findReplace") },
       ],
     },
     {

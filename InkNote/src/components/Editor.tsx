@@ -13,6 +13,7 @@ export interface EditorRef {
   runAction: (action: EditorAction) => void;
   insertTable: (rows: number, cols: number) => void;
   refreshPreview: () => void;
+  resetContent: (content: string) => void;
   getSelectedText: () => string;
 }
 
@@ -110,6 +111,23 @@ const Editor = forwardRef<EditorRef, Props>(function Editor(
       handleRef.current?.insertTable(rows, cols);
     },
     refreshPreview: () => handleRef.current?.refreshPreview(),
+    resetContent: (content) => {
+      const handle = handleRef.current;
+      if (!handle) return;
+      const view = handle.view;
+      const nextDoc = Text.of(content.split(/\r\n?|\n/));
+      const { anchor, head } = view.state.selection.main;
+      lastEmittedRef.current = content;
+      if (readOnly) handle.setReadOnly(false);
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: nextDoc },
+        selection: {
+          anchor: Math.min(anchor, nextDoc.length),
+          head: Math.min(head, nextDoc.length),
+        },
+      });
+      if (readOnly) handle.setReadOnly(true);
+    },
     getSelectedText: () => {
       const domSelection = window.getSelection();
       if (domSelection?.toString() && hostRef.current?.contains(domSelection.anchorNode)) {

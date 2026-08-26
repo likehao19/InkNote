@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { isMac } from "../lib/tauri";
+import { isLinux } from "../lib/platform";
 import MenuBar from "./MenuBar";
 import { buildMenuGroups } from "./menus";
 import WindowControls from "./WindowControls";
@@ -119,6 +120,7 @@ export default function Titlebar({
           recentFiles,
           canReopenClosed,
           documentEditable,
+          pdfExportSupported: !isLinux,
         },
         locale,
       ),

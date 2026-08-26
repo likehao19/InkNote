@@ -5,10 +5,11 @@ import { writeBinary } from "./tauri";
  * 文档还没保存时粘贴进来的图片。
  *
  * 不能因为「还不知道该存哪」就弹保存框打断书写：先把字节留在内存、
- * 用 blob URL 立刻回显，等文档拿到真实路径时再统一落盘到 assets/。
+ * 用 blob URL 立刻回显，等文档拿到真实路径时再统一落盘到 .inknote-assets/。
  */
 interface PendingImage {
   bytes: Uint8Array;
+  mime: string;
   url: string;
 }
 
@@ -17,7 +18,7 @@ const pending = new Map<string, PendingImage>();
 /** 暂存并返回可立即用于 <img> 的 URL；key 是插入到 Markdown 里的相对路径 */
 export function addPendingImage(relPath: string, bytes: Uint8Array, mime: string): string {
   const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: mime }));
-  pending.set(relPath, { bytes, url });
+  pending.set(relPath, { bytes, mime, url });
   return url;
 }
 
@@ -28,6 +29,27 @@ export function pendingImageUrl(relPath: string): string | null {
 export function clearPendingImages(): void {
   for (const item of pending.values()) URL.revokeObjectURL(item.url);
   pending.clear();
+}
+
+export interface PendingImageSnapshot {
+  relPath: string;
+  bytes: Uint8Array;
+  mime: string;
+}
+
+/** 保存“重新打开已关闭文档”所需的数据，不复用即将失效的 blob URL。 */
+export function snapshotPendingImages(): PendingImageSnapshot[] {
+  return [...pending.entries()].map(([relPath, item]) => ({
+    relPath,
+    bytes: item.bytes.slice(),
+    mime: item.mime,
+  }));
+}
+
+/** 恢复关闭文档随附的内存图片，并重新创建可显示的 blob URL。 */
+export function restorePendingImages(snapshot: PendingImageSnapshot[]): void {
+  clearPendingImages();
+  for (const item of snapshot) addPendingImage(item.relPath, item.bytes, item.mime);
 }
 
 export interface PreparedPendingImage {

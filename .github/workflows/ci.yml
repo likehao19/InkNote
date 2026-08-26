@@ -1,0 +1,58 @@
+name: Validate InkNote
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [windows-latest, macos-latest, ubuntu-22.04]
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: pnpm
+          cache-dependency-path: InkNote/pnpm-lock.yaml
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: InkNote/src-tauri -> target
+
+      - name: Install dependencies
+        working-directory: InkNote
+        run: pnpm install --frozen-lockfile
+
+      - name: Test frontend
+        working-directory: InkNote
+        run: pnpm test
+
+      - name: Build frontend
+        working-directory: InkNote
+        run: pnpm build
+
+      - name: Check Rust backend
+        working-directory: InkNote
+        run: cargo check --all-targets --manifest-path src-tauri/Cargo.toml

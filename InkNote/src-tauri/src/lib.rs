@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicU64 as FileAtomicU64, Ordering as FileOrdering};
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 use std::{
     sync::{
         atomic::{AtomicU64, AtomicU8, Ordering},
@@ -13,7 +13,7 @@ use std::{
     },
     time::Duration,
 };
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 use tauri::{webview::PageLoadEvent, WebviewUrl, WebviewWindowBuilder};
 #[cfg(windows)]
 use webview2_com::{Microsoft::Web::WebView2::Win32::ICoreWebView2_7, PrintToPdfCompletedHandler};
@@ -189,10 +189,10 @@ fn get_startup_file(state: tauri::State<AppState>) -> Option<String> {
     state.startup_file.lock().unwrap().take()
 }
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 type PdfExportResult = Result<(), String>;
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 fn finish_pdf_export(
     sender: &Arc<Mutex<Option<mpsc::Sender<PdfExportResult>>>>,
     result: PdfExportResult,
@@ -200,6 +200,94 @@ fn finish_pdf_export(
     if let Some(sender) = sender.lock().unwrap().take() {
         let _ = sender.send(result);
     }
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+async fn export_pdf(app: tauri::AppHandle, path: String, html: String) -> PdfExportResult {
+    static NEXT_EXPORT_ID: AtomicU64 = AtomicU64::new(1);
+
+    let export_id = NEXT_EXPORT_ID.fetch_add(1, Ordering::Relaxed);
+    let label = format!("pdf-export-{export_id}");
+    let temp_path = std::env::temp_dir().join(format!("inknote-pdf-{export_id}.html"));
+    std::fs::write(&temp_path, html).map_err(|e| e.to_string())?;
+
+    let file_url = tauri::Url::from_file_path(&temp_path)
+        .map_err(|_| "Could not create the temporary PDF export URL".to_string())?;
+    let completed = Arc::new(AtomicU8::new(0));
+    let (sender, receiver) = mpsc::channel::<PdfExportResult>();
+    let sender = Arc::new(Mutex::new(Some(sender)));
+
+    let callback_sender = Arc::clone(&sender);
+    let callback_completed = Arc::clone(&completed);
+    let callback_temp_path = temp_path.clone();
+    let callback_output_path = PathBuf::from(path);
+    let window = WebviewWindowBuilder::new(&app, &label, WebviewUrl::External(file_url))
+        .title("InkNote PDF Export")
+        .visible(false)
+        .focusable(false)
+        .on_page_load(move |window, payload| {
+            if !matches!(payload.event(), PageLoadEvent::Finished)
+                || callback_completed.swap(1, Ordering::SeqCst) != 0
+            {
+                return;
+            }
+
+            let sender = Arc::clone(&callback_sender);
+            let output_path = callback_output_path.clone();
+            let temp_path = callback_temp_path.clone();
+            let close_window = window.clone();
+            let dispatch = window.with_webview(move |webview| unsafe {
+                use block2::RcBlock;
+                use objc2_foundation::{NSData, NSError};
+                use objc2_web_kit::WKWebView;
+
+                let completion_sender = Arc::clone(&sender);
+                let completion_temp_path = temp_path.clone();
+                let completion_window = close_window.clone();
+                let handler: RcBlock<dyn Fn(*mut NSData, *mut NSError)> =
+                    RcBlock::new(move |data: *mut NSData, error: *mut NSError| {
+                        let result = if !error.is_null() {
+                            Err("WebKit could not create the PDF file".to_string())
+                        } else if data.is_null() {
+                            Err("WebKit returned an empty PDF file".to_string())
+                        } else {
+                            std::fs::write(&output_path, (&*data).to_vec())
+                                .map_err(|e| e.to_string())
+                        };
+                        let _ = std::fs::remove_file(&completion_temp_path);
+                        finish_pdf_export(&completion_sender, result);
+                        let _ = completion_window.close();
+                    });
+
+                let webview = &*webview.inner().cast::<WKWebView>();
+                webview.createPDFWithConfiguration_completionHandler(None, &handler);
+            });
+            if let Err(error) = dispatch {
+                let _ = std::fs::remove_file(&callback_temp_path);
+                finish_pdf_export(&callback_sender, Err(error.to_string()));
+                let _ = window.close();
+            }
+        })
+        .build()
+        .map_err(|e| {
+            let _ = std::fs::remove_file(&temp_path);
+            e.to_string()
+        })?;
+
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        receiver
+            .recv_timeout(Duration::from_secs(60))
+            .map_err(|_| "PDF export timed out".to_string())?
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+
+    if result.is_err() {
+        let _ = window.close();
+        let _ = std::fs::remove_file(temp_path);
+    }
+    result
 }
 
 #[cfg(windows)]
@@ -339,7 +427,7 @@ async fn export_pdf(app: tauri::AppHandle, path: String, html: String) -> PdfExp
     result
 }
 
-#[cfg(not(windows))]
+#[cfg(all(not(windows), not(target_os = "macos")))]
 #[tauri::command]
 async fn export_pdf(_app: tauri::AppHandle, _path: String, _html: String) -> Result<(), String> {
     Err("pdf_export_unsupported".to_string())

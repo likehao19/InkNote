@@ -69,7 +69,7 @@ export async function setupMacNativeMenu(locale: Locale): Promise<void> {
       await command("editor:selectAll", tr("menu.selectAll"), "CmdOrCtrl+A"),
       await separator(),
       await command("editor:find", tr("menu.find"), "CmdOrCtrl+F"),
-      await command("editor:findReplace", tr("menu.findReplace"), "CmdOrCtrl+H"),
+      await command("editor:findReplace", tr("menu.findReplace"), "Cmd+Alt+F"),
       await command("search-files", tr("menu.globalSearch"), "CmdOrCtrl+Shift+F"),
     ],
   });

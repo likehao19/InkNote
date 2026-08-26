@@ -1807,7 +1807,10 @@ dependencies = [
 name = "inknote"
 version = "0.2.1"
 dependencies = [
+ "block2",
  "notify",
+ "objc2-foundation",
+ "objc2-web-kit",
  "serde",
  "serde_json",
  "tauri",

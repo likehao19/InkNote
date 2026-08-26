@@ -6,9 +6,10 @@ import { altShortcut, deleteShortcut, modShortcut } from "../lib/shortcuts";
 import type { Locale } from "../lib/i18n";
 import { t } from "../lib/i18n";
 import ContextMenu, { type ContextMenuItem } from "./ContextMenu";
-import { listWorkspaceFiles } from "../lib/workspaceSearch";
+import { invalidateWorkspaceFileCache, listWorkspaceFiles } from "../lib/workspaceSearch";
 import { getTreeExpansion, setTreeExpansion } from "../lib/treeState";
 import { isMac } from "../lib/platform";
+import { isManagedImageAssetDir } from "../lib/imageAssets";
 
 interface Props {
   locale: Locale;
@@ -24,6 +25,7 @@ interface Props {
   onCreateFile: (parentDir: string, name: string) => void | Promise<void>;
   onCreateFolder: (parentDir: string, name: string) => void | Promise<void>;
   onRenamePath: (path: string, newName: string, isDir: boolean) => boolean | Promise<boolean>;
+  onMovePath?: (oldPath: string, newPath: string) => void;
   onDelete: (path: string, isDir: boolean) => boolean | Promise<boolean>;
   onRemoveRoot?: (path: string) => void;
   onError?: (e: unknown) => void;
@@ -229,6 +231,7 @@ export default function FileTree({
   onCreateFile,
   onCreateFolder,
   onRenamePath,
+  onMovePath,
   onDelete,
   onRemoveRoot,
   onError,
@@ -257,7 +260,9 @@ export default function FileTree({
 
   const loadDir = useCallback(async (path: string) => {
     try {
-      const entries = await api.listDir(path);
+      const entries = (await api.listDir(path)).filter(
+        (entry) => !(entry.is_dir && isManagedImageAssetDir(entry.name)),
+      );
       setCache((prev) => new Map(prev).set(path, entries));
     } catch {
       setCache((prev) => new Map(prev).set(path, []));
@@ -357,6 +362,10 @@ export default function FileTree({
       onRenameRequestHandled?.(renameRequest.id);
     });
   }, [renameRequest, rootPath, loadDir, onSelectedPathChange, onRenameRequestHandled]);
+
+  useEffect(() => {
+    invalidateWorkspaceFileCache();
+  }, [dirTick, rootPath]);
 
   useEffect(() => {
     const query = filter.trim().toLowerCase();
@@ -586,7 +595,9 @@ export default function FileTree({
         if (mode === "copy") {
           await api.copyFileToDir(path, destDir);
         } else {
-          await api.moveFileToDir(path, destDir);
+          const movedPath = await api.moveFileToDir(path, destDir);
+          onMovePath?.(path, movedPath);
+          if (selectedPath === path) onSelectedPathChange(movedPath);
           onClipboardChange(null);
         }
         onRefresh();
@@ -594,7 +605,7 @@ export default function FileTree({
         onError?.(e);
       }
     },
-    [clipboard, onClipboardChange, onRefresh, onError],
+    [clipboard, onMovePath, selectedPath, onSelectedPathChange, onClipboardChange, onRefresh, onError],
   );
 
   const clipboardMenuItems = useCallback(
