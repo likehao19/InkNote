@@ -104,6 +104,10 @@ InkNote/
 
 ---
 
+## 交流社区
+
+- [LinuxDo](https://linux.do)
+
 ## English
 
 InkNote is a local-first WYSIWYG Markdown editor for Windows and macOS. It keeps one standard Markdown source file while providing seamless live preview, direct component editing, workspace search, HTML/PDF export, themes, and in-app updates.
