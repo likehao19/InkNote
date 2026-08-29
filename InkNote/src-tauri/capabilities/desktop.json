@@ -1,6 +1,7 @@
 {
   "identifier": "desktop-capability",
   "platforms": [
+    "linux",
     "macOS",
     "windows"
   ],

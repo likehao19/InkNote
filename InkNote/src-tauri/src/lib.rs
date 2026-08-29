@@ -710,6 +710,18 @@ fn remove_path(path: String) -> Result<(), String> {
     }
 }
 
+#[tauri::command]
+fn supports_in_app_update() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        std::env::var_os("APPIMAGE").is_some()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        true
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let startup_file = find_markdown_file(&std::env::args().collect::<Vec<_>>());
@@ -760,6 +772,7 @@ pub fn run() {
             create_file,
             rename_path,
             remove_path,
+            supports_in_app_update,
         ]);
 
     builder

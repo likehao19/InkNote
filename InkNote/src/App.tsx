@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { check } from "@tauri-apps/plugin-updater";
+import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import type { EditorRef } from "./components/Editor";
 import Titlebar from "./components/Titlebar";
@@ -11,7 +11,7 @@ import Settings from "./components/Settings";
 import ReloadDialog from "./components/ReloadDialog";
 import TableSizePicker from "./components/TableSizePicker";
 import Toast from "./components/Toast";
-import UpdateProgress, { type UpdateProgressState } from "./components/UpdateProgress";
+import type { UpdateProgressState } from "./components/UpdateProgress";
 import ConfirmDialog from "./components/ConfirmDialog";
 import LinkInsertDialog from "./components/LinkInsertDialog";
 import ImageInsertDialog from "./components/ImageInsertDialog";
@@ -172,6 +172,9 @@ export default function App() {
   } | null>(null);
   const { message: toastMessage, toastKind, show, showSuccess, showError } = useToast();
   const updateRunningRef = useRef(false);
+  const updateCheckRunningRef = useRef(false);
+  const automaticUpdateCheckStartedRef = useRef(false);
+  const availableUpdateRef = useRef<Update | null>(null);
   const closingRef = useRef(false);
   const fileLoadRequestRef = useRef(0);
   const [updateProgress, setUpdateProgress] = useState<UpdateProgressState | null>(null);
@@ -913,36 +916,80 @@ export default function App() {
     if (next) show(t(locale, "toast.typewriterHint"));
   }, [typewriterMode, toggleTypewriterMode, show, locale]);
 
+  const checkForUpdates = useCallback(async (announce: boolean) => {
+    if (updateRunningRef.current || updateCheckRunningRef.current) {
+      if (announce) show(t(locale, "update.inProgress"));
+      return;
+    }
+    if (availableUpdateRef.current) {
+      const version = availableUpdateRef.current.version;
+      setUpdateProgress({ phase: "available", version, percent: 0, downloaded: 0, total: 0 });
+      if (announce) show(t(locale, "update.ready", { v: version }));
+      return;
+    }
+
+    updateCheckRunningRef.current = true;
+    try {
+      if (!(await api.supportsInAppUpdate())) {
+        setUpdateProgress(null);
+        if (announce) show(t(locale, "update.unsupportedPackage"));
+        return;
+      }
+      if (announce) {
+        setUpdateProgress({ phase: "checking", percent: 0, downloaded: 0, total: 0 });
+      }
+      const update = await check();
+      if (!update) {
+        setUpdateProgress(null);
+        if (announce) showSuccess(t(locale, "update.latest"));
+        return;
+      }
+      availableUpdateRef.current = update;
+      setUpdateProgress({
+        phase: "available",
+        version: update.version,
+        percent: 0,
+        downloaded: 0,
+        total: 0,
+      });
+      if (announce) show(t(locale, "update.ready", { v: update.version }));
+    } catch (error) {
+      setUpdateProgress(null);
+      if (announce) showError(error);
+      else console.warn("Automatic update check failed", error);
+    } finally {
+      updateCheckRunningRef.current = false;
+    }
+  }, [locale, show, showError, showSuccess]);
+
   const handleCheckUpdates = useCallback(async () => {
+    await checkForUpdates(true);
+  }, [checkForUpdates]);
+
+  const handleInstallUpdate = useCallback(async () => {
     if (updateRunningRef.current) {
       show(t(locale, "update.inProgress"));
       return;
     }
-    updateRunningRef.current = true;
-    setUpdateProgress({
-      phase: "checking",
-      percent: 0,
-      downloaded: 0,
-      total: 0,
-    });
-    try {
-      const update = await check();
-      if (!update) {
-        setUpdateProgress(null);
-        showSuccess(t(locale, "update.latest"));
-        return;
-      }
-      setUpdateProgress(null);
-      const install = await askConfirm(t(locale, "update.available", { v: update.version }));
-      if (!install) {
-        await update.close();
-        return;
-      }
+    const update = availableUpdateRef.current;
+    if (!update) {
+      await checkForUpdates(true);
+      return;
+    }
 
+    updateRunningRef.current = true;
+    let installed = false;
+    try {
       const activeTab = getActive();
       if (activeTab?.dirty && !(await saveTab(activeTab.id))) {
-        await update.close();
         return;
+      }
+      const latestTab = useTabsStore.getState().getActive();
+      if (latestTab?.dirty) {
+        const savedAgain = latestTab.path
+          ? await saveExistingTab(latestTab)
+          : Boolean(await saveTab(latestTab.id));
+        if (!savedAgain || useTabsStore.getState().getActive()?.dirty) return;
       }
 
       let downloaded = 0;
@@ -987,15 +1034,47 @@ export default function App() {
           });
         }
       });
+      installed = true;
+      availableUpdateRef.current = null;
+      setUpdateProgress({
+        phase: "installing",
+        version: update.version,
+        percent: 100,
+        downloaded,
+        total,
+      });
       showSuccess(t(locale, "update.installed"));
       await relaunch();
     } catch (error) {
+      setUpdateProgress(installed
+        ? null
+        : {
+            phase: "available",
+            version: update.version,
+            percent: 0,
+            downloaded: 0,
+            total: 0,
+          });
       showError(error);
     } finally {
       updateRunningRef.current = false;
-      setUpdateProgress(null);
     }
-  }, [askConfirm, getActive, locale, saveTab, show, showError, showSuccess]);
+  }, [checkForUpdates, getActive, locale, saveExistingTab, saveTab, show, showError, showSuccess]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      if (automaticUpdateCheckStartedRef.current) return;
+      automaticUpdateCheckStartedRef.current = true;
+      void checkForUpdates(false);
+    }, 1800);
+    const interval = window.setInterval(() => {
+      void checkForUpdates(false);
+    }, 6 * 60 * 60 * 1000);
+    return () => {
+      window.clearTimeout(timeout);
+      window.clearInterval(interval);
+    };
+  }, [checkForUpdates]);
 
   // 初始化 effect 里用到的回调放进 ref：直接进依赖数组的话，saveTab 依赖 tabs，
   // 每敲一个字符整个 effect 就会重挂一次（重复注册监听、关掉文件监听、重载文件）
@@ -1641,6 +1720,7 @@ export default function App() {
         sidebarTab={sidebarTab}
         editorMode={active?.mode ?? "preview"}
         documentEditable={documentEditable}
+        updateState={updateProgress}
         onOpen={openFile}
         onOpenFolder={openFolder}
         onNewFile={handleNewFile}
@@ -1659,6 +1739,7 @@ export default function App() {
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenShortcuts={() => setShortcutsOpen(true)}
         onCheckUpdates={() => void handleCheckUpdates()}
+        onInstallUpdate={() => void handleInstallUpdate()}
         onOpenAbout={() => setAboutOpen(true)}
         onGlobalSearch={() => setGlobalSearchOpen(true)}
         onQuickOpen={() => setQuickOpenOpen(true)}
@@ -1884,7 +1965,6 @@ export default function App() {
         onCancel={() => setTablePickerOpen(false)}
       />
       <Toast message={toastMessage} kind={toastKind} />
-      <UpdateProgress locale={locale} state={updateProgress} />
       {confirmMessage && (
         <ConfirmDialog
           locale={locale}

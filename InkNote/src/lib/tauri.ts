@@ -121,6 +121,10 @@ export function removePath(path: string): Promise<void> {
   return invoke("remove_path", { path });
 }
 
+export function supportsInAppUpdate(): Promise<boolean> {
+  return invoke("supports_in_app_update");
+}
+
 export async function openFileDialog(): Promise<string | null> {
   const r = await openDialog({ multiple: false, filters: [MD_FILTER] });
   return typeof r === "string" ? r : null;

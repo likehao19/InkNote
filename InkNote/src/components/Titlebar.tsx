@@ -4,6 +4,7 @@ import { isLinux } from "../lib/platform";
 import MenuBar from "./MenuBar";
 import { buildMenuGroups } from "./menus";
 import WindowControls from "./WindowControls";
+import UpdateProgress, { type UpdateProgressState } from "./UpdateProgress";
 import appIcon from "../../src-tauri/icons/32x32.png";
 import type { SidebarTab } from "./Sidebar";
 import type { EditorAction, EditorMode } from "../editor";
@@ -20,6 +21,7 @@ interface Props {
   sidebarTab: SidebarTab;
   editorMode: EditorMode;
   documentEditable: boolean;
+  updateState: UpdateProgressState | null;
   onOpen: () => void;
   onOpenFolder: () => void;
   onNewFile: () => void;
@@ -38,6 +40,7 @@ interface Props {
   onOpenSettings: () => void;
   onOpenShortcuts: () => void;
   onCheckUpdates: () => void;
+  onInstallUpdate: () => void;
   onOpenAbout: () => void;
   onGlobalSearch?: () => void;
   onQuickOpen?: () => void;
@@ -57,6 +60,7 @@ export default function Titlebar({
   sidebarTab,
   editorMode,
   documentEditable,
+  updateState,
   onOpen,
   onOpenFolder,
   onNewFile,
@@ -75,6 +79,7 @@ export default function Titlebar({
   onOpenSettings,
   onOpenShortcuts,
   onCheckUpdates,
+  onInstallUpdate,
   onOpenAbout,
   onGlobalSearch,
   onQuickOpen,
@@ -160,8 +165,35 @@ export default function Titlebar({
     ],
   );
 
-  // macOS 使用系统顶部菜单栏和原生标题栏，窗口内容内不重复绘制一套菜单。
-  if (isMac) return null;
+  const documentTitle = (
+    <>
+      <span className="titlebar-brand">{t(locale, "title.brand")}</span>
+      <span className="titlebar-dot" aria-hidden="true">·</span>
+      <span className="file-name" title={fileName}>
+        {fileName}
+      </span>
+      {dirty && (
+        <span className="dirty-badge" title={t(locale, "title.unsaved")}>
+          {t(locale, "title.unsaved")}
+        </span>
+      )}
+    </>
+  );
+
+  // macOS 保留系统菜单和交通灯，仅用 WebView 绘制可交互的 Overlay 标题栏。
+  if (isMac) {
+    return (
+      <header className="titlebar titlebar-mac" data-tauri-drag-region="">
+        <div className="titlebar-mac-leading" data-tauri-drag-region="" />
+        <div className="titlebar-center" data-tauri-drag-region="">
+          {documentTitle}
+        </div>
+        <div className="titlebar-right">
+          <UpdateProgress locale={locale} state={updateState} onInstall={onInstallUpdate} />
+        </div>
+      </header>
+    );
+  }
 
   return (
     <header className="titlebar">
@@ -174,19 +206,11 @@ export default function Titlebar({
       </div>
 
       <div className="titlebar-center" data-tauri-drag-region="">
-        <span className="titlebar-brand">{t(locale, "title.brand")}</span>
-        <span className="titlebar-dot" aria-hidden="true">·</span>
-        <span className="file-name" title={fileName}>
-          {fileName}
-        </span>
-        {dirty && (
-          <span className="dirty-badge" title={t(locale, "title.unsaved")}>
-            {t(locale, "title.unsaved")}
-          </span>
-        )}
+        {documentTitle}
       </div>
 
       <div className="titlebar-right">
+        <UpdateProgress locale={locale} state={updateState} onInstall={onInstallUpdate} />
         {!isMac && <WindowControls locale={locale} />}
       </div>
     </header>

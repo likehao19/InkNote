@@ -88,6 +88,7 @@
 
 /* macOS 平台微调 */
 html.platform-mac {
+  --titlebar-height: 38px;
   --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
   --font-sidebar: var(--font-ui);
   --font-mono: "SF Mono", ui-monospace, Menlo, Monaco, monospace;
@@ -186,6 +187,16 @@ input, select, textarea, .editor-host { user-select: text; }
 
 .titlebar-left { padding-left: 4px; }
 .titlebar-right { padding-right: 0; }
+
+.titlebar-mac-leading {
+  width: 74px;
+  flex: none;
+  -webkit-app-region: drag;
+}
+.titlebar-mac .titlebar-center {
+  justify-content: flex-start;
+  padding-left: 0;
+}
 
 .titlebar-app-icon {
   display: flex;
@@ -2003,64 +2014,103 @@ html.platform-mac .toast { bottom: calc(var(--statusbar-height) + 20px); }
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
-.update-progress {
-  position: fixed;
-  right: 18px;
-  bottom: calc(var(--statusbar-height) + 16px);
-  z-index: 290;
-  width: min(330px, calc(100vw - 36px));
-  padding: 12px 14px;
-  color: var(--fg);
-  background: color-mix(in srgb, var(--bg) 94%, transparent);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
-  backdrop-filter: blur(12px);
-  animation: update-progress-in 0.18s ease-out;
-}
-.update-progress-copy {
+.update-slot {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  margin-bottom: 9px;
-  font-size: 12.5px;
-  line-height: 1.4;
+  justify-content: flex-end;
+  width: 232px;
+  height: 100%;
+  flex: none;
+  padding: 0 6px;
+  box-sizing: border-box;
+  -webkit-app-region: no-drag;
 }
-.update-progress-detail {
+.update-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 24px;
+  min-width: 0;
+  padding: 0 9px;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--fg);
+  background: var(--bg-active);
+  font: 600 11.5px/1 var(--font-ui);
+  letter-spacing: 0;
+  cursor: default;
+}
+.update-control.available {
+  border-color: var(--accent);
+  color: #ffffff;
+  background: var(--accent);
+  cursor: pointer;
+}
+.update-control.available:hover { background: var(--accent-hover); }
+.update-control:disabled { opacity: 1; }
+.update-control-icon { flex: none; }
+.update-control.checking .update-control-icon,
+.update-control.installing .update-control-icon {
+  animation: update-control-spin 1s linear infinite;
+}
+.update-control-label {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.update-control-detail {
+  margin-left: auto;
   flex: none;
   color: var(--fg-muted);
-  font-size: 11.5px;
+  font-size: 10.5px;
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
-.update-progress-track {
-  position: relative;
-  height: 3px;
+.update-control-track {
+  position: absolute;
+  right: 8px;
+  bottom: 4px;
+  left: 8px;
+  height: 2px;
   overflow: hidden;
   background: color-mix(in srgb, var(--fg) 12%, transparent);
+  pointer-events: none;
 }
-.update-progress-track > span {
+.update-control-track > span {
   display: block;
   height: 100%;
   background: var(--accent);
   transition: width 0.16s ease-out;
 }
-.update-progress-track.indeterminate > span {
+.update-control-track.indeterminate > span {
   width: 42%;
-  animation: update-progress-indeterminate 1.15s ease-in-out infinite;
+  animation: update-control-indeterminate 1.15s ease-in-out infinite;
 }
-html.platform-mac .update-progress { bottom: calc(var(--statusbar-height) + 20px); }
-@keyframes update-progress-in {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+@keyframes update-control-spin {
+  to { transform: rotate(360deg); }
 }
-@keyframes update-progress-indeterminate {
+@keyframes update-control-indeterminate {
   from { transform: translateX(-110%); }
   to { transform: translateX(340%); }
 }
+@media (max-width: 1100px) {
+  .update-slot { width: 180px; }
+  .update-control-detail { display: none; }
+}
+@media (max-width: 760px) {
+  .update-slot { width: 136px; }
+  .titlebar-center { padding-right: 4px; padding-left: 4px; }
+  .titlebar-brand,
+  .titlebar-dot { display: none; }
+}
 @media (prefers-reduced-motion: reduce) {
-  .update-progress,
-  .update-progress-track.indeterminate > span { animation: none; }
+  .update-control-icon,
+  .update-control-track.indeterminate > span { animation: none !important; }
 }
 
 /* ---------- 设置弹窗 ---------- */
