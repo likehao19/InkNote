@@ -16,6 +16,7 @@ on:
           - linux
           - desktop
           - all
+          - manifest
   push:
     tags:
       - "v*"
@@ -211,9 +212,14 @@ jobs:
     needs: [publish, publish-linux]
     if: |
       always() &&
-      (needs.publish.result == 'success' || needs.publish.result == 'skipped') &&
-      (needs.publish-linux.result == 'success' || needs.publish-linux.result == 'skipped') &&
-      !(needs.publish.result == 'skipped' && needs.publish-linux.result == 'skipped')
+      (
+        inputs.platforms == 'manifest' ||
+        (
+          (needs.publish.result == 'success' || needs.publish.result == 'skipped') &&
+          (needs.publish-linux.result == 'success' || needs.publish-linux.result == 'skipped') &&
+          !(needs.publish.result == 'skipped' && needs.publish-linux.result == 'skipped')
+        )
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -294,7 +300,7 @@ jobs:
               version: $version,
               notes: $notes,
               pub_date: $pub_date,
-              platforms: {
+              platforms: ({
                 "windows-x86_64": { signature: $windows_signature, url: $windows_url },
                 "darwin-x86_64": { signature: $macos_x86_signature, url: $macos_x86_url },
                 "darwin-aarch64": { signature: $macos_arm_signature, url: $macos_arm_url }
@@ -304,7 +310,7 @@ jobs:
               } else {} end) +
               (if $linux_arm_url != "" then {
                 "linux-aarch64": { signature: $linux_arm_signature, url: $linux_arm_url }
-              } else {} end)
+              } else {} end))
             }' > latest.json
 
           gh release upload "$RELEASE_TAG" latest.json --clobber
