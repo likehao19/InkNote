@@ -1057,13 +1057,13 @@ export default function App() {
       });
     };
 
-    track(api.onOpenFile((p) => {
+    const handleOpenFile = (p: string) => {
       if (!disposed) {
         void bootRef.current.loadFile(p, { external: true }).then((opened) => {
           if (opened && !disposed) showOutlineForExternalOpen();
         });
       }
-    }));
+    };
     track(api.onFileChanged(() => { if (!disposed) void bootRef.current.handleExternalChange(); }));
     track(api.onMenu((action) => {
       if (disposed) return;
@@ -1114,37 +1114,42 @@ export default function App() {
       }
     };
     window.addEventListener(NATIVE_MENU_EVENT, onNativeMenu);
-    api.getStartupFile().then((p) => {
-      if (disposed) return;
-      if (p) {
-        void bootRef.current.loadFile(p, { external: true }).then((opened) => {
-          if (opened && !disposed) showOutlineForExternalOpen();
-        });
+    void api.onOpenFile(handleOpenFile).then((f) => {
+      if (disposed) {
+        f();
         return;
       }
-      if (getRestoreLastFolder()) {
-        const savedFolders = getWorkspaceFolders();
-        void Promise.all(
-          savedFolders.map(async (folder) => {
-            try {
-              await api.listDir(folder);
-              return folder;
-            } catch {
-              return null;
-            }
-          }),
-        ).then((folders) => {
-          if (disposed) return;
-          const valid = folders.filter((folder): folder is string => folder !== null);
-          setFolderPaths(valid);
-          setWorkspaceFolders(valid);
-          if (!valid.length) clearLastFolder();
-        });
-      }
-      if (getRestoreLastFile()) {
-        const last = getLastFile();
-        if (last) void bootRef.current.loadFile(last);
-      }
+      un.push(f);
+      void api.getStartupFile().then((p) => {
+        if (disposed) return;
+        if (p) {
+          handleOpenFile(p);
+          return;
+        }
+        if (getRestoreLastFolder()) {
+          const savedFolders = getWorkspaceFolders();
+          void Promise.all(
+            savedFolders.map(async (folder) => {
+              try {
+                await api.listDir(folder);
+                return folder;
+              } catch {
+                return null;
+              }
+            }),
+          ).then((folders) => {
+            if (disposed) return;
+            const valid = folders.filter((folder): folder is string => folder !== null);
+            setFolderPaths(valid);
+            setWorkspaceFolders(valid);
+            if (!valid.length) clearLastFolder();
+          });
+        }
+        if (getRestoreLastFile()) {
+          const last = getLastFile();
+          if (last) void bootRef.current.loadFile(last);
+        }
+      });
     });
 
     return () => {

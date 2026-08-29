@@ -20,8 +20,29 @@ use webview2_com::{Microsoft::Web::WebView2::Win32::ICoreWebView2_7, PrintToPdfC
 #[cfg(windows)]
 use windows_core::{Interface, PCWSTR};
 
+struct OpenFileState {
+    pending: Option<String>,
+    frontend_ready: bool,
+}
+
+impl OpenFileState {
+    fn receive(&mut self, path: String) -> Option<String> {
+        if self.frontend_ready {
+            Some(path)
+        } else {
+            self.pending = Some(path);
+            None
+        }
+    }
+
+    fn register_frontend(&mut self) -> Option<String> {
+        self.frontend_ready = true;
+        self.pending.take()
+    }
+}
+
 struct AppState {
-    startup_file: Mutex<Option<String>>,
+    open_file: Mutex<OpenFileState>,
     watcher: Mutex<Option<RecommendedWatcher>>,
     watched_path: Mutex<Option<String>>,
     dir_watcher: Mutex<Option<RecommendedWatcher>>,
@@ -145,6 +166,18 @@ fn find_markdown_file(args: &[String]) -> Option<String> {
     args.iter().skip(1).find(|a| is_markdown(a)).cloned()
 }
 
+fn dispatch_open_file(app: &tauri::AppHandle, path: String) {
+    let ready_path = app
+        .state::<AppState>()
+        .open_file
+        .lock()
+        .unwrap()
+        .receive(path);
+    if let Some(path) = ready_path {
+        let _ = app.emit("open-file", path);
+    }
+}
+
 #[tauri::command]
 fn read_file(path: String) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|e| e.to_string())
@@ -186,7 +219,7 @@ fn list_dir(path: String) -> Result<Vec<DirEntry>, String> {
 
 #[tauri::command]
 fn get_startup_file(state: tauri::State<AppState>) -> Option<String> {
-    state.startup_file.lock().unwrap().take()
+    state.open_file.lock().unwrap().register_frontend()
 }
 
 #[cfg(any(windows, target_os = "macos"))]
@@ -686,7 +719,7 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             if let Some(path) = find_markdown_file(&argv) {
-                let _ = app.emit("open-file", path);
+                dispatch_open_file(app, path);
             }
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
@@ -697,7 +730,10 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_os::init())
         .manage(AppState {
-            startup_file: Mutex::new(startup_file),
+            open_file: Mutex::new(OpenFileState {
+                pending: startup_file,
+                frontend_ready: false,
+            }),
             watcher: Mutex::new(None),
             watched_path: Mutex::new(None),
             dir_watcher: Mutex::new(None),
@@ -734,9 +770,39 @@ pub fn run() {
             if let tauri::RunEvent::Opened { urls } = _event {
                 if let Some(url) = urls.into_iter().next() {
                     if let Ok(path) = url.to_file_path() {
-                        let _ = _app.emit("open-file", path.to_string_lossy().to_string());
+                        dispatch_open_file(_app, path.to_string_lossy().to_string());
                     }
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::OpenFileState;
+
+    #[test]
+    fn open_file_waits_until_frontend_is_registered() {
+        let mut state = OpenFileState {
+            pending: None,
+            frontend_ready: false,
+        };
+
+        assert_eq!(state.receive("cold-start.md".into()), None);
+        assert_eq!(state.register_frontend().as_deref(), Some("cold-start.md"));
+    }
+
+    #[test]
+    fn open_file_is_dispatched_after_frontend_is_registered() {
+        let mut state = OpenFileState {
+            pending: None,
+            frontend_ready: false,
+        };
+
+        assert_eq!(state.register_frontend(), None);
+        assert_eq!(
+            state.receive("warm-open.md".into()).as_deref(),
+            Some("warm-open.md")
+        );
+    }
 }
