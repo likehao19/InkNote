@@ -16,6 +16,7 @@ const PDF_FILTER = { name: "PDF", extensions: ["pdf"] };
 
 const BACKEND_ERROR_KEYS: Record<string, MessageKey> = {
   invalid_source_file: "error.invalidSourceFile",
+  invalid_file_name: "error.invalidFileName",
   directory_exists: "error.directoryExists",
   parent_directory_missing: "error.parentDirectoryMissing",
   file_exists: "error.fileExists",
@@ -61,7 +62,23 @@ export function writeFile(path: string, content: string): Promise<void> {
   });
 }
 export function writeBinary(path: string, data: number[]): Promise<void> {
-  return invoke("write_binary", { path, data });
+  return invokeLocalized("write_binary", { path, data });
+}
+
+export interface RegexSearchMatch {
+  line: number;
+  lineText: string;
+  matchStart: number;
+  matchEnd: number;
+}
+
+export function searchRegex(
+  name: string,
+  text: string,
+  query: string,
+  filenameOnly: boolean,
+): Promise<RegexSearchMatch[]> {
+  return invoke("search_regex", { name, text, query, filenameOnly });
 }
 
 export async function openImageDialog(): Promise<string | null> {
@@ -108,14 +125,14 @@ export function copyFileToDirOverwrite(src: string, destDir: string): Promise<st
 export function moveFileToDir(src: string, destDir: string): Promise<string> {
   return invokeLocalized("move_file_to_dir", { src, destDir });
 }
-export function createDir(path: string): Promise<void> {
-  return invokeLocalized("create_dir", { path });
+export function createDir(parentDir: string, name: string): Promise<void> {
+  return invokeLocalized("create_dir", { parentDir, name });
 }
-export function createFile(path: string, content = ""): Promise<void> {
-  return invokeLocalized("create_file", { path, content });
+export function createFile(parentDir: string, name: string, content = ""): Promise<void> {
+  return invokeLocalized("create_file", { parentDir, name, content });
 }
-export function renamePath(oldPath: string, newPath: string): Promise<void> {
-  return invokeLocalized("rename_path", { oldPath, newPath });
+export function renamePath(oldPath: string, newName: string): Promise<void> {
+  return invokeLocalized("rename_path", { oldPath, newName });
 }
 export function removePath(path: string): Promise<void> {
   return invoke("remove_path", { path });

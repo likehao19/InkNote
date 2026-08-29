@@ -45,7 +45,7 @@ describe("managed document assets", () => {
       "copy",
     )).resolves.toBe("D:\\target\\note.md");
 
-    expect(mockedApi.createDir).toHaveBeenCalledWith("D:\\target\\.inknote-assets");
+    expect(mockedApi.createDir).toHaveBeenCalledWith("D:/target", ".inknote-assets");
     expect(mockedApi.writeFile).toHaveBeenCalledWith(
       "D:\\target\\note.md",
       "![image](.inknote-assets/photo%20%281%29.png)",

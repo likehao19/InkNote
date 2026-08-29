@@ -1,4 +1,4 @@
-import { listDir, readFile } from "./tauri";
+import { listDir, readFile, searchRegex } from "./tauri";
 import { basename } from "./paths";
 
 export interface SearchMatch {
@@ -88,81 +88,35 @@ export interface SearchOptions {
   useRegex?: boolean;
 }
 
-function findMatchesInText(
+async function findMatchesInText(
   path: string,
   text: string,
   query: string,
   opts: SearchOptions,
-): SearchMatch[] {
+): Promise<SearchMatch[]> {
   const matches: SearchMatch[] = [];
   const name = basename(path);
 
+  if (opts.useRegex) {
+    const found = await searchRegex(name, text, query, opts.filenameOnly === true);
+    return found.map((match) => ({ path, ...match }));
+  }
+
   if (opts.filenameOnly) {
-    let idx = -1;
-    let length = query.length;
-    if (opts.useRegex) {
-      try {
-        const match = new RegExp(query, "i").exec(name);
-        if (match) {
-          idx = match.index;
-          length = match[0].length;
-        }
-      } catch {
-        return matches;
-      }
-    } else {
-      idx = name.toLowerCase().indexOf(query.toLowerCase());
-    }
+    const idx = name.toLowerCase().indexOf(query.toLowerCase());
     if (idx >= 0) {
       matches.push({
         path,
         line: 1,
         lineText: name,
         matchStart: idx,
-        matchEnd: idx + length,
+        matchEnd: idx + query.length,
       });
     }
     return matches;
   }
 
   const lines = text.split("\n");
-
-  if (opts.useRegex) {
-    try {
-      const re = new RegExp(query, "gi");
-      if (name.match(re)) {
-        const m = name.match(re);
-        if (m?.[0]) {
-          const idx = name.toLowerCase().indexOf(m[0].toLowerCase());
-          matches.push({
-            path,
-            line: 1,
-            lineText: name,
-            matchStart: idx,
-            matchEnd: idx + m[0].length,
-          });
-        }
-      }
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        re.lastIndex = 0;
-        let m: RegExpExecArray | null;
-        while ((m = re.exec(line))) {
-          matches.push({
-            path,
-            line: i + 1,
-            lineText: line,
-            matchStart: m.index,
-            matchEnd: m.index + m[0].length,
-          });
-          if (m[0].length === 0) re.lastIndex = m.index + 1;
-        }
-      }
-    } catch {
-      return matches;
-    }
-    return matches;
-  }
 
   const q = query.toLowerCase();
   const nameLower = name.toLowerCase();
@@ -210,9 +164,12 @@ export async function searchWorkspace(
   const matches: SearchMatch[] = [];
 
   if (opts.filenameOnly) {
-    for (const path of files) {
-      const fileMatches = findMatchesInText(path, "", q, opts);
-      matches.push(...fileMatches);
+    const batchSize = 50;
+    for (let from = 0; from < files.length; from += batchSize) {
+      const batchMatches = await Promise.all(
+        files.slice(from, from + batchSize).map((path) => findMatchesInText(path, "", q, opts)),
+      );
+      for (const fileMatches of batchMatches) matches.push(...fileMatches);
     }
   } else {
     const batchSize = 12;
@@ -226,11 +183,10 @@ export async function searchWorkspace(
           return null;
         }
       }));
-      for (const item of contents) {
-        if (!item) continue;
-        const fileMatches = findMatchesInText(item.path, item.text, q, opts);
-        matches.push(...fileMatches);
-      }
+      const batchMatches = await Promise.all(contents.map((item) => (
+        item ? findMatchesInText(item.path, item.text, q, opts) : []
+      )));
+      for (const fileMatches of batchMatches) matches.push(...fileMatches);
     }
   }
 

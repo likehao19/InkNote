@@ -4,6 +4,21 @@ export function joinPath(dir: string, name: string): string {
   return `${dir.replace(/[\\/]+$/, "")}${sep}${name}`;
 }
 
+/** 跨平台安全的单一文件/目录名称，不允许路径分隔符或 Windows 保留名。 */
+export function isValidEntryName(name: string): boolean {
+  if (
+    !name ||
+    name !== name.trim() ||
+    name === "." ||
+    name === ".." ||
+    /[<>:"/\\|?*\u0000-\u001f]/.test(name) ||
+    /[. ]$/.test(name)
+  ) return false;
+
+  const stem = name.split(".", 1)[0].toUpperCase();
+  return !/^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/.test(stem);
+}
+
 /** 取路径最后一段名称 */
 export function basename(path: string): string {
   return path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || path;

@@ -30,7 +30,7 @@ async function ensureAssetDirectory(path: string): Promise<boolean> {
     await api.listDir(path);
     return false;
   } catch {
-    await api.createDir(path);
+    await api.createDir(dirOf(path), basename(path));
     return true;
   }
 }

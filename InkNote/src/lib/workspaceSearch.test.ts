@@ -3,11 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   listDir: vi.fn(),
   readFile: vi.fn(),
+  searchRegex: vi.fn(),
 }));
 
 vi.mock("./tauri", () => ({
   listDir: mocks.listDir,
   readFile: mocks.readFile,
+  searchRegex: mocks.searchRegex,
 }));
 
 import { invalidateWorkspaceFileCache, listWorkspaceFiles, searchWorkspace } from "./workspaceSearch";
@@ -16,6 +18,7 @@ describe("workspace search", () => {
   beforeEach(() => {
     mocks.listDir.mockReset();
     mocks.readFile.mockReset();
+    mocks.searchRegex.mockReset();
     invalidateWorkspaceFileCache();
   });
 
@@ -63,5 +66,27 @@ describe("workspace search", () => {
     expect(await listWorkspaceFiles(["D:\\notes"], [])).toEqual(["D:\\notes\\old.md"]);
     invalidateWorkspaceFileCache();
     expect(await listWorkspaceFiles(["D:\\notes"], [])).toEqual(["D:\\notes\\new.md"]);
+  });
+
+  it("delegates regular expressions to the native safe matcher", async () => {
+    mocks.listDir.mockResolvedValue([
+      { name: "emoji.md", path: "D:\\notes\\emoji.md", is_dir: false },
+    ]);
+    mocks.readFile.mockResolvedValue("a😀b");
+    mocks.searchRegex.mockResolvedValue([{
+      line: 1,
+      lineText: "a😀b",
+      matchStart: 1,
+      matchEnd: 3,
+    }]);
+
+    const result = await searchWorkspace(["D:\\notes"], [], "😀", { useRegex: true });
+
+    expect(mocks.searchRegex).toHaveBeenCalledWith("emoji.md", "a😀b", "😀", false);
+    expect(result.matches[0]).toMatchObject({
+      path: "D:\\notes\\emoji.md",
+      matchStart: 1,
+      matchEnd: 3,
+    });
   });
 });

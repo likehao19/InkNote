@@ -115,7 +115,7 @@ import {
   type EditorWidthPreset,
 } from "./lib/preferences";
 import { formatFrontMatter } from "./lib/frontmatter";
-import { dirOf, joinPath, basename, relativePath } from "./lib/paths";
+import { dirOf, isValidEntryName, joinPath, basename, relativePath } from "./lib/paths";
 import { useTabsStore, type TabDoc } from "./store/useTabsStore";
 import type { EditorAction } from "./editor";
 import { setTableInsertRequestHandler } from "./editor/tableInsertBridge";
@@ -127,6 +127,7 @@ import {
   commitPendingImages,
   pendingImageDataUrls,
   preparePendingImages,
+  rollbackPendingImages,
   restorePendingImages,
   snapshotPendingImages,
   type PendingImageSnapshot,
@@ -365,10 +366,14 @@ export default function App() {
 
   const saveExistingTab = useCallback(async (tab: TabDoc): Promise<boolean> => {
     if (!tab.path) return false;
+    let preparedImages: Awaited<ReturnType<typeof preparePendingImages>> = [];
+    let documentWritten = false;
     try {
-      const preparedImages = await preparePendingImages(tab.path);
+      preparedImages = await preparePendingImages(tab.path, tab.content);
       await api.writeFile(tab.path, tab.content);
+      documentWritten = true;
       commitPendingImages(preparedImages);
+      editorRef.current?.refreshPreview();
       try {
         await cleanupRemovedManagedImages(tab.path, tab.diskContent, tab.content);
       } catch (error) {
@@ -377,6 +382,7 @@ export default function App() {
       markSaved(tab.id, tab.path, tab.content);
       return true;
     } catch (error) {
+      if (!documentWritten) await rollbackPendingImages(preparedImages);
       showError(error);
       return false;
     }
@@ -474,12 +480,16 @@ export default function App() {
         path = await api.saveFileDialog();
         if (!path) return null;
       }
+      let preparedImages: Awaited<ReturnType<typeof preparePendingImages>> = [];
+      let documentWritten = false;
       try {
         // 先把未落盘的粘贴图片写出去，再写文档 —— 顺序反了会先触发一次
         // 「图片文件不存在」的重建
-        const preparedImages = await preparePendingImages(path);
+        preparedImages = await preparePendingImages(path, tab.content);
         await api.writeFile(path, tab.content);
+        documentWritten = true;
         commitPendingImages(preparedImages);
+        editorRef.current?.refreshPreview();
         if (tab.path && tab.path === path) {
           try {
             await cleanupRemovedManagedImages(path, tab.diskContent, tab.content);
@@ -496,6 +506,7 @@ export default function App() {
         showSuccess(t(locale, "toast.saved"));
         return path;
       } catch (e) {
+        if (!documentWritten) await rollbackPendingImages(preparedImages);
         showError(e);
         return null;
       }
@@ -509,13 +520,15 @@ export default function App() {
     const p = await api.saveFileDialog(tab.path ?? undefined);
     if (!p) return;
     let managedImages: Awaited<ReturnType<typeof prepareManagedImagesForSaveAs>> | null = null;
+    let preparedImages: Awaited<ReturnType<typeof preparePendingImages>> = [];
     let documentWritten = false;
     try {
       managedImages = await prepareManagedImagesForSaveAs(tab.path, p, tab.content);
-      const preparedImages = await preparePendingImages(p);
+      preparedImages = await preparePendingImages(p, managedImages.content);
       await api.writeFile(p, managedImages.content);
       documentWritten = true;
       commitPendingImages(preparedImages);
+      editorRef.current?.refreshPreview();
       const currentTab = useTabsStore.getState().tabs.find((candidate) => candidate.id === tab.id);
       if (currentTab) {
         const currentContent = rewriteManagedImageReferences(currentTab.content, managedImages.replacements);
@@ -529,7 +542,10 @@ export default function App() {
       await api.watchFile(p);
       showSuccess(t(locale, "toast.saved"));
     } catch (e) {
-      if (!documentWritten) await managedImages?.rollback();
+      if (!documentWritten) {
+        await rollbackPendingImages(preparedImages);
+        await managedImages?.rollback();
+      }
       showError(e);
     }
   }, [getActive, markSaved, setTitle, showError, showSuccess, locale, updateContent]);
@@ -654,10 +670,14 @@ export default function App() {
     async (path: string, newName: string, _isDir: boolean) => {
       const base = basename(path);
       if (!newName || newName === base) return false;
+      if (!isValidEntryName(newName)) {
+        showError(new Error(t(locale, "error.invalidFileName")));
+        return false;
+      }
       const parent = dirOf(path);
       const newPath = joinPath(parent, newName);
       try {
-        await api.renamePath(path, newPath);
+        await api.renamePath(path, newName);
         remapRecentFiles(path, newPath);
         remapLastFile(path, newPath);
         // 只换路径：重命名不该把「未保存」状态抹掉
@@ -676,7 +696,7 @@ export default function App() {
         return false;
       }
     },
-    [active, setPath, showError],
+    [active, setPath, showError, locale],
   );
 
   const handleMovePath = useCallback((oldPath: string, newPath: string) => {
@@ -730,29 +750,36 @@ export default function App() {
 
   const handleCreateFileInFolder = useCallback(
     async (parentDir: string, name: string) => {
+      if (!isValidEntryName(name)) {
+        showError(new Error(t(locale, "error.invalidFileName")));
+        return;
+      }
       const path = joinPath(parentDir, name);
       try {
-        await api.createFile(path, createNewDocumentContent());
+        await api.createFile(parentDir, name, createNewDocumentContent());
         setDirTick((t) => t + 1);
         await loadFile(path);
       } catch (e) {
         showError(e);
       }
     },
-    [loadFile, showError, createNewDocumentContent],
+    [loadFile, showError, createNewDocumentContent, locale],
   );
 
   const handleCreateFolderInDir = useCallback(
     async (parentDir: string, name: string) => {
-      const path = joinPath(parentDir, name);
+      if (!isValidEntryName(name)) {
+        showError(new Error(t(locale, "error.invalidFileName")));
+        return;
+      }
       try {
-        await api.createDir(path);
+        await api.createDir(parentDir, name);
         setDirTick((t) => t + 1);
       } catch (e) {
         showError(e);
       }
     },
-    [showError],
+    [showError, locale],
   );
 
   const handleChange = useCallback(
@@ -1333,40 +1360,51 @@ export default function App() {
     };
   }, [loadFile, showOutlineForExternalOpen, finishImportedFile, handleTransferPath, showError]);
 
+  const closeRequestRef = useRef<() => Promise<void>>(async () => undefined);
+  closeRequestRef.current = async () => {
+    const win = getCurrentWindow();
+    if (closingRef.current) return;
+    closingRef.current = true;
+    await flushSettingsStore();
+
+    const tab = getActive();
+    if (!tab?.dirty) {
+      await win.destroy();
+      return;
+    }
+
+    if (!tab.path) {
+      const shouldSave = await askConfirm(t(locale, "confirm.saveBeforeClose"));
+      if (!shouldSave) {
+        closingRef.current = false;
+        return;
+      }
+      const path = await saveTab(tab.id);
+      if (path) await win.destroy();
+      else closingRef.current = false;
+      return;
+    }
+
+    if (await saveExistingTab(tab)) await win.destroy();
+    else closingRef.current = false;
+  };
+
   useEffect(() => {
     const win = getCurrentWindow();
+    let disposed = false;
     let unlisten: (() => void) | undefined;
-    void win.onCloseRequested(async (event) => {
+    void win.onCloseRequested((event) => {
       event.preventDefault();
-      if (closingRef.current) return;
-      closingRef.current = true;
-      await flushSettingsStore();
-
-      const tab = getActive();
-      if (!tab?.dirty) {
-        await win.destroy();
-        return;
-      }
-
-      if (!tab.path) {
-        const shouldSave = await askConfirm(t(locale, "confirm.saveBeforeClose"));
-        if (!shouldSave) {
-          closingRef.current = false;
-          return;
-        }
-        const path = await saveTab(tab.id);
-        if (path) await win.destroy();
-        else closingRef.current = false;
-        return;
-      }
-
-      if (await saveExistingTab(tab)) await win.destroy();
-      else closingRef.current = false;
+      void closeRequestRef.current();
     }).then((fn) => {
-      unlisten = fn;
+      if (disposed) fn();
+      else unlisten = fn;
     });
-    return () => unlisten?.();
-  }, [getActive, saveExistingTab, saveTab, askConfirm, locale]);
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
 
   useEffect(() => {
     const modalOpen =

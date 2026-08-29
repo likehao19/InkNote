@@ -1,6 +1,8 @@
 use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
-use std::io::Write;
-use std::path::{Path, PathBuf};
+use regex::RegexBuilder;
+use std::fs::{File, OpenOptions};
+use std::io::{self, Write};
+use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64 as FileAtomicU64, Ordering as FileOrdering};
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
@@ -51,7 +53,7 @@ struct AppState {
 
 static NEXT_TEMP_FILE_ID: FileAtomicU64 = FileAtomicU64::new(1);
 
-fn temporary_sibling(path: &Path) -> Result<PathBuf, String> {
+fn create_temporary_sibling(path: &Path) -> Result<(PathBuf, File), String> {
     let parent = path
         .parent()
         .ok_or_else(|| "parent_directory_missing".to_string())?;
@@ -59,8 +61,20 @@ fn temporary_sibling(path: &Path) -> Result<PathBuf, String> {
         .file_name()
         .and_then(|value| value.to_str())
         .unwrap_or("document");
-    let id = NEXT_TEMP_FILE_ID.fetch_add(1, FileOrdering::Relaxed);
-    Ok(parent.join(format!(".{name}.inknote-{id}.tmp")))
+    for _ in 0..128 {
+        let id = NEXT_TEMP_FILE_ID.fetch_add(1, FileOrdering::Relaxed);
+        let candidate = parent.join(format!(".{name}.inknote-{}-{id}.tmp", std::process::id()));
+        match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&candidate)
+        {
+            Ok(file) => return Ok((candidate, file)),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error.to_string()),
+        }
+    }
+    Err("temporary_file_name_exhausted".to_string())
 }
 
 #[cfg(windows)]
@@ -107,13 +121,8 @@ fn write_file_safely(path: &Path, content: &[u8]) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
-    let temp = temporary_sibling(path)?;
+    let (temp, mut file) = create_temporary_sibling(path)?;
     let result = (|| {
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temp)
-            .map_err(|error| error.to_string())?;
         file.write_all(content).map_err(|error| error.to_string())?;
         file.sync_all().map_err(|error| error.to_string())?;
         drop(file);
@@ -123,6 +132,102 @@ fn write_file_safely(path: &Path, content: &[u8]) -> Result<(), String> {
         let _ = std::fs::remove_file(&temp);
     }
     result
+}
+
+fn copy_file_without_overwrite(source: &Path, destination: &Path) -> Result<(), String> {
+    let mut source_file = File::open(source).map_err(|error| error.to_string())?;
+    let mut destination_file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(destination)
+        .map_err(|error| {
+            if error.kind() == io::ErrorKind::AlreadyExists {
+                "file_exists".to_string()
+            } else {
+                error.to_string()
+            }
+        })?;
+    let result = (|| {
+        io::copy(&mut source_file, &mut destination_file).map_err(|error| error.to_string())?;
+        destination_file
+            .sync_all()
+            .map_err(|error| error.to_string())?;
+        let permissions = source_file
+            .metadata()
+            .map_err(|error| error.to_string())?
+            .permissions();
+        std::fs::set_permissions(destination, permissions).map_err(|error| error.to_string())
+    })();
+    if result.is_err() {
+        drop(destination_file);
+        let _ = std::fs::remove_file(destination);
+    }
+    result
+}
+
+fn copy_file_with_overwrite(source: &Path, destination: &Path) -> Result<(), String> {
+    let mut source_file = File::open(source).map_err(|error| error.to_string())?;
+    let (temp, mut temp_file) = create_temporary_sibling(destination)?;
+    let result = (|| {
+        io::copy(&mut source_file, &mut temp_file).map_err(|error| error.to_string())?;
+        temp_file.sync_all().map_err(|error| error.to_string())?;
+        let permissions = source_file
+            .metadata()
+            .map_err(|error| error.to_string())?
+            .permissions();
+        std::fs::set_permissions(&temp, permissions).map_err(|error| error.to_string())?;
+        drop(temp_file);
+        replace_file(&temp, destination)
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(&temp);
+    }
+    result
+}
+
+fn is_valid_entry_name(name: &str) -> bool {
+    if name.is_empty()
+        || name != name.trim()
+        || name == "."
+        || name == ".."
+        || name.ends_with(['.', ' '])
+        || name.chars().any(|character| {
+            character.is_control()
+                || matches!(
+                    character,
+                    '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*'
+                )
+        })
+    {
+        return false;
+    }
+
+    let mut components = Path::new(name).components();
+    if !matches!(components.next(), Some(Component::Normal(_))) || components.next().is_some() {
+        return false;
+    }
+
+    let stem = name
+        .split('.')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_uppercase();
+    !matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        && !(stem.len() == 4
+            && (stem.starts_with("COM") || stem.starts_with("LPT"))
+            && stem.as_bytes()[3].is_ascii_digit()
+            && stem.as_bytes()[3] != b'0')
+}
+
+fn entry_path(parent: &str, name: &str) -> Result<PathBuf, String> {
+    if !is_valid_entry_name(name) {
+        return Err("invalid_file_name".to_string());
+    }
+    let parent = Path::new(parent);
+    if !parent.is_dir() {
+        return Err("parent_directory_missing".to_string());
+    }
+    Ok(parent.join(name))
 }
 
 fn available_destination(dest_dir: &Path, source: &Path) -> Result<PathBuf, String> {
@@ -190,10 +295,81 @@ fn write_file(path: String, content: String) -> Result<(), String> {
 
 #[tauri::command]
 fn write_binary(path: String, data: Vec<u8>) -> Result<(), String> {
-    if let Some(parent) = Path::new(&path).parent() {
+    let path = Path::new(&path);
+    if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    std::fs::write(&path, data).map_err(|e| e.to_string())
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|error| {
+            if error.kind() == io::ErrorKind::AlreadyExists {
+                "file_exists".to_string()
+            } else {
+                error.to_string()
+            }
+        })?;
+    let result = file
+        .write_all(&data)
+        .and_then(|_| file.sync_all())
+        .map_err(|error| error.to_string());
+    if result.is_err() {
+        drop(file);
+        let _ = std::fs::remove_file(path);
+    }
+    result
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RegexSearchMatch {
+    line: usize,
+    line_text: String,
+    match_start: usize,
+    match_end: usize,
+}
+
+fn utf16_offset(value: &str, byte_offset: usize) -> usize {
+    value[..byte_offset].encode_utf16().count()
+}
+
+#[tauri::command]
+fn search_regex(
+    name: String,
+    text: String,
+    query: String,
+    filename_only: bool,
+) -> Result<Vec<RegexSearchMatch>, String> {
+    let regex = RegexBuilder::new(&query)
+        .case_insensitive(true)
+        .build()
+        .map_err(|_| "invalid_regex".to_string())?;
+    let mut matches = Vec::new();
+
+    if let Some(found) = regex.find(&name) {
+        matches.push(RegexSearchMatch {
+            line: 1,
+            line_text: name.clone(),
+            match_start: utf16_offset(&name, found.start()),
+            match_end: utf16_offset(&name, found.end()),
+        });
+    }
+    if filename_only {
+        return Ok(matches);
+    }
+
+    for (index, line) in text.split('\n').enumerate() {
+        for found in regex.find_iter(line) {
+            matches.push(RegexSearchMatch {
+                line: index + 1,
+                line_text: line.to_string(),
+                match_start: utf16_offset(line, found.start()),
+                match_end: utf16_offset(line, found.end()),
+            });
+        }
+    }
+    Ok(matches)
 }
 
 #[tauri::command]
@@ -611,7 +787,7 @@ fn unwatch_dir(state: tauri::State<AppState>) {
 fn copy_file_to_dir(src: String, dest_dir: String) -> Result<String, String> {
     let src_path = Path::new(&src);
     let dest = available_destination(Path::new(&dest_dir), src_path)?;
-    std::fs::copy(src_path, &dest).map_err(|e| e.to_string())?;
+    copy_file_without_overwrite(src_path, &dest)?;
     Ok(dest.to_string_lossy().to_string())
 }
 
@@ -623,7 +799,7 @@ fn copy_file_to_dir_strict(src: String, dest_dir: String) -> Result<String, Stri
     if dest.exists() || dest == src_path {
         return Err("file_exists".to_string());
     }
-    std::fs::copy(src_path, &dest).map_err(|error| error.to_string())?;
+    copy_file_without_overwrite(src_path, &dest)?;
     Ok(dest.to_string_lossy().to_string())
 }
 
@@ -635,7 +811,7 @@ fn copy_file_to_dir_overwrite(src: String, dest_dir: String) -> Result<String, S
     if dest == src_path {
         return Err("invalid_source_file".to_string());
     }
-    std::fs::copy(src_path, &dest).map_err(|error| error.to_string())?;
+    copy_file_with_overwrite(src_path, &dest)?;
     Ok(dest.to_string_lossy().to_string())
 }
 
@@ -644,7 +820,7 @@ fn move_file_to_dir(src: String, dest_dir: String) -> Result<String, String> {
     let src_path = Path::new(&src);
     let dest = available_destination(Path::new(&dest_dir), src_path)?;
     if std::fs::rename(src_path, &dest).is_err() {
-        std::fs::copy(src_path, &dest).map_err(|error| error.to_string())?;
+        copy_file_without_overwrite(src_path, &dest)?;
         if let Err(error) = std::fs::remove_file(src_path) {
             let _ = std::fs::remove_file(&dest);
             return Err(error.to_string());
@@ -654,32 +830,24 @@ fn move_file_to_dir(src: String, dest_dir: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn create_dir(path: String) -> Result<(), String> {
-    let p = Path::new(&path);
+fn create_dir(parent_dir: String, name: String) -> Result<(), String> {
+    let p = entry_path(&parent_dir, &name)?;
     if p.exists() {
         return Err("directory_exists".to_string());
     }
-    if let Some(parent) = p.parent() {
-        if !parent.exists() {
-            return Err("parent_directory_missing".to_string());
-        }
-    }
-    std::fs::create_dir(p).map_err(|e| e.to_string())
+    std::fs::create_dir(&p).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn create_file(path: String, content: String) -> Result<(), String> {
-    let p = Path::new(&path);
+fn create_file(parent_dir: String, name: String, content: String) -> Result<(), String> {
+    let p = entry_path(&parent_dir, &name)?;
     if p.exists() {
         return Err("file_exists".to_string());
     }
-    if let Some(parent) = p.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    let mut file = std::fs::OpenOptions::new()
+    let mut file = OpenOptions::new()
         .write(true)
         .create_new(true)
-        .open(p)
+        .open(&p)
         .map_err(|error| {
             if error.kind() == std::io::ErrorKind::AlreadyExists {
                 "file_exists".to_string()
@@ -693,8 +861,12 @@ fn create_file(path: String, content: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn rename_path(old_path: String, new_path: String) -> Result<(), String> {
-    if Path::new(&new_path).exists() {
+fn rename_path(old_path: String, new_name: String) -> Result<(), String> {
+    let parent = Path::new(&old_path)
+        .parent()
+        .ok_or_else(|| "parent_directory_missing".to_string())?;
+    let new_path = entry_path(&parent.to_string_lossy(), &new_name)?;
+    if new_path.exists() {
         return Err("file_exists".to_string());
     }
     std::fs::rename(&old_path, &new_path).map_err(|e| e.to_string())
@@ -755,6 +927,7 @@ pub fn run() {
             read_file,
             write_file,
             write_binary,
+            search_regex,
             export_pdf,
             list_dir,
             get_startup_file,
@@ -792,7 +965,18 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::OpenFileState;
+    use super::{
+        copy_file_with_overwrite, create_temporary_sibling, is_valid_entry_name, search_regex,
+        write_binary, OpenFileState,
+    };
+
+    fn test_directory(name: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!(
+            "inknote-test-{name}-{}-{}",
+            std::process::id(),
+            super::NEXT_TEMP_FILE_ID.fetch_add(1, super::FileOrdering::Relaxed)
+        ))
+    }
 
     #[test]
     fn open_file_waits_until_frontend_is_registered() {
@@ -817,5 +1001,85 @@ mod tests {
             state.receive("warm-open.md".into()).as_deref(),
             Some("warm-open.md")
         );
+    }
+
+    #[test]
+    fn rejects_names_that_can_escape_or_break_cross_platform_workspaces() {
+        for name in [
+            "../outside.md",
+            "folder/note.md",
+            "folder\\note.md",
+            ".",
+            "..",
+            "CON.txt",
+            "LPT1",
+            "trailing.",
+        ] {
+            assert!(!is_valid_entry_name(name), "accepted unsafe name: {name}");
+        }
+        assert!(is_valid_entry_name("会议记录 2026.md"));
+    }
+
+    #[test]
+    fn safe_regex_search_handles_pathological_patterns_and_utf16_offsets() {
+        let pathological = format!("{}!", "a".repeat(100_000));
+        assert!(
+            search_regex("note.md".into(), pathological, "(a+)+$".into(), false,)
+                .unwrap()
+                .is_empty()
+        );
+
+        let matches = search_regex("emoji.md".into(), "a😀b".into(), "😀".into(), false).unwrap();
+        let content_match = matches
+            .iter()
+            .find(|found| found.line_text == "a😀b")
+            .unwrap();
+        assert_eq!((content_match.match_start, content_match.match_end), (1, 3));
+    }
+
+    #[test]
+    fn failed_overwrite_copy_keeps_the_existing_destination() {
+        let dir = test_directory("copy");
+        std::fs::create_dir_all(&dir).unwrap();
+        let destination = dir.join("note.md");
+        std::fs::write(&destination, "original").unwrap();
+
+        assert!(copy_file_with_overwrite(&dir.join("missing.md"), &destination).is_err());
+        assert_eq!(std::fs::read_to_string(&destination).unwrap(), "original");
+
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn temporary_siblings_are_unique_and_only_created_by_the_current_process() {
+        let dir = test_directory("temporary");
+        std::fs::create_dir_all(&dir).unwrap();
+        let target = dir.join("note.md");
+        let (first_path, first_file) = create_temporary_sibling(&target).unwrap();
+        let (second_path, second_file) = create_temporary_sibling(&target).unwrap();
+
+        assert_ne!(first_path, second_path);
+        assert!(first_path.exists());
+        assert!(second_path.exists());
+
+        drop(first_file);
+        drop(second_file);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn binary_attachments_never_overwrite_an_existing_file() {
+        let dir = test_directory("binary");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("image.png");
+        std::fs::write(&path, [1, 2, 3]).unwrap();
+
+        assert_eq!(
+            write_binary(path.to_string_lossy().into_owned(), vec![9, 9]).unwrap_err(),
+            "file_exists"
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), vec![1, 2, 3]);
+
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

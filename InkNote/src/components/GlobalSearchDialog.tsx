@@ -51,6 +51,7 @@ export default function GlobalSearchDialog({
   const [query, setQuery] = useState("");
   const [matches, setMatches] = useState<SearchMatch[]>([]);
   const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState(false);
   const [fileCount, setFileCount] = useState(0);
   const [filenameOnly, setFilenameOnly] = useState(false);
   const [useRegex, setUseRegex] = useState(false);
@@ -75,9 +76,11 @@ export default function GlobalSearchDialog({
         setMatches([]);
         setFileCount(0);
         setSearching(false);
+        setSearchError(false);
         return;
       }
       setSearching(true);
+      setSearchError(false);
       try {
         const result = await searchWorkspace(folderPaths, [], trimmed, {
           filenameOnly,
@@ -91,6 +94,7 @@ export default function GlobalSearchDialog({
         if (request === requestRef.current) {
           setMatches([]);
           setFileCount(0);
+          setSearchError(true);
         }
       } finally {
         if (request === requestRef.current) setSearching(false);
@@ -103,6 +107,7 @@ export default function GlobalSearchDialog({
     if (!query.trim() || !scoped || invalidRegex) {
       requestRef.current++;
       setSearching(false);
+      setSearchError(false);
       setMatches([]);
       setFileCount(0);
       return;
@@ -196,7 +201,7 @@ export default function GlobalSearchDialog({
                 {tr("globalSearch.openFolder")}
               </button>
             </div>
-          ) : invalidRegex ? (
+          ) : invalidRegex || searchError ? (
             <div className="global-search-empty global-search-error">{tr("globalSearch.invalidRegex")}</div>
           ) : query.trim() && !searching && matches.length === 0 ? (
             <div className="global-search-empty">{tr("globalSearch.noResults")}</div>

@@ -1,5 +1,6 @@
 import { dirOf } from "./paths";
-import { writeBinary } from "./tauri";
+import { extractManagedImageReferences } from "./imageAssets";
+import { removePath, writeBinary } from "./tauri";
 
 /**
  * 文档还没保存时粘贴进来的图片。
@@ -18,6 +19,8 @@ const pending = new Map<string, PendingImage>();
 /** 暂存并返回可立即用于 <img> 的 URL；key 是插入到 Markdown 里的相对路径 */
 export function addPendingImage(relPath: string, bytes: Uint8Array, mime: string): string {
   const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: mime }));
+  const previous = pending.get(relPath);
+  if (previous) URL.revokeObjectURL(previous.url);
   pending.set(relPath, { bytes, mime, url });
   return url;
 }
@@ -70,22 +73,48 @@ export function restorePendingImages(snapshot: PendingImageSnapshot[]): void {
 export interface PreparedPendingImage {
   relPath: string;
   url: string;
+  absPath: string;
 }
 
 /**
  * 先把图片写到文档目录，但暂不释放内存副本。
  * 只有文档本身也成功写入后，调用方才能 commit；这样另存失败后仍可换目录重试。
  */
-export async function preparePendingImages(docPath: string): Promise<PreparedPendingImage[]> {
+export async function preparePendingImages(
+  docPath: string,
+  content: string,
+): Promise<PreparedPendingImage[]> {
   if (!pending.size) return [];
+  const referencedNames = new Set(
+    extractManagedImageReferences(content).map((reference) => reference.fileName.toLowerCase()),
+  );
+  for (const [relPath, item] of [...pending.entries()]) {
+    const fileName = relPath.split(/[\\/]/).pop()?.toLowerCase() ?? "";
+    if (referencedNames.has(fileName)) continue;
+    URL.revokeObjectURL(item.url);
+    pending.delete(relPath);
+  }
+
   const dir = dirOf(docPath);
   const prepared: PreparedPendingImage[] = [];
-  for (const [relPath, item] of [...pending.entries()]) {
-    const abs = `${dir}/${relPath}`.replace(/\\/g, "/");
-    await writeBinary(abs, Array.from(item.bytes));
-    prepared.push({ relPath, url: item.url });
+  try {
+    for (const [relPath, item] of [...pending.entries()]) {
+      const absPath = `${dir}/${relPath}`.replace(/\\/g, "/");
+      await writeBinary(absPath, Array.from(item.bytes));
+      prepared.push({ relPath, url: item.url, absPath });
+    }
+  } catch (error) {
+    await rollbackPendingImages(prepared);
+    throw error;
   }
   return prepared;
+}
+
+/** 文档写入失败时删除本次创建的附件，但保留内存副本以便重试。 */
+export async function rollbackPendingImages(prepared: PreparedPendingImage[]): Promise<void> {
+  for (const item of [...prepared].reverse()) {
+    try { await removePath(item.absPath); } catch { /* keep the original save error */ }
+  }
 }
 
 /** 文档写入成功后提交对应图片，避免部分成功造成永久断图。 */

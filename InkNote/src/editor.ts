@@ -51,12 +51,11 @@ import { enterAdjacentBlock, focusBlockStartingAt } from "./editor/widgets/edita
 import { bracketExtensions } from "./editor/commands/brackets";
 import { editorActionKeymap, runEditorAction, type EditorAction } from "./editor/commands/format";
 import { parseFrontMatter } from "./lib/frontmatter";
-import { dirOf, resolveAssetPath } from "./lib/paths";
+import { resolveAssetPath } from "./lib/paths";
 import { addPendingImage } from "./lib/pendingImages";
 import { IMAGE_ASSET_DIR } from "./lib/imageAssets";
 import { htmlToMarkdown } from "./lib/htmlPaste";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import * as api from "./lib/tauri";
 import {
   editorShowError,
   editorShowMessage,
@@ -910,30 +909,21 @@ function typewriterExt(enabled: boolean): Extension {
 /**
  * 插入图片。
  *
- * 文档已保存 → 直接写到同目录的 .inknote-assets/；还没保存 → 先在内存暂存并立刻回显，
- * 等保存时统一落盘。任何情况下都不打断书写去弹保存框。
+ * 先在内存暂存并立刻回显，等文档保存成功时再统一落盘。
+ * 这样撤销或放弃编辑不会在附件目录留下孤儿文件。
  */
+let fallbackImageId = 0;
+
 async function insertImage(
   view: EditorView,
-  filePath: string | null,
   bytes: Uint8Array,
   ext = "png",
   mime = "image/png",
 ) {
-  const name = `image-${Date.now()}.${ext}`;
+  const id = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${++fallbackImageId}`;
+  const name = `image-${id}.${ext}`;
   const rel = `${IMAGE_ASSET_DIR}/${name}`;
-
-  if (filePath) {
-    const abs = `${dirOf(filePath)}/${rel}`.replace(/\\/g, "/");
-    try {
-      await api.writeBinary(abs, Array.from(bytes));
-    } catch (e) {
-      editorShowError(e);
-      return;
-    }
-  } else {
-    addPendingImage(rel, bytes, mime);
-  }
+  addPendingImage(rel, bytes, mime);
 
   const insert = `![](${rel})`;
   const pos = view.state.selection.main.head;
@@ -949,7 +939,7 @@ async function insertImage(
     userEvent: "input.image",
   });
   editorShowMessage(
-    tr(getLocale(), filePath ? "toast.imageSaved" : "toast.imagePending"),
+    tr(getLocale(), "toast.imagePending"),
   );
 }
 
@@ -1125,10 +1115,7 @@ function urlAtPos(state: EditorState, pos: number): string | null {
   return null;
 }
 
-function mediaHandlers(
-  ctx: { filePath: string | null },
-  onOpenMarkdown?: (content: string, path?: string) => void,
-): Extension {
+function mediaHandlers(onOpenMarkdown?: (content: string, path?: string) => void): Extension {
   return EditorView.domEventHandlers({
     paste(event, view) {
       // Ctrl/Cmd+Shift+V：粘贴为纯文本，跳过 HTML → Markdown 转换
@@ -1162,7 +1149,7 @@ function mediaHandlers(
           if (!file) return true;
           void file.arrayBuffer().then((buf) => {
             const ext = file.type.split("/")[1] || "png";
-            void insertImage(view, ctx.filePath, new Uint8Array(buf), ext, file.type || "image/png");
+            void insertImage(view, new Uint8Array(buf), ext, file.type || "image/png");
           });
           return true;
         }
@@ -1191,7 +1178,7 @@ function mediaHandlers(
       event.preventDefault();
       void file.arrayBuffer().then((buf) => {
         const ext = file.name.split(".").pop() || "png";
-        void insertImage(view, ctx.filePath, new Uint8Array(buf), ext, file.type || "image/png");
+        void insertImage(view, new Uint8Array(buf), ext, file.type || "image/png");
       });
       return true;
     },
@@ -1402,7 +1389,7 @@ export function createEditor(
       highlightSelectionMatches(),
       previewCompartment.of(previewExt(mode, assetContext)),
       typewriterCompartment.of(typewriterExt(typewriter)),
-      mediaHandlers(assetContext, opts.onOpenMarkdown),
+      mediaHandlers(opts.onOpenMarkdown),
       EditorView.updateListener.of((u) => {
         if (u.docChanged) opts.onChange(documentText(u.state.doc));
         if (u.selectionSet) {

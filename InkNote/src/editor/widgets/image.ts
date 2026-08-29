@@ -21,6 +21,7 @@ export class ImageWidget extends WidgetType {
     readonly resolved: string,
     readonly inline = false,
     readonly title = "",
+    readonly pendingUrl = pendingImageUrl(src),
   ) {
     super();
   }
@@ -33,7 +34,8 @@ export class ImageWidget extends WidgetType {
       other.alt === this.alt &&
       other.resolved === this.resolved &&
       other.inline === this.inline &&
-      other.title === this.title
+      other.title === this.title &&
+      other.pendingUrl === this.pendingUrl
     );
   }
 
@@ -44,10 +46,9 @@ export class ImageWidget extends WidgetType {
     img.loading = "lazy";
     img.draggable = false;
 
-    // 文档还没保存时粘贴进来的图片：直接用内存里的 blob URL 回显
-    const pending = pendingImageUrl(this.src);
-    if (pending) {
-      img.src = pending;
+    // 尚未随文档提交的图片直接使用内存 Blob URL 回显。
+    if (this.pendingUrl) {
+      img.src = this.pendingUrl;
     } else if (/^https?:\/\//i.test(this.resolved) || /^data:/i.test(this.resolved)) {
       img.src = this.resolved;
     } else {
