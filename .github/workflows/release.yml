@@ -7,12 +7,22 @@ on:
         description: "Existing release tag to build or repair"
         required: true
         default: "v0.2.3"
+      platforms:
+        description: "Platform group to build"
+        required: true
+        type: choice
+        default: "linux"
+        options:
+          - linux
+          - desktop
+          - all
   push:
     tags:
       - "v*"
 
 jobs:
   publish:
+    if: github.event_name == 'push' || inputs.platforms == 'desktop' || inputs.platforms == 'all'
     permissions:
       contents: write
     strategy:
@@ -89,6 +99,8 @@ jobs:
             - Windows x64：中文安装程序
             - macOS Intel：x86_64 DMG
             - macOS Apple 芯片：ARM64 DMG
+            - Linux x86_64：AppImage / DEB / RPM
+            - Linux ARM64：AppImage / DEB / RPM
 
             macOS 安装包使用 ad-hoc 签名且未经过 Apple 公证。若首次打开被 Gatekeeper 拦截，请在“系统设置 → 隐私与安全性”中选择“仍要打开”。
           releaseDraft: false
@@ -98,9 +110,109 @@ jobs:
           releaseAssetNamePattern: ${{ matrix.asset_pattern }}
           args: ${{ matrix.args }}
 
+  publish-linux:
+    if: github.event_name == 'push' || inputs.platforms == 'linux' || inputs.platforms == 'all'
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-22.04
+            architecture: x86_64
+            asset_pattern: "InkNote-Linux-x86_64[ext]"
+          - platform: ubuntu-24.04-arm
+            architecture: arm64
+            asset_pattern: "InkNote-Linux-arm64[ext]"
+    runs-on: ${{ matrix.platform }}
+    env:
+      APPIMAGE_EXTRACT_AND_RUN: "1"
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: pnpm
+          cache-dependency-path: InkNote/pnpm-lock.yaml
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: InkNote/src-tauri -> target
+
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf \
+            rpm \
+            wget
+
+      - name: Install dependencies
+        working-directory: InkNote
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests
+        working-directory: InkNote
+        run: pnpm test
+
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        with:
+          projectPath: InkNote
+          tagName: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          releaseName: "InkNote v__VERSION__"
+          releaseBody: |
+            InkNote v__VERSION__
+
+            ### 修复
+
+            - 修复 macOS 应用未运行时，双击 Markdown 文件仍恢复上次文档、没有打开目标文件的问题（#1）
+            - 修复 macOS 安装包签名结构不完整，可能被系统提示“文件已损坏”的问题
+            - “预览 / 编辑”切换现在适用于新建文档、应用内打开的已有文件和外部关联打开的文件
+
+            ### 下载
+
+            - Windows x64：中文安装程序
+            - macOS Intel：x86_64 DMG
+            - macOS Apple 芯片：ARM64 DMG
+            - Linux x86_64：AppImage / DEB / RPM
+            - Linux ARM64：AppImage / DEB / RPM
+
+            Linux 用户可根据发行版选择 AppImage、DEB 或 RPM。macOS 安装包使用 ad-hoc 签名且未经过 Apple 公证。
+          releaseDraft: false
+          prerelease: false
+          uploadUpdaterJson: false
+          retryAttempts: 2
+          releaseAssetNamePattern: ${{ matrix.asset_pattern }}
+          args: "--bundles deb,rpm,appimage"
+
   publish-updater-manifest:
     name: Publish updater manifest
-    needs: publish
+    needs: [publish, publish-linux]
+    if: |
+      always() &&
+      (needs.publish.result == 'success' || needs.publish.result == 'skipped') &&
+      (needs.publish-linux.result == 'success' || needs.publish-linux.result == 'skipped') &&
+      !(needs.publish.result == 'skipped' && needs.publish-linux.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -151,6 +263,16 @@ jobs:
           windows_signature="$(read_signature "$windows_asset")"
           macos_x86_signature="$(read_signature "$macos_x86_asset")"
           macos_arm_signature="$(read_signature "$macos_arm_asset")"
+          linux_x86_asset="$(pick_asset '^InkNote-Linux-x86_64\.AppImage\.tar\.gz$' || true)"
+          linux_arm_asset="$(pick_asset '^InkNote-Linux-arm64\.AppImage\.tar\.gz$' || true)"
+          linux_x86_signature=""
+          linux_arm_signature=""
+          if [[ -n "$linux_x86_asset" ]]; then
+            linux_x86_signature="$(read_signature "$linux_x86_asset")"
+          fi
+          if [[ -n "$linux_arm_asset" ]]; then
+            linux_arm_signature="$(read_signature "$linux_arm_asset")"
+          fi
           base_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}"
 
           jq -n \
@@ -163,6 +285,10 @@ jobs:
             --arg macos_x86_url "${base_url}/${macos_x86_asset}" \
             --arg macos_arm_signature "$macos_arm_signature" \
             --arg macos_arm_url "${base_url}/${macos_arm_asset}" \
+            --arg linux_x86_signature "$linux_x86_signature" \
+            --arg linux_x86_url "${linux_x86_asset:+${base_url}/${linux_x86_asset}}" \
+            --arg linux_arm_signature "$linux_arm_signature" \
+            --arg linux_arm_url "${linux_arm_asset:+${base_url}/${linux_arm_asset}}" \
             '{
               version: $version,
               notes: $notes,
@@ -171,7 +297,13 @@ jobs:
                 "windows-x86_64": { signature: $windows_signature, url: $windows_url },
                 "darwin-x86_64": { signature: $macos_x86_signature, url: $macos_x86_url },
                 "darwin-aarch64": { signature: $macos_arm_signature, url: $macos_arm_url }
-              }
+              } +
+              (if $linux_x86_url != "" then {
+                "linux-x86_64": { signature: $linux_x86_signature, url: $linux_x86_url }
+              } else {} end) +
+              (if $linux_arm_url != "" then {
+                "linux-aarch64": { signature: $linux_arm_signature, url: $linux_arm_url }
+              } else {} end)
             }' > latest.json
 
           gh release upload "$RELEASE_TAG" latest.json --clobber

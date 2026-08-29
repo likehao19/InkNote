@@ -88,6 +88,8 @@ InkNote keeps every document as a standard local Markdown file while giving you 
 | Windows | [Installer](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Windows-x64-Setup.exe) | x64 |
 | macOS | [Apple silicon DMG](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-macOS-arm64.dmg) | ARM64 |
 | macOS | [Intel DMG](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-macOS-x86_64.dmg) | x86_64 |
+| Linux | [AppImage](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-x86_64.AppImage) · [DEB](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-x86_64.deb) · [RPM](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-x86_64.rpm) | x86_64 |
+| Linux | [AppImage](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-arm64.AppImage) · [DEB](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-arm64.deb) · [RPM](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-arm64.rpm) | ARM64 / aarch64 |
 
 Release notes and older builds are available on [GitHub Releases](https://github.com/likehao19/InkNote/releases).
 
@@ -108,6 +110,31 @@ xattr -dr com.apple.quarantine /Applications/InkNote.app
 ```
 
 This removes the quarantine attribute from the downloaded app; it does not modify your documents.
+
+### Linux
+
+Check your architecture with `uname -m`: choose `x86_64` for 64-bit Intel/AMD systems or `arm64` for `aarch64` systems.
+
+- Use **DEB** on Ubuntu, Debian, Linux Mint, Pop!_OS, and other Debian-based distributions.
+- Use **RPM** on Fedora, RHEL, Rocky Linux, AlmaLinux, openSUSE, and other RPM-based distributions.
+- Use **AppImage** on other mainstream glibc-based distributions. Alpine Linux and other musl-based systems are not currently supported.
+
+```bash
+# AppImage (replace x86_64 with arm64 when needed)
+chmod +x InkNote-Linux-x86_64.AppImage
+./InkNote-Linux-x86_64.AppImage
+
+# Debian family
+sudo apt install ./InkNote-Linux-x86_64.deb
+
+# Fedora / RHEL family
+sudo dnf install ./InkNote-Linux-x86_64.rpm
+
+# openSUSE
+sudo zypper install ./InkNote-Linux-x86_64.rpm
+```
+
+HTML export is available on Linux; PDF export is currently unavailable.
 
 ## Keyboard shortcuts
 

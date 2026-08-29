@@ -88,6 +88,8 @@ InkNote は文書を標準のローカル Markdown ファイルとして保存�
 | Windows | [インストーラー](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Windows-x64-Setup.exe) | x64 |
 | macOS | [Apple シリコン版 DMG](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-macOS-arm64.dmg) | ARM64 |
 | macOS | [Intel 版 DMG](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-macOS-x86_64.dmg) | x86_64 |
+| Linux | [AppImage](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-x86_64.AppImage) · [DEB](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-x86_64.deb) · [RPM](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-x86_64.rpm) | x86_64 |
+| Linux | [AppImage](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-arm64.AppImage) · [DEB](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-arm64.deb) · [RPM](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-arm64.rpm) | ARM64 / aarch64 |
 
 リリースノートと過去のビルドは [GitHub Releases](https://github.com/likehao19/InkNote/releases) で確認できます。
 
@@ -108,6 +110,31 @@ xattr -dr com.apple.quarantine /Applications/InkNote.app
 ```
 
 このコマンドはダウンロードしたアプリの隔離属性だけを削除し、文書には変更を加えません。
+
+### Linux
+
+`uname -m` でアーキテクチャを確認します。64 ビット Intel/AMD 環境では `x86_64`、`aarch64` と表示される環境では `arm64` を選択してください。
+
+- Ubuntu、Debian、Linux Mint、Pop!_OS などの Debian 系ディストリビューションでは **DEB** を使用します。
+- Fedora、RHEL、Rocky Linux、AlmaLinux、openSUSE などの RPM 系ディストリビューションでは **RPM** を使用します。
+- その他の主要な glibc ベースのディストリビューションでは **AppImage** を使用できます。Alpine Linux などの musl ベースのシステムは現在サポートしていません。
+
+```bash
+# AppImage（ARM64 環境では x86_64 を arm64 に置き換えてください）
+chmod +x InkNote-Linux-x86_64.AppImage
+./InkNote-Linux-x86_64.AppImage
+
+# Debian 系
+sudo apt install ./InkNote-Linux-x86_64.deb
+
+# Fedora / RHEL 系
+sudo dnf install ./InkNote-Linux-x86_64.rpm
+
+# openSUSE
+sudo zypper install ./InkNote-Linux-x86_64.rpm
+```
+
+Linux 版では HTML をエクスポートできますが、PDF エクスポートは現在利用できません。
 
 ## キーボードショートカット
 

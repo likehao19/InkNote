@@ -88,6 +88,8 @@ InkNote 始终以标准 Markdown 文件保存文档，同时提供接近普通�
 | Windows | [下载安装程序](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Windows-x64-Setup.exe) | x64 |
 | macOS | [下载 Apple 芯片版](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-macOS-arm64.dmg) | ARM64 |
 | macOS | [下载 Intel 版](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-macOS-x86_64.dmg) | x86_64 |
+| Linux | [AppImage](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-x86_64.AppImage) · [DEB](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-x86_64.deb) · [RPM](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-x86_64.rpm) | x86_64 |
+| Linux | [AppImage](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-arm64.AppImage) · [DEB](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-arm64.deb) · [RPM](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-arm64.rpm) | ARM64 / aarch64 |
 
 更新说明和历史版本可在 [GitHub Releases](https://github.com/likehao19/InkNote/releases) 查看。
 
@@ -108,6 +110,31 @@ xattr -dr com.apple.quarantine /Applications/InkNote.app
 ```
 
 该命令只会移除下载应用的隔离属性，不会修改你的文档。
+
+### Linux
+
+先运行 `uname -m` 查看架构：64 位 Intel/AMD 设备选择 `x86_64`，显示 `aarch64` 的设备选择 `arm64`。
+
+- Ubuntu、Debian、Linux Mint、Pop!_OS 等 Debian 系发行版使用 **DEB**。
+- Fedora、RHEL、Rocky Linux、AlmaLinux、openSUSE 等 RPM 系发行版使用 **RPM**。
+- 其他主流、基于 glibc 的发行版可使用 **AppImage**。目前不支持 Alpine Linux 等基于 musl 的系统。
+
+```bash
+# AppImage（ARM64 设备请将 x86_64 替换为 arm64）
+chmod +x InkNote-Linux-x86_64.AppImage
+./InkNote-Linux-x86_64.AppImage
+
+# Debian 系
+sudo apt install ./InkNote-Linux-x86_64.deb
+
+# Fedora / RHEL 系
+sudo dnf install ./InkNote-Linux-x86_64.rpm
+
+# openSUSE
+sudo zypper install ./InkNote-Linux-x86_64.rpm
+```
+
+Linux 版支持导出 HTML，暂不支持导出 PDF。
 
 ## 常用快捷键
 

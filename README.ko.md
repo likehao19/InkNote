@@ -88,6 +88,8 @@ InkNote는 모든 문서를 표준 로컬 Markdown 파일로 보관하면서 일
 | Windows | [설치 프로그램](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Windows-x64-Setup.exe) | x64 |
 | macOS | [Apple Silicon DMG](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-macOS-arm64.dmg) | ARM64 |
 | macOS | [Intel DMG](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-macOS-x86_64.dmg) | x86_64 |
+| Linux | [AppImage](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-x86_64.AppImage) · [DEB](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-x86_64.deb) · [RPM](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-x86_64.rpm) | x86_64 |
+| Linux | [AppImage](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-arm64.AppImage) · [DEB](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-arm64.deb) · [RPM](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-arm64.rpm) | ARM64 / aarch64 |
 
 릴리스 노트와 이전 빌드는 [GitHub Releases](https://github.com/likehao19/InkNote/releases)에서 확인할 수 있습니다.
 
@@ -108,6 +110,31 @@ xattr -dr com.apple.quarantine /Applications/InkNote.app
 ```
 
 이 명령은 다운로드한 앱의 격리 속성만 제거하며 문서는 변경하지 않습니다.
+
+### Linux
+
+`uname -m`으로 아키텍처를 확인하세요. 64비트 Intel/AMD 시스템은 `x86_64`, `aarch64`로 표시되는 시스템은 `arm64`를 선택합니다.
+
+- Ubuntu, Debian, Linux Mint, Pop!_OS 등 Debian 계열 배포판에서는 **DEB**를 사용합니다.
+- Fedora, RHEL, Rocky Linux, AlmaLinux, openSUSE 등 RPM 계열 배포판에서는 **RPM**을 사용합니다.
+- 그 밖의 주요 glibc 기반 배포판에서는 **AppImage**를 사용할 수 있습니다. Alpine Linux와 같은 musl 기반 시스템은 현재 지원하지 않습니다.
+
+```bash
+# AppImage (ARM64 시스템에서는 x86_64를 arm64로 바꾸세요)
+chmod +x InkNote-Linux-x86_64.AppImage
+./InkNote-Linux-x86_64.AppImage
+
+# Debian 계열
+sudo apt install ./InkNote-Linux-x86_64.deb
+
+# Fedora / RHEL 계열
+sudo dnf install ./InkNote-Linux-x86_64.rpm
+
+# openSUSE
+sudo zypper install ./InkNote-Linux-x86_64.rpm
+```
+
+Linux 버전은 HTML 내보내기를 지원하지만 PDF 내보내기는 현재 사용할 수 없습니다.
 
 ## 키보드 단축키
 

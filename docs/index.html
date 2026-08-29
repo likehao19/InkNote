@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#ffffff" />
     <meta
       name="description"
-      content="墨笺 InkNote，一款面向 Windows 与 macOS 的本地优先、所见即所得 Markdown 编辑器。"
+      content="墨笺 InkNote，一款面向 Windows、macOS 与 Linux 的本地优先、所见即所得 Markdown 编辑器。"
     />
     <title>墨笺 InkNote — 专注写作的 Markdown 编辑器</title>
     <link rel="icon" href="./assets/inknote-icon.png" />
@@ -43,14 +43,14 @@
       <section class="hero" id="top">
         <div class="container hero-grid">
           <div class="hero-copy">
-            <div class="eyebrow"><span class="status-dot"></span><span data-i18n="eyebrow">本地优先 · Windows / macOS</span></div>
+            <div class="eyebrow"><span class="status-dot"></span><span data-i18n="eyebrow">本地优先 · Windows / macOS / Linux</span></div>
             <h1 data-i18n="heroTitle">写 Markdown，<br />只看内容本身。</h1>
             <p class="hero-lead" data-i18n="heroLead">墨笺是一款所见即所得的桌面 Markdown 编辑器。没有割裂的双栏预览，点击即可编辑，移开焦点即呈现最终排版。</p>
             <div class="hero-actions">
               <a class="button button-primary recommended-download" href="#download"><span data-i18n="downloadNow">立即下载</span><span aria-hidden="true">↓</span></a>
               <a class="button button-secondary" href="https://github.com/likehao19/InkNote" target="_blank" rel="noreferrer"><span data-i18n="viewGithub">查看 GitHub</span><span aria-hidden="true">↗</span></a>
             </div>
-            <p class="release-note"><span data-i18n="latest">最新版本</span> <strong data-release-version>v0.2.2</strong><span class="dot-separator">·</span><span data-i18n="freeDownload">免费下载</span></p>
+            <p class="release-note"><span data-i18n="latest">最新版本</span> <strong data-release-version>v0.2.3</strong><span class="dot-separator">·</span><span data-i18n="freeDownload">免费下载</span></p>
           </div>
           <div class="hero-aside" aria-label="InkNote application icon">
             <div class="icon-card"><img src="./assets/inknote-icon.png" alt="InkNote" /></div>
@@ -58,6 +58,8 @@
               <div><dt>Windows</dt><dd>x64</dd></div>
               <div><dt>macOS</dt><dd>Intel x86_64</dd></div>
               <div><dt>macOS</dt><dd>Apple ARM64</dd></div>
+              <div><dt>Linux</dt><dd>x86_64</dd></div>
+              <div><dt>Linux</dt><dd>ARM64</dd></div>
             </dl>
           </div>
         </div>
@@ -136,14 +138,14 @@
             <article><span class="feature-icon">⌕</span><h3 data-i18n="feature3Title">文档与工作区检索</h3><p data-i18n="feature3Text">支持当前文档查找替换，以及跨工作区按文件名和内容搜索。</p></article>
             <article><span class="feature-icon">∑</span><h3 data-i18n="feature4Title">专业 Markdown</h3><p data-i18n="feature4Text">支持 GFM、KaTeX 数学公式、Mermaid 图表与 YAML Front Matter。</p></article>
             <article><span class="feature-icon">◫</span><h3 data-i18n="feature5Title">本地工作区</h3><p data-i18n="feature5Text">多根目录文件树、大纲、最近文档与本地设置，内容始终由你掌控。</p></article>
-            <article><span class="feature-icon">⇧</span><h3 data-i18n="feature6Title">导出与更新</h3><p data-i18n="feature6Text">直接导出 HTML/PDF，并可在应用内检查、下载和安装新版本。</p></article>
+            <article><span class="feature-icon">⇧</span><h3 data-i18n="feature6Title">导出与更新</h3><p data-i18n="feature6Text">直接导出 HTML（Windows/macOS 也支持 PDF），并可在应用内检查、下载和安装新版本。</p></article>
           </div>
         </div>
       </section>
 
       <section class="section workflow-section">
         <div class="container workflow-grid">
-          <div><span class="section-index">02</span><h2 data-i18n="workflowTitle">从打开到交付，保持一条写作流</h2><p data-i18n="workflowText">使用文件关联快速预览，切换到编辑模式继续修改；需要交付时直接导出 HTML 或 PDF。源文件始终是标准 Markdown。</p></div>
+          <div><span class="section-index">02</span><h2 data-i18n="workflowTitle">从打开到交付，保持一条写作流</h2><p data-i18n="workflowText">使用文件关联快速预览，切换到编辑模式继续修改；需要交付时直接导出 HTML，Windows/macOS 还可导出 PDF。源文件始终是标准 Markdown。</p></div>
           <ol><li><span>1</span><div><strong data-i18n="flow1Title">打开</strong><p data-i18n="flow1Text">文件、文件夹或最近文档</p></div></li><li><span>2</span><div><strong data-i18n="flow2Title">写作</strong><p data-i18n="flow2Text">实时预览或源码模式</p></div></li><li><span>3</span><div><strong data-i18n="flow3Title">交付</strong><p data-i18n="flow3Text">保存 Markdown，导出 HTML/PDF</p></div></li></ol>
         </div>
       </section>
@@ -155,8 +157,10 @@
             <article class="download-card featured"><div class="platform-mark windows"><span></span><span></span><span></span><span></span></div><div><h3>Windows</h3><p data-i18n="windowsMeta">Windows 10/11 · x64 · 中文安装程序</p></div><a class="button button-primary download-link" data-platform="windows" download href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Windows-x64-Setup.exe"><span data-i18n="downloadWindows">下载 Windows 版</span><span>↓</span></a></article>
             <article class="download-card"><div class="platform-mark apple">●</div><div><h3>macOS Intel</h3><p data-i18n="macIntelMeta">Intel 芯片 · x86_64 · DMG</p></div><a class="button button-secondary download-link" data-platform="macos-x64" download href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-macOS-x86_64.dmg"><span data-i18n="downloadMacIntel">下载 Mac Intel 版</span><span>↓</span></a></article>
             <article class="download-card"><div class="platform-mark apple">●</div><div><h3>macOS ARM</h3><p data-i18n="macArmMeta">Apple 芯片 · ARM64 · DMG</p></div><a class="button button-secondary download-link" data-platform="macos-arm64" download href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-macOS-arm64.dmg"><span data-i18n="downloadMacArm">下载 Mac ARM 版</span><span>↓</span></a></article>
+            <article class="download-card"><div class="platform-mark linux">&gt;_</div><div><h3>Linux x86_64</h3><p data-i18n="linuxX64Meta">Intel/AMD · AppImage；DEB/RPM 见 Releases</p></div><a class="button button-secondary download-link" data-platform="linux-x64" download href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-x86_64.AppImage"><span data-i18n="downloadLinuxX64">下载 Linux x86_64</span><span>↓</span></a></article>
+            <article class="download-card"><div class="platform-mark linux">&gt;_</div><div><h3>Linux ARM64</h3><p data-i18n="linuxArmMeta">aarch64 · AppImage；DEB/RPM 见 Releases</p></div><a class="button button-secondary download-link" data-platform="linux-arm64" download href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-arm64.AppImage"><span data-i18n="downloadLinuxArm">下载 Linux ARM64</span><span>↓</span></a></article>
           </div>
-          <p class="download-footnote"><span data-i18n="otherPackages">需要历史版本？</span> <a href="https://github.com/likehao19/InkNote/releases" target="_blank" rel="noreferrer" data-i18n="allReleases">查看全部 Releases ↗</a></p>
+          <p class="download-footnote"><span data-i18n="otherPackages">Linux DEB/RPM 或历史版本：</span> <a href="https://github.com/likehao19/InkNote/releases" target="_blank" rel="noreferrer" data-i18n="allReleases">查看全部 Releases ↗</a></p>
         </div>
       </section>
 
