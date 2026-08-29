@@ -6,7 +6,7 @@ on:
       tag:
         description: "Existing release tag to build or repair"
         required: true
-        default: "v0.2.2"
+        default: "v0.2.3"
   push:
     tags:
       - "v*"
@@ -78,9 +78,19 @@ jobs:
           releaseBody: |
             InkNote v__VERSION__
 
+            ### 修复
+
+            - 修复 macOS 应用未运行时，双击 Markdown 文件仍恢复上次文档、没有打开目标文件的问题（#1）
+            - 修复 macOS 安装包签名结构不完整，可能被系统提示“文件已损坏”的问题
+            - “预览 / 编辑”切换现在适用于新建文档、应用内打开的已有文件和外部关联打开的文件
+
+            ### 下载
+
             - Windows x64：中文安装程序
             - macOS Intel：x86_64 DMG
             - macOS Apple 芯片：ARM64 DMG
+
+            macOS 安装包使用 ad-hoc 签名且未经过 Apple 公证。若首次打开被 Gatekeeper 拦截，请在“系统设置 → 隐私与安全性”中选择“仍要打开”。
           releaseDraft: false
           prerelease: false
           uploadUpdaterJson: false
