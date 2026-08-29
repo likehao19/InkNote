@@ -1,9 +1,13 @@
 <h1 align="center">InkNote</h1>
 
-<p align="center">A local-first, WYSIWYG Markdown editor for Windows and macOS.</p>
+<p align="center"><strong>A local-first Markdown editor that feels like writing in a document.</strong></p>
 
 <p align="center">
-  English | <a href="README.zh-CN.md">简体中文</a>
+  English |
+  <a href="README.zh-CN.md">简体中文</a> |
+  <a href="README.zh-TW.md">繁體中文</a> |
+  <a href="README.ja.md">日本語</a> |
+  <a href="README.ko.md">한국어</a>
 </p>
 
 <p align="center">
@@ -17,63 +21,95 @@
 <p align="center">
   <a href="https://likehao19.github.io/InkNote/">Website</a> ·
   <a href="https://github.com/likehao19/InkNote/releases/latest">Download</a> ·
-  <a href="https://github.com/likehao19/InkNote/issues">Report an issue</a>
+  <a href="https://github.com/likehao19/InkNote/issues">Issues</a>
 </p>
 
 <p align="center">
-  <img src="docs/assets/inknote-website-preview.svg" alt="InkNote editor" width="900" />
+  <img src="docs/assets/inknote-live-preview.png" alt="InkNote live preview with document outline" width="1000" />
 </p>
 
-## Why InkNote?
+## Markdown files, without the Markdown friction
 
-InkNote combines a polished writing surface with ordinary Markdown files. It renders formatting as you write, lets you edit rich blocks in place, and always keeps the source portable and readable by other Markdown tools.
+InkNote keeps every document as a standard local Markdown file while giving you a polished writing surface. Formatting is rendered as you type, complex blocks can be edited in place, and the complete source is always one command away.
 
-- **Local first** — no account, no mandatory cloud, and no document uploads.
-- **Standard Markdown** — your notes remain plain `.md` files that you control.
-- **Focused editing** — switch between read-only preview, live editing, and full source mode.
-- **Cross-platform** — native desktop packages for Windows, Intel Mac, and Apple silicon Mac.
+- **Local first** — no account, mandatory cloud, or document upload.
+- **Portable by design** — plain `.md` files remain readable by any Markdown tool.
+- **Safe to open** — every new or existing document exposes a clear **Preview / Edit** access switch.
+- **Built for real documents** — outlines, workspaces, search, export, math, diagrams, tables, and code are part of the core workflow.
 
-## Features
+## Two ways to work
 
-- **Seamless live preview** — edit content directly while Markdown syntax stays out of the way.
-- **Markdown and GFM** — headings, lists, blockquotes, tables, tasks, footnotes, links, and more.
-- **Rich technical writing** — syntax-highlighted code blocks, KaTeX math, and Mermaid diagrams.
-- **Direct block editing** — edit tables, code, formulas, diagrams, images, and front matter in place.
-- **Workspace tools** — multiple folders, file tree, document outline, recent files, and quick open.
-- **Search** — find and replace in the current document or search across a workspace.
-- **Writing modes** — preview/edit access, live preview/source, focus mode, and typewriter mode.
-- **Export** — create standalone HTML and PDF documents.
-- **Personalization** — light/dark UI, Markdown themes, typography controls, and custom CSS.
-- **Desktop integration** — Markdown file associations, drag and drop, and in-app updates.
-- **Bilingual interface** — English and Simplified Chinese.
+<table>
+  <tr>
+    <td width="50%"><img src="docs/assets/inknote-source-mode.png" alt="InkNote Markdown source mode" /></td>
+    <td width="50%"><img src="docs/assets/inknote-settings.png" alt="InkNote appearance settings" /></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Live preview or full source</strong><br />Write with rendered formatting, or inspect and edit the complete Markdown source.</td>
+    <td align="center"><strong>Your editor, your way</strong><br />Choose light, dark, or system appearance, Markdown themes, typography, and custom CSS.</td>
+  </tr>
+</table>
+
+## What InkNote does
+
+### Write and format
+
+- Live-preview editing with Markdown syntax shown only when it is useful.
+- Headings, lists, blockquotes, links, images, task lists, footnotes, and GFM tables.
+- Formatting commands for bold, italic, strike-through, highlight, inline code, underline, superscript, and subscript.
+- Focus mode and typewriter mode for distraction-free writing.
+
+### Work with rich technical content
+
+- Syntax-highlighted code blocks with line numbers and copy controls.
+- KaTeX inline and block mathematics.
+- Mermaid flowcharts, sequence diagrams, and other supported diagrams.
+- In-place editors for tables, code, formulas, diagrams, images, and YAML front matter.
+
+### Organize and find
+
+- Multiple workspace folders, persistent file-tree state, and file operations.
+- Document outline, recent files, and quick open.
+- Find and replace in the current document.
+- Workspace-wide filename and content search with result navigation.
+
+### Publish and personalize
+
+- Export complete documents to standalone HTML or PDF.
+- Light, dark, and system UI appearance.
+- GitHub, Vue, and Minimal Markdown themes, plus custom CSS.
+- Markdown file associations, drag-and-drop opening, and in-app update checks.
+- English and Simplified Chinese application interface.
 
 ## Download
 
 | Platform | Package | Architecture |
 | --- | --- | --- |
-| Windows | [Download the installer](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Windows-x64-Setup.exe) | x64 |
-| macOS | [Download for Apple silicon](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-macOS-arm64.dmg) | ARM64 |
-| macOS | [Download for Intel](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-macOS-x86_64.dmg) | x86_64 |
+| Windows | [Installer](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Windows-x64-Setup.exe) | x64 |
+| macOS | [Apple silicon DMG](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-macOS-arm64.dmg) | ARM64 |
+| macOS | [Intel DMG](https://github.com/likehao19/InkNote/releases/latest/download/InkNote-macOS-x86_64.dmg) | x86_64 |
 
-Previous versions and release notes are available on the [Releases](https://github.com/likehao19/InkNote/releases) page.
+Release notes and older builds are available on [GitHub Releases](https://github.com/likehao19/InkNote/releases).
 
-## Install
+## Installation
 
 ### Windows
 
-Download `InkNote-Windows-x64-Setup.exe` and follow the installer. InkNote currently provides an x64 Windows build.
+Download `InkNote-Windows-x64-Setup.exe` and follow the installer. The current Windows release supports x64 systems.
 
 ### macOS
 
 Download the DMG for your Mac, open it, and drag **InkNote** into **Applications**.
 
-The macOS package is ad-hoc signed and is not notarized by Apple. If Gatekeeper blocks the first launch, open **System Settings → Privacy & Security** and choose **Open Anyway**. If macOS still reports that the app is damaged, run:
+InkNote is ad-hoc signed because the project does not currently use a paid Apple Developer certificate. If Gatekeeper blocks the first launch, open **System Settings → Privacy & Security** and choose **Open Anyway**. If macOS reports that the app is damaged, run:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/InkNote.app
 ```
 
-## Keyboard Shortcuts
+This removes the quarantine attribute from the downloaded app; it does not modify your documents.
+
+## Keyboard shortcuts
 
 | Action | Windows | macOS |
 | --- | --- | --- |
@@ -89,39 +125,19 @@ xattr -dr com.apple.quarantine /Applications/InkNote.app
 | Focus mode | `F8` | `F8` |
 | Typewriter mode | `F9` | `F9` |
 
-Open **Help → Keyboard Shortcuts** in InkNote for the complete list.
+Open **Help → Keyboard Shortcuts** for the complete list.
 
-## Privacy and Local Data
+## Privacy and local data
 
-InkNote does not require an account and does not upload your documents. Markdown files stay wherever you save them. Workspace folders, recent files, and preferences are stored locally in the platform-specific application data directory as `settings.json`.
+InkNote does not require an account and does not upload your documents. Files stay wherever you save them. Workspace folders, recent files, and preferences are stored locally in the platform application-data directory as `settings.json`.
 
-## FAQ
+## Build from source
 
-### Does InkNote use a proprietary document format?
-
-No. InkNote reads and writes standard Markdown files, so you can open the same documents in any compatible editor.
-
-### Can I use InkNote without a workspace?
-
-Yes. You can open or create individual Markdown files, or add one or more folders when you want file-tree navigation and workspace search.
-
-### Why does macOS warn when I open InkNote?
-
-InkNote does not currently use a paid Apple Developer certificate or Apple notarization. The release is ad-hoc signed to protect bundle integrity, but Gatekeeper may still require one-time approval as described in the [macOS installation steps](#macos).
-
-### How do updates work?
-
-Use **Help → Check for Updates**. InkNote reads the latest GitHub Release and selects the correct package for Windows, Intel Mac, or Apple silicon Mac.
-
-## Development
-
-### Prerequisites
+### Requirements
 
 - Node.js LTS and pnpm
 - Rust stable
-- The [Tauri 2 platform prerequisites](https://v2.tauri.app/start/prerequisites/)
-
-### Run locally
+- [Tauri 2 platform prerequisites](https://v2.tauri.app/start/prerequisites/)
 
 ```bash
 git clone https://github.com/likehao19/InkNote.git
@@ -130,7 +146,7 @@ pnpm install
 pnpm tauri dev
 ```
 
-### Validate and build
+Run the project checks and create a desktop bundle with:
 
 ```bash
 pnpm test
@@ -139,35 +155,16 @@ cargo check --all-targets --manifest-path src-tauri/Cargo.toml
 pnpm tauri build
 ```
 
-## Project Structure
-
-```text
-InkNote/
-├─ .github/workflows/   # CI, release, and website deployment
-├─ docs/                # GitHub Pages website
-├─ InkNote/
-│  ├─ src/              # React UI and CodeMirror editor
-│  ├─ src-tauri/        # Tauri and Rust desktop backend
-│  └─ public/           # Application assets
-└─ README.md
-```
-
 ## Technology
 
-- Tauri 2 and Rust
-- React 19, TypeScript, and Vite
-- CodeMirror 6
-- unified, remark, and rehype
-- KaTeX, Mermaid, and highlight.js
+InkNote is built with Tauri 2 and Rust, React 19 and TypeScript, CodeMirror 6, unified/remark/rehype, KaTeX, Mermaid, and highlight.js.
 
 ## Contributing
 
-Bug reports and focused feature requests are welcome in [GitHub Issues](https://github.com/likehao19/InkNote/issues). Before submitting code, run the frontend tests, production build, and Rust checks described above.
+Reproducible bug reports and focused feature requests are welcome in [GitHub Issues](https://github.com/likehao19/InkNote/issues). Before submitting code, run the frontend tests, production build, and Rust checks listed above.
 
-## Community
-
-- [LinuxDo](https://linux.do)
+Community discussion: [LinuxDo](https://linux.do)
 
 ## License
 
-InkNote is available under the [MIT License](LICENSE).
+InkNote is open source under the [MIT License](LICENSE).
