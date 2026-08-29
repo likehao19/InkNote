@@ -270,8 +270,8 @@ jobs:
           windows_signature="$(read_signature "$windows_asset")"
           macos_x86_signature="$(read_signature "$macos_x86_asset")"
           macos_arm_signature="$(read_signature "$macos_arm_asset")"
-          linux_x86_asset="$(pick_asset '^InkNote-Linux-x86_64\.AppImage\.tar\.gz$' || true)"
-          linux_arm_asset="$(pick_asset '^InkNote-Linux-arm64\.AppImage\.tar\.gz$' || true)"
+          linux_x86_asset="$(pick_asset '^InkNote-Linux-x86_64\.AppImage$' || true)"
+          linux_arm_asset="$(pick_asset '^InkNote-Linux-arm64\.AppImage$' || true)"
           linux_x86_signature=""
           linux_arm_signature=""
           if [[ -n "$linux_x86_asset" ]]; then
