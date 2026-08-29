@@ -163,6 +163,25 @@ InkNote は Tauri 2 と Rust、React 19 と TypeScript、CodeMirror 6、unified/
 
 再現可能な不具合報告や明確な機能提案は [GitHub Issues](https://github.com/likehao19/InkNote/issues) へお寄せください。コミュニティ：[LinuxDo](https://linux.do)
 
+## コントリビューター
+
+<table>
+  <tr>
+    <td align="center">
+      <a href="https://github.com/likehao19">
+        <img src="https://avatars.githubusercontent.com/u/96912988?v=4" width="72" height="72" alt="likehao19" /><br />
+        <sub><strong>likehao19</strong></sub>
+      </a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/StackTao">
+        <img src="https://avatars.githubusercontent.com/u/243470334?v=4" width="72" height="72" alt="StackTao" /><br />
+        <sub><strong>StackTao</strong></sub>
+      </a>
+    </td>
+  </tr>
+</table>
+
 ## ライセンス
 
 InkNote は [MIT License](LICENSE) のもとで公開されています。

@@ -165,6 +165,25 @@ Reproducible bug reports and focused feature requests are welcome in [GitHub Iss
 
 Community discussion: [LinuxDo](https://linux.do)
 
+## Contributors
+
+<table>
+  <tr>
+    <td align="center">
+      <a href="https://github.com/likehao19">
+        <img src="https://avatars.githubusercontent.com/u/96912988?v=4" width="72" height="72" alt="likehao19" /><br />
+        <sub><strong>likehao19</strong></sub>
+      </a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/StackTao">
+        <img src="https://avatars.githubusercontent.com/u/243470334?v=4" width="72" height="72" alt="StackTao" /><br />
+        <sub><strong>StackTao</strong></sub>
+      </a>
+    </td>
+  </tr>
+</table>
+
 ## License
 
 InkNote is open source under the [MIT License](LICENSE).

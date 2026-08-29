@@ -163,6 +163,25 @@ InkNote는 Tauri 2와 Rust, React 19와 TypeScript, CodeMirror 6, unified/remark
 
 재현 가능한 버그와 범위가 명확한 기능 제안은 [GitHub Issues](https://github.com/likehao19/InkNote/issues)에 남겨 주세요. 커뮤니티: [LinuxDo](https://linux.do)
 
+## 기여자
+
+<table>
+  <tr>
+    <td align="center">
+      <a href="https://github.com/likehao19">
+        <img src="https://avatars.githubusercontent.com/u/96912988?v=4" width="72" height="72" alt="likehao19" /><br />
+        <sub><strong>likehao19</strong></sub>
+      </a>
+    </td>
+    <td align="center">
+      <a href="https://github.com/StackTao">
+        <img src="https://avatars.githubusercontent.com/u/243470334?v=4" width="72" height="72" alt="StackTao" /><br />
+        <sub><strong>StackTao</strong></sub>
+      </a>
+    </td>
+  </tr>
+</table>
+
 ## 라이선스
 
 InkNote는 [MIT License](LICENSE)로 공개됩니다.
