@@ -209,6 +209,12 @@ InkNote는 Tauri 2와 Rust, React 19와 TypeScript, CodeMirror 6, unified/remark
   </tr>
 </table>
 
+## Star 증가 추이
+
+<picture>
+  <img alt="InkNote Star 증가 그래프" src="docs/assets/star-history.svg" />
+</picture>
+
 ## 라이선스
 
 InkNote는 [MIT License](LICENSE)로 공개됩니다.

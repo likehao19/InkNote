@@ -211,6 +211,12 @@ Community discussion: [LinuxDo](https://linux.do)
   </tr>
 </table>
 
+## Star history
+
+<picture>
+  <img alt="InkNote star history chart" src="docs/assets/star-history.svg" />
+</picture>
+
 ## License
 
 InkNote is open source under the [MIT License](LICENSE).

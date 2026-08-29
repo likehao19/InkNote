@@ -209,6 +209,12 @@ InkNote は Tauri 2 と Rust、React 19 と TypeScript、CodeMirror 6、unified/
   </tr>
 </table>
 
+## Star の推移
+
+<picture>
+  <img alt="InkNote Star 推移グラフ" src="docs/assets/star-history.svg" />
+</picture>
+
 ## ライセンス
 
 InkNote は [MIT License](LICENSE) のもとで公開されています。

@@ -209,6 +209,12 @@ InkNote 使用 Tauri 2 與 Rust、React 19 與 TypeScript、CodeMirror 6、unifi
   </tr>
 </table>
 
+## Star 成長趨勢
+
+<picture>
+  <img alt="InkNote Star 成長曲線" src="docs/assets/star-history.svg" />
+</picture>
+
 ## 授權條款
 
 InkNote 依照 [MIT License](LICENSE) 開放原始碼。

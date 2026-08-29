@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="420" viewBox="0 0 960 420" role="img" aria-labelledby="title description">
+  <title id="title">likehao19/InkNote Star history</title>
+  <desc id="description">24 GitHub Stars since 2026-08-24</desc>
+  <style>
+    .background { fill: #ffffff; }
+    .grid { stroke: #d8dee4; stroke-width: 1; }
+    .label { fill: #57606a; font: 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .heading { fill: #1f2328; font: 600 18px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .count { fill: #1f2328; font: 600 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .area { fill: #2da44e; opacity: 0.12; }
+    .line { fill: none; stroke: #1a7f37; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+    .point { fill: #1a7f37; stroke: #ffffff; stroke-width: 2; }
+    @media (prefers-color-scheme: dark) {
+      .background { fill: #0d1117; }
+      .grid { stroke: #30363d; }
+      .label { fill: #8b949e; }
+      .heading, .count { fill: #e6edf3; }
+      .area { fill: #3fb950; opacity: 0.14; }
+      .line { stroke: #3fb950; }
+      .point { fill: #3fb950; stroke: #0d1117; }
+    }
+  </style>
+  <rect class="background" width="960" height="420" />
+  <text class="heading" x="72" y="28">likehao19/InkNote Star history</text>
+  <text class="count" x="888" y="28" text-anchor="end">24 Stars</text>
+  <line class="grid" x1="72" y1="362.00" x2="888" y2="362.00" />
+  <text class="label" x="58" y="362.00" text-anchor="end" dominant-baseline="middle">0</text>
+  <line class="grid" x1="72" y1="299.20" x2="888" y2="299.20" />
+  <text class="label" x="58" y="299.20" text-anchor="end" dominant-baseline="middle">5</text>
+  <line class="grid" x1="72" y1="236.40" x2="888" y2="236.40" />
+  <text class="label" x="58" y="236.40" text-anchor="end" dominant-baseline="middle">10</text>
+  <line class="grid" x1="72" y1="173.60" x2="888" y2="173.60" />
+  <text class="label" x="58" y="173.60" text-anchor="end" dominant-baseline="middle">15</text>
+  <line class="grid" x1="72" y1="110.80" x2="888" y2="110.80" />
+  <text class="label" x="58" y="110.80" text-anchor="end" dominant-baseline="middle">20</text>
+  <line class="grid" x1="72" y1="48.00" x2="888" y2="48.00" />
+  <text class="label" x="58" y="48.00" text-anchor="end" dominant-baseline="middle">25</text>
+  <text class="label" x="72.00" y="396" text-anchor="middle">2026-08-24</text>
+  <text class="label" x="276.00" y="396" text-anchor="middle">2026-08-25</text>
+  <text class="label" x="480.00" y="396" text-anchor="middle">2026-08-26</text>
+  <text class="label" x="684.00" y="396" text-anchor="middle">2026-08-28</text>
+  <text class="label" x="888.00" y="396" text-anchor="middle">2026-08-29</text>
+  <path class="area" d="M 72.00 362.00 H 887.87 V 349.44 H 887.87 V 336.88 H 887.87 V 324.32 H 887.87 V 311.76 H 887.87 V 299.20 H 887.87 V 286.64 H 887.87 V 274.08 H 887.87 V 261.52 H 887.87 V 248.96 H 887.87 V 236.40 H 887.87 V 223.84 H 887.87 V 211.28 H 887.87 V 198.72 H 887.87 V 186.16 H 887.87 V 173.60 H 887.87 V 161.04 H 887.87 V 148.48 H 887.87 V 135.92 H 887.87 V 123.36 H 887.87 V 110.80 H 887.87 V 98.24 H 887.87 V 85.68 H 887.87 V 73.12 H 887.87 V 60.56 H 888.00 V 362.00 H 72.00 Z" />
+  <path class="line" d="M 72.00 362.00 H 887.87 V 349.44 H 887.87 V 336.88 H 887.87 V 324.32 H 887.87 V 311.76 H 887.87 V 299.20 H 887.87 V 286.64 H 887.87 V 274.08 H 887.87 V 261.52 H 887.87 V 248.96 H 887.87 V 236.40 H 887.87 V 223.84 H 887.87 V 211.28 H 887.87 V 198.72 H 887.87 V 186.16 H 887.87 V 173.60 H 887.87 V 161.04 H 887.87 V 148.48 H 887.87 V 135.92 H 887.87 V 123.36 H 887.87 V 110.80 H 887.87 V 98.24 H 887.87 V 85.68 H 887.87 V 73.12 H 887.87 V 60.56 H 888.00" />
+  <circle class="point" cx="888.00" cy="60.56" r="5" />
+</svg>
