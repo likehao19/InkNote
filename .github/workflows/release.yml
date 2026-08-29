@@ -161,7 +161,8 @@ jobs:
             libxdo-dev \
             patchelf \
             rpm \
-            wget
+            wget \
+            xdg-utils
 
       - name: Install dependencies
         working-directory: InkNote
