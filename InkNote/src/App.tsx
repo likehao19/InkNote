@@ -7,22 +7,9 @@ import Titlebar from "./components/Titlebar";
 import Sidebar, { type SidebarTab } from "./components/Sidebar";
 import { SidebarPanel } from "./components/SidebarPanel";
 import StatusBar from "./components/StatusBar";
-import Settings from "./components/Settings";
-import ReloadDialog from "./components/ReloadDialog";
-import TableSizePicker from "./components/TableSizePicker";
 import Toast from "./components/Toast";
 import type { UpdateProgressState } from "./components/UpdateProgress";
-import ConfirmDialog from "./components/ConfirmDialog";
-import LinkInsertDialog from "./components/LinkInsertDialog";
-import ImageInsertDialog from "./components/ImageInsertDialog";
-import ShortcutsDialog from "./components/ShortcutsDialog";
-import AboutDialog from "./components/AboutDialog";
 import WelcomePanel from "./components/WelcomePanel";
-import GlobalSearchDialog from "./components/GlobalSearchDialog";
-import QuickOpenDialog from "./components/QuickOpenDialog";
-import DocumentSearchDialog from "./components/DocumentSearchDialog";
-import PromptDialog from "./components/PromptDialog";
-import FileConflictDialog from "./components/FileConflictDialog";
 import * as api from "./lib/tauri";
 import { initPlatform, isMac } from "./lib/platform";
 import { setConfirmHandler } from "./lib/confirmBridge";
@@ -137,6 +124,7 @@ import { extractMarkdownOutline } from "./lib/markdownOutline";
 import { NATIVE_MENU_EVENT, setupMacNativeMenu } from "./lib/nativeMenu";
 import { invalidateWorkspaceFileCache } from "./lib/workspaceSearch";
 import { flushSettingsStore } from "./lib/settingsStore";
+import { scheduleIdleTask } from "./lib/startup";
 import {
   cleanupRemovedManagedImages,
   prepareManagedImagesForSaveAs,
@@ -148,6 +136,19 @@ import {
 import { rewriteManagedImageReferences } from "./lib/imageAssets";
 
 const Editor = lazy(() => import("./components/Editor"));
+const Settings = lazy(() => import("./components/Settings"));
+const ReloadDialog = lazy(() => import("./components/ReloadDialog"));
+const TableSizePicker = lazy(() => import("./components/TableSizePicker"));
+const ConfirmDialog = lazy(() => import("./components/ConfirmDialog"));
+const LinkInsertDialog = lazy(() => import("./components/LinkInsertDialog"));
+const ImageInsertDialog = lazy(() => import("./components/ImageInsertDialog"));
+const ShortcutsDialog = lazy(() => import("./components/ShortcutsDialog"));
+const AboutDialog = lazy(() => import("./components/AboutDialog"));
+const GlobalSearchDialog = lazy(() => import("./components/GlobalSearchDialog"));
+const QuickOpenDialog = lazy(() => import("./components/QuickOpenDialog"));
+const DocumentSearchDialog = lazy(() => import("./components/DocumentSearchDialog"));
+const PromptDialog = lazy(() => import("./components/PromptDialog"));
+const FileConflictDialog = lazy(() => import("./components/FileConflictDialog"));
 
 function formatLocalDate(timestamp: number): string {
   const date = new Date(timestamp);
@@ -1093,7 +1094,7 @@ export default function App() {
       if (automaticUpdateCheckStartedRef.current) return;
       automaticUpdateCheckStartedRef.current = true;
       void checkForUpdates(false);
-    }, 1800);
+    }, 8_000);
     const interval = window.setInterval(() => {
       void checkForUpdates(false);
     }, 6 * 60 * 60 * 1000);
@@ -1145,7 +1146,9 @@ export default function App() {
   };
 
   useEffect(() => {
-    void setupMacNativeMenu(locale).catch(showError);
+    return scheduleIdleTask(() => {
+      void setupMacNativeMenu(locale).catch(showError);
+    });
   }, [locale, showError]);
 
   useEffect(() => {
@@ -1154,6 +1157,7 @@ export default function App() {
     applyMarkdownTheme();
     applyEditorLayoutPrefs();
     let disposed = false;
+    let cancelWorkspaceValidation: (() => void) | undefined;
     const un: Array<() => void> = [];
     const track = (p: Promise<() => void>) => {
       void p.then((f) => {
@@ -1234,21 +1238,23 @@ export default function App() {
         }
         if (getRestoreLastFolder()) {
           const savedFolders = getWorkspaceFolders();
-          void Promise.all(
-            savedFolders.map(async (folder) => {
-              try {
-                await api.listDir(folder);
-                return folder;
-              } catch {
-                return null;
-              }
-            }),
-          ).then((folders) => {
-            if (disposed) return;
-            const valid = folders.filter((folder): folder is string => folder !== null);
-            setFolderPaths(valid);
-            setWorkspaceFolders(valid);
-            if (!valid.length) clearLastFolder();
+          cancelWorkspaceValidation = scheduleIdleTask(() => {
+            void Promise.all(
+              savedFolders.map(async (folder) => {
+                try {
+                  await api.listDir(folder);
+                  return folder;
+                } catch {
+                  return null;
+                }
+              }),
+            ).then((folders) => {
+              if (disposed) return;
+              const valid = folders.filter((folder): folder is string => folder !== null);
+              setFolderPaths(valid);
+              setWorkspaceFolders(valid);
+              if (!valid.length) clearLastFolder();
+            });
           });
         }
         if (getRestoreLastFile()) {
@@ -1260,6 +1266,7 @@ export default function App() {
 
     return () => {
       disposed = true;
+      cancelWorkspaceValidation?.();
       un.forEach((f) => f());
       window.removeEventListener(NATIVE_MENU_EVENT, onNativeMenu);
       api.unwatchFile();
@@ -1893,232 +1900,236 @@ export default function App() {
           onCopyPath={() => void handleCopyPath()}
         />
       )}
-      {settingsOpen && (
-        <Settings
-          onClose={() => setSettingsOpen(false)}
-          values={{
-            locale,
-            theme,
-            markdownTheme,
-            restoreLastFolder,
-            restoreLastFile,
-            confirmDiscard,
-            confirmDelete,
-            recentFilesLimit,
-            sidebarVisible,
-            defaultSidebarTab,
-            defaultEditorMode,
-            fontSize,
-            lineHeight,
-            fontFamily,
-            monoFontFamily,
-            editorZoom,
-            editorWidthPreset,
-            focusMaxWidth,
-            lineNumbers,
-            wordWrap,
-            tabSize,
-            spellCheck,
-            typewriterPadding,
-            showStatusBar,
-            externalOpenReadOnly,
-            newDocumentMetadata,
-            metadataTitle,
-            metadataAuthor,
-          }}
-          handlers={{
-            onLocale: (next) => {
-              setLocaleState(next);
-              setLocale(next);
-            },
-            onTheme: (next) => {
-              setTheme(next);
-              setThemePref(next);
-            },
-            onMarkdownTheme: (next) => {
-              setMarkdownThemeState(next);
-              setMarkdownTheme(next);
-            },
-            onRestoreLastFolder: setRestoreLastFolder,
-            onRestoreLastFile: setRestoreLastFile,
-            onConfirmDiscard: setConfirmDiscard,
-            onConfirmDelete: setConfirmDelete,
-            onRecentFilesLimit: setRecentFilesLimit,
-            onClearRecent: () => {
-              clearRecentFiles();
-              setRecentFiles([]);
-            },
-            onSidebarVisible: setSidebarVisible,
-            onDefaultSidebarTab: (tab) => {
-              setDefaultSidebarTabState(tab);
-              setDefaultSidebarTab(tab);
-              setSidebarTab(tab);
-              persistSidebarTab(tab);
-            },
-            onDefaultEditorMode: (mode) => {
-              setDefaultEditorModeState(mode);
-              setDefaultEditorMode(mode);
-            },
-            onFontSize: setFontSize,
-            onLineHeight: setLineHeight,
-            onFontFamily: setFontFamilyState,
-            onMonoFontFamily: setMonoFontFamilyState,
-            onEditorZoom: setEditorZoomState,
-            onEditorWidthPreset: setEditorWidthPreset,
-            onFocusMaxWidth: setFocusMaxWidth,
-            onLineNumbers: setLineNumbers,
-            onWordWrap: setWordWrap,
-            onTabSize: setTabSize,
-            onSpellCheck: setSpellCheck,
-            onTypewriterPadding: setTypewriterPadding,
-            onShowStatusBar: setShowStatusBar,
-            onExternalOpenReadOnly: setExternalOpenReadOnly,
-            onNewDocumentMetadata: (on) => {
-              setNewDocumentMetadata(on);
-              persistNewDocumentMetadata(on);
-              show(t(locale, on ? "toast.newDocumentMetadataOn" : "toast.newDocumentMetadataOff"));
-            },
-            onMetadataTitle: (value) => {
-              setMetadataTitle(value);
-              persistMetadataTitle(value);
-            },
-            onMetadataAuthor: (value) => {
-              setMetadataAuthor(value);
-              persistMetadataAuthor(value);
-            },
-          }}
-        />
-      )}
-      {reloadPrompt && (
-        <ReloadDialog
-          locale={locale}
-          onReload={reloadFromDisk}
-          onDismiss={() => setReloadPrompt(false)}
-        />
-      )}
-      <TableSizePicker
-        open={tablePickerOpen}
-        locale={locale}
-        onSelect={handleTableSizeSelect}
-        onCancel={() => setTablePickerOpen(false)}
-      />
       <Toast message={toastMessage} kind={toastKind} />
-      {confirmMessage && (
-        <ConfirmDialog
-          locale={locale}
-          message={confirmMessage}
-          onConfirm={() => resolveConfirm(true)}
-          onCancel={() => resolveConfirm(false)}
-        />
-      )}
-      {importConflict && (
-        <FileConflictDialog
-          locale={locale}
-          fileName={basename(importConflict.path)}
-          onOverwrite={() => void resolveImportConflict("overwrite")}
-          onRename={() => void resolveImportConflict("rename")}
-          onCancel={() => void resolveImportConflict("cancel")}
-        />
-      )}
-      {linkDialogText !== null && (
-        <LinkInsertDialog
-          locale={locale}
-          defaultText={linkDialogText}
-          onConfirm={(text, url) => {
-            linkResolveRef.current?.({ text, url });
-            linkResolveRef.current = null;
-            setLinkDialogText(null);
-          }}
-          onCancel={() => {
-            linkResolveRef.current?.(null);
-            linkResolveRef.current = null;
-            setLinkDialogText(null);
-          }}
-        />
-      )}
-      {imageDialog !== null && (
-        <ImageInsertDialog
-          locale={locale}
-          defaultAlt={imageDialog.alt}
-          defaultPath={imageDialog.path}
-          onBrowse={async () => {
-            const picked = await api.openImageDialog();
-            if (!picked) return null;
-            const tab = getActive();
-            if (tab?.path) return relativePath(dirOf(tab.path), picked);
-            return picked;
-          }}
-          onConfirm={(alt, path) => {
-            imageResolveRef.current?.({ alt, path });
-            imageResolveRef.current = null;
-            setImageDialog(null);
-          }}
-          onCancel={() => {
-            imageResolveRef.current?.(null);
-            imageResolveRef.current = null;
-            setImageDialog(null);
-          }}
-        />
-      )}
-      {promptDialog && (
-        <PromptDialog
-          locale={locale}
-          title={promptDialog.title}
-          label={promptDialog.label}
-          defaultValue={promptDialog.defaultValue}
-          placeholder={promptDialog.placeholder}
-          onConfirm={(value) => {
-            promptResolveRef.current?.(value);
-            promptResolveRef.current = null;
-            setPromptDialog(null);
-          }}
-          onCancel={() => {
-            promptResolveRef.current?.(null);
-            promptResolveRef.current = null;
-            setPromptDialog(null);
-          }}
-        />
-      )}
-      {shortcutsOpen && (
-        <ShortcutsDialog locale={locale} onClose={() => setShortcutsOpen(false)} />
-      )}
-      {aboutOpen && (
-        <AboutDialog locale={locale} onClose={() => setAboutOpen(false)} />
-      )}
-      {documentSearch.open && (
-        <DocumentSearchDialog
-          locale={locale}
-          content={active?.content ?? ""}
-          editable={documentEditable}
-          initialReplace={documentSearch.replace}
-          initialQuery={documentSearch.query}
-          onSelectLine={scrollToHeading}
-          onReplaceContent={(content, line) => {
-            if (active) updateContent(active.id, content);
-            requestAnimationFrame(() => scrollToHeading(line));
-          }}
-          onClose={() => setDocumentSearch({ open: false, replace: false, query: "" })}
-        />
-      )}
-      {globalSearchOpen && (
-        <GlobalSearchDialog
-          locale={locale}
-          folderPaths={folderPaths}
-          onOpenResult={openWorkspaceSearchResult}
-          onOpenFolder={() => void openFolder()}
-          onClose={() => setGlobalSearchOpen(false)}
-        />
-      )}
-      {quickOpenOpen && (
-        <QuickOpenDialog
-          locale={locale}
-          folderPaths={folderPaths}
-          recentFiles={recentFiles}
-          currentPath={active?.path ?? null}
-          onOpen={(p) => void loadFile(p)}
-          onClose={() => setQuickOpenOpen(false)}
-        />
-      )}
+      <Suspense fallback={null}>
+        {settingsOpen && (
+          <Settings
+            onClose={() => setSettingsOpen(false)}
+            values={{
+              locale,
+              theme,
+              markdownTheme,
+              restoreLastFolder,
+              restoreLastFile,
+              confirmDiscard,
+              confirmDelete,
+              recentFilesLimit,
+              sidebarVisible,
+              defaultSidebarTab,
+              defaultEditorMode,
+              fontSize,
+              lineHeight,
+              fontFamily,
+              monoFontFamily,
+              editorZoom,
+              editorWidthPreset,
+              focusMaxWidth,
+              lineNumbers,
+              wordWrap,
+              tabSize,
+              spellCheck,
+              typewriterPadding,
+              showStatusBar,
+              externalOpenReadOnly,
+              newDocumentMetadata,
+              metadataTitle,
+              metadataAuthor,
+            }}
+            handlers={{
+              onLocale: (next) => {
+                setLocaleState(next);
+                setLocale(next);
+              },
+              onTheme: (next) => {
+                setTheme(next);
+                setThemePref(next);
+              },
+              onMarkdownTheme: (next) => {
+                setMarkdownThemeState(next);
+                setMarkdownTheme(next);
+              },
+              onRestoreLastFolder: setRestoreLastFolder,
+              onRestoreLastFile: setRestoreLastFile,
+              onConfirmDiscard: setConfirmDiscard,
+              onConfirmDelete: setConfirmDelete,
+              onRecentFilesLimit: setRecentFilesLimit,
+              onClearRecent: () => {
+                clearRecentFiles();
+                setRecentFiles([]);
+              },
+              onSidebarVisible: setSidebarVisible,
+              onDefaultSidebarTab: (tab) => {
+                setDefaultSidebarTabState(tab);
+                setDefaultSidebarTab(tab);
+                setSidebarTab(tab);
+                persistSidebarTab(tab);
+              },
+              onDefaultEditorMode: (mode) => {
+                setDefaultEditorModeState(mode);
+                setDefaultEditorMode(mode);
+              },
+              onFontSize: setFontSize,
+              onLineHeight: setLineHeight,
+              onFontFamily: setFontFamilyState,
+              onMonoFontFamily: setMonoFontFamilyState,
+              onEditorZoom: setEditorZoomState,
+              onEditorWidthPreset: setEditorWidthPreset,
+              onFocusMaxWidth: setFocusMaxWidth,
+              onLineNumbers: setLineNumbers,
+              onWordWrap: setWordWrap,
+              onTabSize: setTabSize,
+              onSpellCheck: setSpellCheck,
+              onTypewriterPadding: setTypewriterPadding,
+              onShowStatusBar: setShowStatusBar,
+              onExternalOpenReadOnly: setExternalOpenReadOnly,
+              onNewDocumentMetadata: (on) => {
+                setNewDocumentMetadata(on);
+                persistNewDocumentMetadata(on);
+                show(t(locale, on ? "toast.newDocumentMetadataOn" : "toast.newDocumentMetadataOff"));
+              },
+              onMetadataTitle: (value) => {
+                setMetadataTitle(value);
+                persistMetadataTitle(value);
+              },
+              onMetadataAuthor: (value) => {
+                setMetadataAuthor(value);
+                persistMetadataAuthor(value);
+              },
+            }}
+          />
+        )}
+        {reloadPrompt && (
+          <ReloadDialog
+            locale={locale}
+            onReload={reloadFromDisk}
+            onDismiss={() => setReloadPrompt(false)}
+          />
+        )}
+        {tablePickerOpen && (
+          <TableSizePicker
+            open
+            locale={locale}
+            onSelect={handleTableSizeSelect}
+            onCancel={() => setTablePickerOpen(false)}
+          />
+        )}
+        {confirmMessage && (
+          <ConfirmDialog
+            locale={locale}
+            message={confirmMessage}
+            onConfirm={() => resolveConfirm(true)}
+            onCancel={() => resolveConfirm(false)}
+          />
+        )}
+        {importConflict && (
+          <FileConflictDialog
+            locale={locale}
+            fileName={basename(importConflict.path)}
+            onOverwrite={() => void resolveImportConflict("overwrite")}
+            onRename={() => void resolveImportConflict("rename")}
+            onCancel={() => void resolveImportConflict("cancel")}
+          />
+        )}
+        {linkDialogText !== null && (
+          <LinkInsertDialog
+            locale={locale}
+            defaultText={linkDialogText}
+            onConfirm={(text, url) => {
+              linkResolveRef.current?.({ text, url });
+              linkResolveRef.current = null;
+              setLinkDialogText(null);
+            }}
+            onCancel={() => {
+              linkResolveRef.current?.(null);
+              linkResolveRef.current = null;
+              setLinkDialogText(null);
+            }}
+          />
+        )}
+        {imageDialog !== null && (
+          <ImageInsertDialog
+            locale={locale}
+            defaultAlt={imageDialog.alt}
+            defaultPath={imageDialog.path}
+            onBrowse={async () => {
+              const picked = await api.openImageDialog();
+              if (!picked) return null;
+              const tab = getActive();
+              if (tab?.path) return relativePath(dirOf(tab.path), picked);
+              return picked;
+            }}
+            onConfirm={(alt, path) => {
+              imageResolveRef.current?.({ alt, path });
+              imageResolveRef.current = null;
+              setImageDialog(null);
+            }}
+            onCancel={() => {
+              imageResolveRef.current?.(null);
+              imageResolveRef.current = null;
+              setImageDialog(null);
+            }}
+          />
+        )}
+        {promptDialog && (
+          <PromptDialog
+            locale={locale}
+            title={promptDialog.title}
+            label={promptDialog.label}
+            defaultValue={promptDialog.defaultValue}
+            placeholder={promptDialog.placeholder}
+            onConfirm={(value) => {
+              promptResolveRef.current?.(value);
+              promptResolveRef.current = null;
+              setPromptDialog(null);
+            }}
+            onCancel={() => {
+              promptResolveRef.current?.(null);
+              promptResolveRef.current = null;
+              setPromptDialog(null);
+            }}
+          />
+        )}
+        {shortcutsOpen && (
+          <ShortcutsDialog locale={locale} onClose={() => setShortcutsOpen(false)} />
+        )}
+        {aboutOpen && (
+          <AboutDialog locale={locale} onClose={() => setAboutOpen(false)} />
+        )}
+        {documentSearch.open && (
+          <DocumentSearchDialog
+            locale={locale}
+            content={active?.content ?? ""}
+            editable={documentEditable}
+            initialReplace={documentSearch.replace}
+            initialQuery={documentSearch.query}
+            onSelectLine={scrollToHeading}
+            onReplaceContent={(content, line) => {
+              if (active) updateContent(active.id, content);
+              requestAnimationFrame(() => scrollToHeading(line));
+            }}
+            onClose={() => setDocumentSearch({ open: false, replace: false, query: "" })}
+          />
+        )}
+        {globalSearchOpen && (
+          <GlobalSearchDialog
+            locale={locale}
+            folderPaths={folderPaths}
+            onOpenResult={openWorkspaceSearchResult}
+            onOpenFolder={() => void openFolder()}
+            onClose={() => setGlobalSearchOpen(false)}
+          />
+        )}
+        {quickOpenOpen && (
+          <QuickOpenDialog
+            locale={locale}
+            folderPaths={folderPaths}
+            recentFiles={recentFiles}
+            currentPath={active?.path ?? null}
+            onOpen={(p) => void loadFile(p)}
+            onClose={() => setQuickOpenOpen(false)}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }

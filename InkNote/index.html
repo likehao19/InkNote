@@ -8,7 +8,17 @@
     <title>InkNote</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="app startup-shell" aria-hidden="true">
+        <header class="titlebar startup-titlebar" data-tauri-drag-region="">
+          <div class="startup-mac-leading" data-tauri-drag-region=""></div>
+          <div class="titlebar-center" data-tauri-drag-region="">
+            <span class="titlebar-brand">InkNote</span>
+          </div>
+        </header>
+        <div class="startup-body"></div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

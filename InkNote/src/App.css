@@ -144,6 +144,18 @@ input, select, textarea, .editor-host { user-select: text; }
 
 .app { display: flex; flex-direction: column; height: 100%; }
 .app-body { display: flex; flex: 1; min-height: 0; position: relative; }
+.startup-shell { background: var(--bg); }
+.startup-body { flex: 1; min-height: 0; background: var(--bg-editor); }
+.startup-mac-leading { display: none; }
+html.platform-mac .startup-mac-leading {
+  display: block;
+  width: 74px;
+  flex: none;
+}
+html.platform-mac .startup-titlebar .titlebar-center {
+  justify-content: flex-start;
+  padding-left: 0;
+}
 .empty-action { display: flex; flex-direction: column; gap: 10px; align-items: center; text-align: center; }
 .btn-sm { padding: 4px 10px; font-size: 12px; }
 

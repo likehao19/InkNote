@@ -1,13 +1,16 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App";
 import { initPlatform } from "./lib/platform";
 import { getLocale, setLocale } from "./lib/i18n";
 import { applyEditorLayoutPrefs } from "./lib/preferences";
 import { applyMarkdownTheme } from "./lib/markdownTheme";
-import { apply as applyTheme } from "./lib/theme";
+import { apply as applyTheme, applyBootstrapTheme } from "./lib/theme";
 import { initializeSettingsStore } from "./lib/settingsStore";
 import "./App.css";
+
+performance.mark("inknote:bootstrap-start");
+initPlatform();
+applyBootstrapTheme();
 
 document.addEventListener(
   "contextmenu",
@@ -18,7 +21,11 @@ document.addEventListener(
 );
 
 async function bootstrap() {
-  await initializeSettingsStore();
+  const [{ default: App }] = await Promise.all([
+    import("./App"),
+    initializeSettingsStore(),
+  ]);
+  performance.mark("inknote:settings-ready");
   initPlatform();
   setLocale(getLocale());
   applyTheme();
@@ -30,6 +37,14 @@ async function bootstrap() {
       <App />
     </React.StrictMode>,
   );
+  requestAnimationFrame(() => {
+    performance.mark("inknote:app-rendered");
+    performance.measure(
+      "inknote:bootstrap-to-render",
+      "inknote:bootstrap-start",
+      "inknote:app-rendered",
+    );
+  });
 }
 
 void bootstrap();
