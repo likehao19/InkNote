@@ -3,6 +3,7 @@ name = "inknote"
 version = "0.2.3"
 description = "InkNote local Markdown editor"
 authors = ["likehao19"]
+license = "MIT"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
