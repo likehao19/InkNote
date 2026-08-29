@@ -1569,6 +1569,7 @@ export default function App() {
   }, [documentEditable, active?.content, activeTabId, setMode, show, locale]);
 
   const showWelcome = !welcomeDismissed && !active?.path && !active?.content.trim();
+  const showDocumentAccessSwitch = Boolean(active && !showWelcome);
   const wasWelcomeRef = useRef(showWelcome);
 
   useEffect(() => {
@@ -1704,8 +1705,8 @@ export default function App() {
             />
           </SidebarPanel>
         )}
-        <main className={`main${externalDocument && active?.path ? " has-document-access-switch" : ""}`}>
-          {externalDocument && active?.path && (
+        <main className={`main${showDocumentAccessSwitch ? " has-document-access-switch" : ""}`}>
+          {showDocumentAccessSwitch && (
             <div className="document-access-switch" role="group" aria-label={t(locale, "documentAccess.label")}>
               <button
                 type="button"
