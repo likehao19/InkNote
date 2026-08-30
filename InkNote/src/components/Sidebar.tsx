@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import type { Locale } from "../lib/i18n";
 import { t } from "../lib/i18n";
 import { isPathUnder } from "../lib/paths";
+import { deleteShortcut, modShortcut } from "../lib/shortcuts";
+import { isMac } from "../lib/platform";
+import ContextMenu, { type ContextMenuItem } from "./ContextMenu";
 import FileTree, { type TreeClipboard } from "./FileTree";
 
 export type SidebarTab = "files" | "outline" | "recent";
@@ -68,6 +72,7 @@ export default function Sidebar({
   const [fileFilter, setFileFilter] = useState("");
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [treeClipboard, setTreeClipboard] = useState<TreeClipboard | null>(null);
+  const [recentMenu, setRecentMenu] = useState<{ x: number; y: number; path: string } | null>(null);
 
   useEffect(() => {
     setSelectedPath(
@@ -98,6 +103,44 @@ export default function Sidebar({
       active.scrollIntoView({ block: "nearest" });
     }
   }, [tab, activeOutlineLine]);
+
+  const recentMenuItems: ContextMenuItem[] = recentMenu
+    ? [
+        {
+          label: tr("tree.open"),
+          shortcut: "Enter",
+          accelerator: "Enter",
+          onClick: () => onOpenPath(recentMenu.path),
+        },
+        { separator: true, label: "" },
+        {
+          label: tr("tree.copyAbsolutePath"),
+          onClick: () => {
+            void navigator.clipboard.writeText(recentMenu.path).catch((error) => onError?.(error));
+          },
+        },
+        {
+          label: tr("tree.revealInExplorer"),
+          shortcut: modShortcut("Shift+E"),
+          onClick: () => {
+            void revealItemInDir(recentMenu.path).catch((error) => onError?.(error));
+          },
+        },
+        { separator: true, label: "" },
+        {
+          label: tr("tree.delete"),
+          shortcut: deleteShortcut(),
+          accelerator: isMac ? "Backspace" : "Delete",
+          disabled: !onDeletePath,
+          onClick: () => void onDeletePath?.(recentMenu.path, false),
+        },
+        { separator: true, label: "" },
+        {
+          label: tr("sidebar.removeRecent"),
+          onClick: () => onRemoveRecent(recentMenu.path),
+        },
+      ]
+    : [];
 
   return (
     <aside className="sidebar">
@@ -200,6 +243,11 @@ export default function Sidebar({
                       key={p}
                       className={active ? "recent-item active" : "recent-item"}
                       title={p}
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setRecentMenu({ x: event.clientX, y: event.clientY, path: p });
+                      }}
                     >
                       <button
                         type="button"
@@ -236,6 +284,15 @@ export default function Sidebar({
           </div>
         )}
       </div>
+      {recentMenu && (
+        <ContextMenu
+          variant="tree"
+          x={recentMenu.x}
+          y={recentMenu.y}
+          items={recentMenuItems}
+          onClose={() => setRecentMenu(null)}
+        />
+      )}
     </aside>
   );
 }

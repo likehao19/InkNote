@@ -1814,7 +1814,7 @@ export default function App() {
               onRenamePath={folderPaths.length ? handleRenamePath : undefined}
               onTransferPath={folderPaths.length ? handleTransferPath : undefined}
               onMovePath={folderPaths.length ? handleMovePath : undefined}
-              onDeletePath={folderPaths.length ? handleDeletePath : undefined}
+              onDeletePath={handleDeletePath}
               onRemoveFolder={handleRemoveWorkspaceFolder}
               outline={outline}
               activeOutlineLine={activeOutlineLine}
