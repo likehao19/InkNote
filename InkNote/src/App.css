@@ -1095,11 +1095,18 @@ html[data-theme="dark"] .file-tree .tree-filter-highlight {
    编辑器 — Typora 式居中排版
    ============================================================ */
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg-editor); position: relative; }
+.document-access-toolbar {
+  flex: none;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-editor);
+}
 .document-access-switch {
-  position: absolute;
-  top: 10px;
-  right: 18px;
-  z-index: 12;
+  position: relative;
   display: inline-flex;
   gap: 4px;
   padding: 0;
@@ -1129,9 +1136,6 @@ html[data-theme="dark"] .file-tree .tree-filter-highlight {
 .document-access-switch button.active {
   color: var(--accent);
   font-weight: 600;
-}
-.has-document-access-switch .editor-host .cm-content {
-  padding-top: max(64px, 8vh);
 }
 .editor-host--readonly .cm-content { caret-color: transparent; }
 .editor-host--readonly [contenteditable="true"] { caret-color: transparent; }

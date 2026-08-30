@@ -1831,23 +1831,25 @@ export default function App() {
             />
           </SidebarPanel>
         )}
-        <main className={`main${showDocumentAccessSwitch ? " has-document-access-switch" : ""}`}>
+        <main className="main">
           {showDocumentAccessSwitch && (
-            <div className="document-access-switch" role="group" aria-label={t(locale, "documentAccess.label")}>
-              <button
-                type="button"
-                className={!documentEditable ? "active" : ""}
-                onClick={() => setDocumentAccessMode(false)}
-              >
-                {t(locale, "documentAccess.preview")}
-              </button>
-              <button
-                type="button"
-                className={documentEditable ? "active" : ""}
-                onClick={() => setDocumentAccessMode(true)}
-              >
-                {t(locale, "documentAccess.edit")}
-              </button>
+            <div className="document-access-toolbar">
+              <div className="document-access-switch" role="group" aria-label={t(locale, "documentAccess.label")}>
+                <button
+                  type="button"
+                  className={!documentEditable ? "active" : ""}
+                  onClick={() => setDocumentAccessMode(false)}
+                >
+                  {t(locale, "documentAccess.preview")}
+                </button>
+                <button
+                  type="button"
+                  className={documentEditable ? "active" : ""}
+                  onClick={() => setDocumentAccessMode(true)}
+                >
+                  {t(locale, "documentAccess.edit")}
+                </button>
+              </div>
             </div>
           )}
           {showWelcome && (
