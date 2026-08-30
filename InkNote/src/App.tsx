@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { Eye, Pencil } from "lucide-react";
 import type { EditorRef } from "./components/Editor";
 import Titlebar from "./components/Titlebar";
 import Sidebar, { type SidebarTab } from "./components/Sidebar";
@@ -1693,7 +1694,7 @@ export default function App() {
   }, [documentEditable, active?.content, activeTabId, setMode, show, locale]);
 
   const showWelcome = !welcomeDismissed && !active?.path && !active?.content.trim();
-  const showDocumentAccessSwitch = Boolean(active && !showWelcome);
+  const showDocumentAccessControl = Boolean(active && !showWelcome);
   const wasWelcomeRef = useRef(showWelcome);
 
   useEffect(() => {
@@ -1831,26 +1832,19 @@ export default function App() {
             />
           </SidebarPanel>
         )}
-        <main className="main">
-          {showDocumentAccessSwitch && (
-            <div className="document-access-toolbar">
-              <div className="document-access-switch" role="group" aria-label={t(locale, "documentAccess.label")}>
-                <button
-                  type="button"
-                  className={!documentEditable ? "active" : ""}
-                  onClick={() => setDocumentAccessMode(false)}
-                >
-                  {t(locale, "documentAccess.preview")}
-                </button>
-                <button
-                  type="button"
-                  className={documentEditable ? "active" : ""}
-                  onClick={() => setDocumentAccessMode(true)}
-                >
-                  {t(locale, "documentAccess.edit")}
-                </button>
-              </div>
-            </div>
+        <main className={`main${showDocumentAccessControl ? " has-document-access-control" : ""}`}>
+          {showDocumentAccessControl && (
+            <button
+              type="button"
+              className="document-access-control"
+              onClick={() => setDocumentAccessMode(!documentEditable)}
+              title={t(locale, documentEditable ? "documentAccess.preview" : "documentAccess.edit")}
+              aria-label={t(locale, documentEditable ? "documentAccess.preview" : "documentAccess.edit")}
+            >
+              {documentEditable
+                ? <Eye size={17} strokeWidth={1.8} aria-hidden="true" />
+                : <Pencil size={16} strokeWidth={1.8} aria-hidden="true" />}
+            </button>
           )}
           {showWelcome && (
             <WelcomePanel
