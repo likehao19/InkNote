@@ -1121,7 +1121,7 @@ html[data-theme="dark"] .file-tree .tree-filter-highlight {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.has-document-access-control .editor-host { padding-right: 56px; }
+.has-document-access-control .editor-host .cm-scroller { padding-right: 56px; }
 .editor-host--readonly .cm-content { caret-color: transparent; }
 .editor-host--readonly [contenteditable="true"] { caret-color: transparent; }
 .editor-host--readonly .md-table-toolbar,
