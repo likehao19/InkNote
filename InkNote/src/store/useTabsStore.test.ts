@@ -29,3 +29,68 @@ describe("document restoration", () => {
     expect(useTabsStore.getState().getActive()?.dirty).toBe(false);
   });
 });
+
+describe("document identity", () => {
+  it("starts a new editor history when another file is opened", () => {
+    const initialId = useTabsStore.getState().activeId;
+
+    const openedId = useTabsStore.getState().openTab("B.md", "content B");
+
+    expect(openedId).not.toBe(initialId);
+    expect(useTabsStore.getState().getActive()).toMatchObject({
+      id: openedId,
+      path: "B.md",
+      content: "content B",
+      dirty: false,
+    });
+  });
+
+  it("keeps the same editor history for edits and saves within one document", () => {
+    const id = useTabsStore.getState().openTab("A.md", "before");
+
+    useTabsStore.getState().updateContent(id, "after");
+    useTabsStore.getState().markSaved(id, "A.md", "after");
+
+    expect(useTabsStore.getState().activeId).toBe(id);
+    expect(useTabsStore.getState().getActive()).toMatchObject({
+      content: "after",
+      diskContent: "after",
+      dirty: false,
+    });
+  });
+
+  it("starts a new editor history when a document is restored", () => {
+    const initialId = useTabsStore.getState().activeId;
+
+    useTabsStore.getState().restoreTab({
+      path: "restored.md",
+      content: "restored",
+      diskContent: "saved",
+      dirty: true,
+      mode: "source",
+    });
+
+    expect(useTabsStore.getState().activeId).not.toBe(initialId);
+    expect(useTabsStore.getState().getActive()).toMatchObject({
+      path: "restored.md",
+      content: "restored",
+      diskContent: "saved",
+      dirty: true,
+      mode: "source",
+    });
+  });
+
+  it("starts a new editor history when disk content replaces the document", () => {
+    const id = useTabsStore.getState().openTab("A.md", "old");
+
+    useTabsStore.getState().loadFromDisk(id, "A.md", "new");
+
+    expect(useTabsStore.getState().activeId).not.toBe(id);
+    expect(useTabsStore.getState().getActive()).toMatchObject({
+      path: "A.md",
+      content: "new",
+      diskContent: "new",
+      dirty: false,
+    });
+  });
+});

@@ -72,10 +72,9 @@ export const useTabsStore = create<DocState>((set, get) => ({
   },
 
   openTab: (path, content) => {
-    set((s) => {
-      const cur = s.tabs.find((t) => t.id === s.activeId) ?? s.tabs[0] ?? emptyTab();
+    set(() => {
       const tab: TabDoc = {
-        ...cur,
+        id: newId(),
         path,
         content,
         diskContent: content,
@@ -93,9 +92,8 @@ export const useTabsStore = create<DocState>((set, get) => ({
   },
 
   restoreTab: (snap) => {
-    const cur = get().tabs.find((t) => t.id === get().activeId) ?? get().tabs[0] ?? emptyTab();
     const tab: TabDoc = {
-      id: cur.id,
+      id: newId(),
       path: snap.path,
       content: snap.content,
       diskContent: snap.diskContent,
@@ -143,11 +141,23 @@ export const useTabsStore = create<DocState>((set, get) => ({
 
   /** 用磁盘内容整体替换当前文档 */
   loadFromDisk: (id, path, content) => {
-    set((s) => ({
-      tabs: s.tabs.map((t) =>
-        t.id === id ? { ...t, path, content, diskContent: content, dirty: false } : t,
-      ),
-    }));
+    set((s) => {
+      let activeId = s.activeId;
+      const tabs = s.tabs.map((t) => {
+        if (t.id !== id) return t;
+        const next = {
+          ...t,
+          id: newId(),
+          path,
+          content,
+          diskContent: content,
+          dirty: false,
+        };
+        if (activeId === id) activeId = next.id;
+        return next;
+      });
+      return { tabs, activeId };
+    });
   },
 
   setPath: (id, path) => {
