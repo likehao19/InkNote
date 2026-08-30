@@ -1,6 +1,7 @@
 import { Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
 import { isMac } from "./platform";
 import { t, type Locale, type MessageKey } from "./i18n";
+import { toTauriAccelerator, type ShortcutMap } from "./shortcuts";
 
 export const NATIVE_MENU_EVENT = "inknote-native-menu";
 
@@ -16,7 +17,7 @@ async function separator() {
   return PredefinedMenuItem.new({ item: "Separator" });
 }
 
-export async function setupMacNativeMenu(locale: Locale): Promise<void> {
+export async function setupMacNativeMenu(locale: Locale, shortcuts: ShortcutMap): Promise<void> {
   if (!isMac) return;
   const tr = (key: MessageKey) => t(locale, key);
 
@@ -25,7 +26,7 @@ export async function setupMacNativeMenu(locale: Locale): Promise<void> {
     items: [
       await command("about", tr("menu.about")),
       await separator(),
-      await command("settings", tr("menu.settings"), "CmdOrCtrl+,"),
+      await command("settings", tr("menu.settings"), toTauriAccelerator(shortcuts.settings)),
       await separator(),
       await PredefinedMenuItem.new({ item: "Services" }),
       await separator(),
@@ -40,16 +41,16 @@ export async function setupMacNativeMenu(locale: Locale): Promise<void> {
   const fileMenu = await Submenu.new({
     text: tr("menu.file"),
     items: [
-      await command("new", tr("menu.new"), "CmdOrCtrl+N"),
-      await command("open", tr("menu.open"), "CmdOrCtrl+O"),
+      await command("new", tr("menu.new"), toTauriAccelerator(shortcuts.new)),
+      await command("open", tr("menu.open"), toTauriAccelerator(shortcuts.open)),
       await command("open-folder", tr("menu.openFolder")),
-      await command("quick-open", tr("menu.quickOpen"), "CmdOrCtrl+P"),
+      await command("quick-open", tr("menu.quickOpen"), toTauriAccelerator(shortcuts.quickOpen)),
       await separator(),
-      await command("close-file", tr("menu.close"), "CmdOrCtrl+W"),
-      await command("reopen-closed", tr("menu.reopenClosed"), "CmdOrCtrl+Shift+T"),
+      await command("close-file", tr("menu.close"), toTauriAccelerator(shortcuts.closeFile)),
+      await command("reopen-closed", tr("menu.reopenClosed"), toTauriAccelerator(shortcuts.reopenClosed)),
       await separator(),
-      await command("save", tr("menu.save"), "CmdOrCtrl+S"),
-      await command("save-as", tr("menu.saveAs"), "CmdOrCtrl+Shift+S"),
+      await command("save", tr("menu.save"), toTauriAccelerator(shortcuts.save)),
+      await command("save-as", tr("menu.saveAs"), toTauriAccelerator(shortcuts.saveAs)),
       await separator(),
       await command("export-html", tr("menu.exportHtml")),
       await command("export-pdf", tr("menu.exportPdf")),
@@ -68,9 +69,9 @@ export async function setupMacNativeMenu(locale: Locale): Promise<void> {
       await command("editor:pastePlain", tr("shortcuts.pastePlain"), "CmdOrCtrl+Shift+V"),
       await command("editor:selectAll", tr("menu.selectAll"), "CmdOrCtrl+A"),
       await separator(),
-      await command("editor:find", tr("menu.find"), "CmdOrCtrl+F"),
-      await command("editor:findReplace", tr("menu.findReplace"), "Cmd+Alt+F"),
-      await command("search-files", tr("menu.globalSearch"), "CmdOrCtrl+Shift+F"),
+      await command("find", tr("menu.find"), toTauriAccelerator(shortcuts.find)),
+      await command("find-replace", tr("menu.findReplace"), toTauriAccelerator(shortcuts.findReplace)),
+      await command("search-files", tr("menu.globalSearch"), toTauriAccelerator(shortcuts.globalSearch)),
     ],
   });
 
@@ -123,11 +124,11 @@ export async function setupMacNativeMenu(locale: Locale): Promise<void> {
   const viewMenu = await Submenu.new({
     text: tr("menu.view"),
     items: [
-      await command("toggle-sidebar", tr("menu.sidebar"), "CmdOrCtrl+Shift+L"),
-      await command("toggle-mode", tr("menu.source"), "CmdOrCtrl+/"),
-      await command("focus-mode", tr("menu.focus")),
-      await command("typewriter-mode", tr("menu.typewriter")),
-      await command("fullscreen", tr("shortcuts.fullscreen"), "Ctrl+Cmd+F"),
+      await command("toggle-sidebar", tr("menu.sidebar"), toTauriAccelerator(shortcuts.toggleSidebar)),
+      await command("toggle-mode", tr("menu.source"), toTauriAccelerator(shortcuts.toggleMode)),
+      await command("focus-mode", tr("menu.focus"), toTauriAccelerator(shortcuts.focusMode)),
+      await command("typewriter-mode", tr("menu.typewriter"), toTauriAccelerator(shortcuts.typewriterMode)),
+      await command("fullscreen", tr("shortcuts.fullscreen"), toTauriAccelerator(shortcuts.fullscreen)),
       await separator(),
       await command("sidebar-files", tr("menu.files")),
       await command("sidebar-outline", tr("menu.outline")),

@@ -1954,6 +1954,9 @@ html.platform-mac .settings-panel { border-radius: 12px; }
   transition: background 0.15s ease;
 }
 .settings-toggle.is-on { background: var(--accent); }
+.settings-toggle:disabled {
+  opacity: 0.55;
+}
 .settings-toggle-thumb {
   position: absolute;
   top: 2px;
@@ -1967,6 +1970,48 @@ html.platform-mac .settings-panel { border-radius: 12px; }
 }
 .settings-toggle.is-on .settings-toggle-thumb {
   transform: translateX(16px);
+}
+.settings-shortcuts-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.settings-shortcuts-header .settings-page-desc {
+  margin: 0;
+  max-width: 520px;
+}
+.settings-shortcut-recorder {
+  min-width: 138px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-input, var(--bg));
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-align: center;
+}
+.settings-shortcut-recorder:hover { background: var(--bg-hover); }
+.settings-shortcut-recorder.is-recording {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
+}
+.settings-shortcut-error {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, #c42b1c 40%, var(--border));
+  border-radius: 6px;
+  background: color-mix(in srgb, #c42b1c 10%, var(--bg));
+  color: #c42b1c;
+  font-size: 12px;
 }
 
 @media (max-width: 760px) {

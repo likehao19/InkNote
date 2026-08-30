@@ -1,10 +1,10 @@
 import {
   altShortcut,
   deleteShortcut,
-  findReplaceShortcut,
-  fullscreenShortcut,
+  formatShortcut,
   modShortcut,
   redoShortcut,
+  type ShortcutMap,
 } from "../lib/shortcuts";
 import type { Locale } from "../lib/i18n";
 import { t } from "../lib/i18n";
@@ -12,23 +12,24 @@ import { useModalEscape } from "../lib/useModalEscape";
 
 interface Props {
   locale: Locale;
+  shortcutMap: ShortcutMap;
   onClose: () => void;
 }
 
 type MessageKey = Parameters<typeof t>[1];
 
-const SHORTCUT_GROUPS: { titleKey: MessageKey; items: [MessageKey, string][] }[] = [
+const shortcutGroups = (app: ShortcutMap): { titleKey: MessageKey; items: [MessageKey, string][] }[] => [
   {
     titleKey: "shortcuts.file",
     items: [
-      ["shortcuts.new", modShortcut("N")],
-      ["shortcuts.open", modShortcut("O")],
-      ["shortcuts.save", modShortcut("S")],
-      ["shortcuts.saveAs", modShortcut("Shift+S")],
-      ["shortcuts.closeFile", modShortcut("W")],
-      ["shortcuts.reopenClosed", modShortcut("Shift+T")],
-      ["shortcuts.quickOpen", modShortcut("P")],
-      ["shortcuts.settings", modShortcut(",")],
+      ["shortcuts.new", formatShortcut(app.new)],
+      ["shortcuts.open", formatShortcut(app.open)],
+      ["shortcuts.save", formatShortcut(app.save)],
+      ["shortcuts.saveAs", formatShortcut(app.saveAs)],
+      ["shortcuts.closeFile", formatShortcut(app.closeFile)],
+      ["shortcuts.reopenClosed", formatShortcut(app.reopenClosed)],
+      ["shortcuts.quickOpen", formatShortcut(app.quickOpen)],
+      ["shortcuts.settings", formatShortcut(app.settings)],
     ],
   },
   {
@@ -41,9 +42,9 @@ const SHORTCUT_GROUPS: { titleKey: MessageKey; items: [MessageKey, string][] }[]
       ["menu.paste", modShortcut("V")],
       ["shortcuts.pastePlain", modShortcut("Shift+V")],
       ["menu.selectAll", modShortcut("A")],
-      ["shortcuts.find", modShortcut("F")],
-      ["shortcuts.findReplace", findReplaceShortcut()],
-      ["shortcuts.globalSearch", modShortcut("Shift+F")],
+      ["shortcuts.find", formatShortcut(app.find)],
+      ["shortcuts.findReplace", formatShortcut(app.findReplace)],
+      ["shortcuts.globalSearch", formatShortcut(app.globalSearch)],
     ],
   },
   {
@@ -89,13 +90,13 @@ const SHORTCUT_GROUPS: { titleKey: MessageKey; items: [MessageKey, string][] }[]
   {
     titleKey: "shortcuts.view",
     items: [
-      ["shortcuts.sidebar", modShortcut("Shift+L")],
-      ["shortcuts.toggleMode", modShortcut("/")],
-      ["shortcuts.zoomIn", modShortcut("+")],
-      ["shortcuts.zoomOut", modShortcut("-")],
-      ["shortcuts.focus", "F8"],
-      ["shortcuts.typewriter", "F9"],
-      ["shortcuts.fullscreen", fullscreenShortcut()],
+      ["shortcuts.sidebar", formatShortcut(app.toggleSidebar)],
+      ["shortcuts.toggleMode", formatShortcut(app.toggleMode)],
+      ["shortcuts.zoomIn", formatShortcut(app.zoomIn)],
+      ["shortcuts.zoomOut", formatShortcut(app.zoomOut)],
+      ["shortcuts.focus", formatShortcut(app.focusMode)],
+      ["shortcuts.typewriter", formatShortcut(app.typewriterMode)],
+      ["shortcuts.fullscreen", formatShortcut(app.fullscreen)],
     ],
   },
   {
@@ -109,7 +110,7 @@ const SHORTCUT_GROUPS: { titleKey: MessageKey; items: [MessageKey, string][] }[]
   },
 ];
 
-export default function ShortcutsDialog({ locale, onClose }: Props) {
+export default function ShortcutsDialog({ locale, shortcutMap, onClose }: Props) {
   useModalEscape(true, onClose);
   const tr = (key: Parameters<typeof t>[1]) => t(locale, key);
 
@@ -130,7 +131,7 @@ export default function ShortcutsDialog({ locale, onClose }: Props) {
           </button>
         </div>
         <div className="modal-body shortcuts-body">
-          {SHORTCUT_GROUPS.map((group) => (
+          {shortcutGroups(shortcutMap).map((group) => (
             <section key={group.titleKey} className="shortcuts-group">
               <h3 className="shortcuts-group-title">{tr(group.titleKey)}</h3>
               <ul className="shortcuts-list">

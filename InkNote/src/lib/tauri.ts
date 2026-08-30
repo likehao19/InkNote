@@ -142,6 +142,10 @@ export function supportsInAppUpdate(): Promise<boolean> {
   return invoke("supports_in_app_update");
 }
 
+export function configureMarkdownDefaultApp(): Promise<"configured" | "opened-settings"> {
+  return invoke("configure_markdown_default_app");
+}
+
 export async function openFileDialog(): Promise<string | null> {
   const r = await openDialog({ multiple: false, filters: [MD_FILTER] });
   return typeof r === "string" ? r : null;

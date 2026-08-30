@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import type { ThemePref } from "../lib/theme";
 import type { Locale, MessageKey } from "../lib/i18n";
 import { t } from "../lib/i18n";
@@ -8,6 +8,15 @@ import type { SavedSidebarTab } from "../lib/workspace";
 import { isMac } from "../lib/tauri";
 import * as api from "../lib/tauri";
 import { getCustomCssPath, setCustomCssPath } from "../lib/customTheme";
+import {
+  APP_SHORTCUT_ACTIONS,
+  eventToShortcut,
+  formatShortcut,
+  isValidAppShortcut,
+  shortcutConflict,
+  type AppShortcutAction,
+  type ShortcutMap,
+} from "../lib/shortcuts";
 import ThemePicker from "./ThemePicker";
 import MarkdownThemePicker from "./MarkdownThemePicker";
 
@@ -15,6 +24,7 @@ export type SettingsCategory =
   | "general"
   | "workspace"
   | "editor"
+  | "shortcuts"
   | "appearance"
   | "document"
   | "about";
@@ -23,6 +33,7 @@ const CATEGORIES: SettingsCategory[] = [
   "general",
   "workspace",
   "editor",
+  "shortcuts",
   "appearance",
   "document",
   "about",
@@ -32,9 +43,51 @@ const CATEGORY_KEYS: Record<SettingsCategory, MessageKey> = {
   general: "settings.category.general",
   workspace: "settings.category.workspace",
   editor: "settings.category.editor",
+  shortcuts: "settings.category.shortcuts",
   appearance: "settings.category.appearance",
   document: "settings.category.document",
   about: "settings.category.about",
+};
+
+const SHORTCUT_LABEL_KEYS: Record<AppShortcutAction, MessageKey> = {
+  new: "shortcuts.new",
+  open: "shortcuts.open",
+  save: "shortcuts.save",
+  saveAs: "shortcuts.saveAs",
+  closeFile: "shortcuts.closeFile",
+  reopenClosed: "shortcuts.reopenClosed",
+  quickOpen: "shortcuts.quickOpen",
+  settings: "shortcuts.settings",
+  find: "shortcuts.find",
+  findReplace: "shortcuts.findReplace",
+  globalSearch: "shortcuts.globalSearch",
+  toggleSidebar: "shortcuts.sidebar",
+  toggleMode: "shortcuts.toggleMode",
+  focusMode: "shortcuts.focus",
+  typewriterMode: "shortcuts.typewriter",
+  fullscreen: "shortcuts.fullscreen",
+  zoomIn: "shortcuts.zoomIn",
+  zoomOut: "shortcuts.zoomOut",
+};
+
+const FIXED_SHORTCUT_LABEL_KEYS: Record<string, MessageKey> = {
+  "Mod+Z": "shortcuts.undo",
+  "Mod+Shift+Z": "shortcuts.redo",
+  ...(isMac ? {} : { "Mod+Y": "shortcuts.redo" as MessageKey }),
+  "Mod+X": "menu.cut",
+  "Mod+C": "menu.copy",
+  "Mod+V": "menu.paste",
+  "Mod+Shift+V": "shortcuts.pastePlain",
+  "Mod+A": "menu.selectAll",
+  "Mod+B": "shortcuts.bold",
+  "Mod+I": "shortcuts.italic",
+  "Mod+K": "shortcuts.link",
+  "Mod+Shift+K": "shortcuts.codeBlock",
+  "Mod+T": "shortcuts.table",
+  "Mod+Shift+I": "shortcuts.image",
+  "Mod+Shift+M": "menu.mathBlock",
+  "F2": "tree.rename",
+  "F5": "tree.refresh",
 };
 
 export interface SettingsValues {
@@ -66,6 +119,9 @@ export interface SettingsValues {
   newDocumentMetadata: boolean;
   metadataTitle: string;
   metadataAuthor: string;
+  launchAtLogin: boolean | null;
+  systemSettingsBusy: boolean;
+  shortcutMap: ShortcutMap;
 }
 
 export interface SettingsHandlers {
@@ -98,6 +154,10 @@ export interface SettingsHandlers {
   onNewDocumentMetadata: (on: boolean) => void;
   onMetadataTitle: (value: string) => void;
   onMetadataAuthor: (value: string) => void;
+  onLaunchAtLogin: (on: boolean) => void;
+  onConfigureMarkdownDefault: () => void;
+  onShortcutMap: (value: ShortcutMap) => void;
+  onResetShortcuts: () => void;
 }
 
 interface Props {
@@ -146,6 +206,13 @@ function buildSearchIndex(): { category: SettingsCategory; keys: MessageKey[] }[
       ],
     },
     {
+      category: "shortcuts",
+      keys: [
+        "settings.shortcutsDesc", "settings.shortcutsReset",
+        ...APP_SHORTCUT_ACTIONS.map((action) => SHORTCUT_LABEL_KEYS[action]),
+      ],
+    },
+    {
       category: "appearance",
       keys: [
         "settings.theme", "settings.themeDesc",
@@ -164,7 +231,7 @@ function buildSearchIndex(): { category: SettingsCategory; keys: MessageKey[] }[
     {
       category: "about",
       keys: [
-        "settings.defaultApp", "settings.defaultAppMac", "settings.defaultAppWin", "settings.aboutText", "settings.aboutPrivacy",
+        "settings.aboutText", "settings.aboutPrivacy",
       ],
     },
   ];
@@ -177,6 +244,8 @@ export default function Settings({ values, handlers, onClose }: Props) {
   const [category, setCategory] = useState<SettingsCategory>("general");
   const [query, setQuery] = useState("");
   const [cssTick, setCssTick] = useState(0);
+  const [recordingShortcut, setRecordingShortcut] = useState<AppShortcutAction | null>(null);
+  const [shortcutError, setShortcutError] = useState("");
   const customCss = getCustomCssPath();
   void cssTick;
   void rest;
@@ -199,11 +268,45 @@ export default function Settings({ values, handlers, onClose }: Props) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      if (recordingShortcut) {
+        setRecordingShortcut(null);
+        setShortcutError("");
+      } else {
+        onClose();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, recordingShortcut]);
+
+  const recordShortcut = (action: AppShortcutAction, event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.key === "Escape") {
+      setRecordingShortcut(null);
+      setShortcutError("");
+      return;
+    }
+    const shortcut = eventToShortcut(event.nativeEvent);
+    if (!isValidAppShortcut(shortcut)) {
+      setShortcutError(tr("settings.shortcutsInvalid"));
+      return;
+    }
+    const conflict = shortcutConflict(values.shortcutMap, action, shortcut);
+    if (conflict) {
+      setShortcutError(tr("settings.shortcutsConflict", { action: tr(SHORTCUT_LABEL_KEYS[conflict]) }));
+      return;
+    }
+    const fixedConflict = FIXED_SHORTCUT_LABEL_KEYS[shortcut];
+    if (fixedConflict) {
+      setShortcutError(tr("settings.shortcutsConflict", { action: tr(fixedConflict) }));
+      return;
+    }
+    handlers.onShortcutMap({ ...values.shortcutMap, [action]: shortcut });
+    setRecordingShortcut(null);
+    setShortcutError("");
+  };
 
   const pickCss = async () => {
     const p = await api.openCssDialog();
@@ -309,6 +412,23 @@ export default function Settings({ values, handlers, onClose }: Props) {
                       <button type="button" className="settings-text-btn" onClick={handlers.onClearRecent}>
                         {tr("settings.clearRecentBtn")}
                       </button>
+                    </SettingItem>
+                    <SettingItem label={tr("settings.defaultMarkdownApp")} desc={tr("settings.defaultMarkdownAppDesc")}>
+                      <button
+                        type="button"
+                        className="settings-text-btn"
+                        disabled={values.systemSettingsBusy}
+                        onClick={handlers.onConfigureMarkdownDefault}
+                      >
+                        {values.systemSettingsBusy ? tr("settings.systemWorking") : tr("settings.defaultMarkdownAppAction")}
+                      </button>
+                    </SettingItem>
+                    <SettingItem label={tr("settings.launchAtLogin")} desc={tr("settings.launchAtLoginDesc")}>
+                      <Toggle
+                        checked={values.launchAtLogin ?? false}
+                        disabled={values.launchAtLogin === null || values.systemSettingsBusy}
+                        onChange={handlers.onLaunchAtLogin}
+                      />
                     </SettingItem>
                   </SettingsPage>
                 )}
@@ -457,6 +577,39 @@ export default function Settings({ values, handlers, onClose }: Props) {
                   </SettingsPage>
                 )}
 
+                {activeCategory === "shortcuts" && (
+                  <SettingsPage title={tr("settings.section.shortcuts")}>
+                    <div className="settings-shortcuts-header">
+                      <p className="settings-page-desc">{tr("settings.shortcutsDesc")}</p>
+                      <button type="button" className="settings-text-btn" onClick={handlers.onResetShortcuts}>
+                        {tr("settings.shortcutsReset")}
+                      </button>
+                    </div>
+                    {shortcutError && <p className="settings-shortcut-error" role="alert">{shortcutError}</p>}
+                    {APP_SHORTCUT_ACTIONS.map((action) => (
+                      <SettingItem key={action} label={tr(SHORTCUT_LABEL_KEYS[action])}>
+                        <button
+                          type="button"
+                          className={recordingShortcut === action
+                            ? "settings-shortcut-recorder is-recording"
+                            : "settings-shortcut-recorder"}
+                          data-shortcut-recorder
+                          onClick={() => {
+                            setRecordingShortcut(action);
+                            setShortcutError("");
+                          }}
+                          onKeyDown={(event) => recordShortcut(action, event)}
+                          onBlur={() => setRecordingShortcut((current) => current === action ? null : current)}
+                        >
+                          {recordingShortcut === action
+                            ? tr("settings.shortcutsRecording")
+                            : formatShortcut(values.shortcutMap[action])}
+                        </button>
+                      </SettingItem>
+                    ))}
+                  </SettingsPage>
+                )}
+
                 {activeCategory === "document" && (
                   <SettingsPage title={tr("settings.section.document")}>
                     <p className="settings-page-desc">{tr("settings.yamlDesc")}</p>
@@ -500,11 +653,6 @@ export default function Settings({ values, handlers, onClose }: Props) {
                   <SettingsPage title={tr("settings.section.about")}>
                     <p className="settings-page-desc">{tr("settings.aboutText")}</p>
                     <p className="settings-page-desc">{tr("settings.aboutPrivacy")}</p>
-                    <SettingItem label={tr("settings.defaultApp")}>
-                      <p className="settings-hint-block">
-                        {isMac ? tr("settings.defaultAppMac") : tr("settings.defaultAppWin")}
-                      </p>
-                    </SettingItem>
                   </SettingsPage>
                 )}
               </>
@@ -545,13 +693,14 @@ function SettingItem({
   );
 }
 
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+function Toggle({ checked, onChange, disabled = false }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
       className={checked ? "settings-toggle is-on" : "settings-toggle"}
+      disabled={disabled}
       onClick={() => onChange(!checked)}
     >
       <span className="settings-toggle-thumb" />

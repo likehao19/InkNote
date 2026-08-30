@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { disable as disableAutostart, enable as enableAutostart, isEnabled as isAutostartEnabled } from "@tauri-apps/plugin-autostart";
 import { Eye, Pencil } from "lucide-react";
 import type { EditorRef } from "./components/Editor";
 import Titlebar from "./components/Titlebar";
@@ -12,7 +13,7 @@ import Toast from "./components/Toast";
 import type { UpdateProgressState } from "./components/UpdateProgress";
 import WelcomePanel from "./components/WelcomePanel";
 import * as api from "./lib/tauri";
-import { initPlatform, isMac } from "./lib/platform";
+import { initPlatform } from "./lib/platform";
 import { setConfirmHandler } from "./lib/confirmBridge";
 import { setEditorBridge, type PromptRequest } from "./lib/editorBridge";
 import {
@@ -135,6 +136,14 @@ import {
   type FileConflictAction,
 } from "./lib/documentAssets";
 import { rewriteManagedImageReferences } from "./lib/imageAssets";
+import {
+  APP_SHORTCUT_ACTIONS,
+  getDefaultShortcutMap,
+  getShortcutMap,
+  matchesShortcut,
+  setShortcutMap as persistShortcutMap,
+  type ShortcutMap,
+} from "./lib/shortcuts";
 
 const Editor = lazy(() => import("./components/Editor"));
 const Settings = lazy(() => import("./components/Settings"));
@@ -209,6 +218,9 @@ export default function App() {
   const activeTabId = active?.id ?? activeId;
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [launchAtLogin, setLaunchAtLogin] = useState<boolean | null>(null);
+  const [systemSettingsBusy, setSystemSettingsBusy] = useState(false);
+  const [shortcutMap, setShortcutMap] = useState<ShortcutMap>(getShortcutMap);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>(getSidebarTab);
   const [sidebarVisible, setSidebarVisible] = useState(getSidebarVisiblePref);
   const sidebarVisibleRef = useRef(sidebarVisible);
@@ -1148,9 +1160,54 @@ export default function App() {
 
   useEffect(() => {
     return scheduleIdleTask(() => {
-      void setupMacNativeMenu(locale).catch(showError);
+      void setupMacNativeMenu(locale, shortcutMap).catch(showError);
     });
-  }, [locale, showError]);
+  }, [locale, shortcutMap, showError]);
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    let disposed = false;
+    setLaunchAtLogin(null);
+    void isAutostartEnabled()
+      .then((enabled) => {
+        if (!disposed) setLaunchAtLogin(enabled);
+      })
+      .catch((error) => {
+        if (!disposed) showError(error);
+      });
+    return () => { disposed = true; };
+  }, [settingsOpen, showError]);
+
+  const handleLaunchAtLogin = useCallback(async (enabled: boolean) => {
+    if (systemSettingsBusy) return;
+    setSystemSettingsBusy(true);
+    try {
+      if (enabled) await enableAutostart();
+      else await disableAutostart();
+      const actual = await isAutostartEnabled();
+      setLaunchAtLogin(actual);
+      showSuccess(t(locale, actual ? "toast.launchAtLoginOn" : "toast.launchAtLoginOff"));
+    } catch (error) {
+      showError(error);
+    } finally {
+      setSystemSettingsBusy(false);
+    }
+  }, [locale, showError, showSuccess, systemSettingsBusy]);
+
+  const handleConfigureMarkdownDefault = useCallback(async () => {
+    if (systemSettingsBusy) return;
+    setSystemSettingsBusy(true);
+    try {
+      const result = await api.configureMarkdownDefaultApp();
+      showSuccess(t(locale, result === "opened-settings"
+        ? "toast.defaultMarkdownSettingsOpened"
+        : "toast.defaultMarkdownConfigured"));
+    } catch (error) {
+      showError(error);
+    } finally {
+      setSystemSettingsBusy(false);
+    }
+  }, [locale, showError, showSuccess, systemSettingsBusy]);
 
   useEffect(() => {
     initPlatform();
@@ -1214,6 +1271,8 @@ export default function App() {
         case "shortcuts": setShortcutsOpen(true); break;
         case "check-updates": void b.handleCheckUpdates(); break;
         case "search-files": setGlobalSearchOpen(true); break;
+        case "find": openDocumentSearch(false); break;
+        case "find-replace": openDocumentSearch(true); break;
         case "toggle-sidebar": setSidebarVisible((value) => !value); break;
         case "toggle-mode": b.toggleEditorMode(); break;
         case "focus-mode": b.handleToggleFocus(); break;
@@ -1431,43 +1490,17 @@ export default function App() {
       documentSearch.open;
 
     const onKey = (e: KeyboardEvent) => {
-      if (isMac && e.ctrlKey && e.metaKey && e.key.toLowerCase() === "f") {
-        if (modalOpen) return;
-        e.preventDefault();
-        void getCurrentWindow().isFullscreen().then((fs) => getCurrentWindow().setFullscreen(!fs));
-        return;
-      }
-      if (e.key === "F8") {
-        if (modalOpen) return;
-        e.preventDefault();
-        handleToggleFocus();
-        return;
-      }
-      if (e.key === "F9") {
-        if (modalOpen) return;
-        e.preventDefault();
-        handleToggleTypewriter();
-        return;
-      }
-      if (e.key === "F11") {
-        if (modalOpen) return;
-        e.preventDefault();
-        void getCurrentWindow().isFullscreen().then((fs) => getCurrentWindow().setFullscreen(!fs));
-        return;
-      }
-      if (!(e.ctrlKey || e.metaKey)) return;
-      const k = e.key.toLowerCase();
-      if (e.shiftKey && (e.code === "KeyF" || k === "f")) {
+      if (e.target instanceof Element && e.target.closest("[data-shortcut-recorder]")) return;
+      const action = APP_SHORTCUT_ACTIONS.find((candidate) => matchesShortcut(e, shortcutMap[candidate]));
+      if (!action) return;
+      if (action === "globalSearch") {
         e.preventDefault();
         e.stopPropagation();
         if (modalOpen && !globalSearchOpen) return;
         setGlobalSearchOpen(true);
         return;
       }
-      const findReplacePressed = isMac
-        ? e.metaKey && e.altKey && k === "f" && !e.shiftKey
-        : e.ctrlKey && !e.altKey && k === "h" && !e.shiftKey;
-      if (findReplacePressed) {
+      if (action === "findReplace") {
         e.preventDefault();
         e.stopPropagation();
         if (modalOpen && !documentSearch.open) return;
@@ -1478,7 +1511,7 @@ export default function App() {
         }
         return;
       }
-      if (k === "f" && !e.shiftKey && !e.altKey) {
+      if (action === "find") {
         e.preventDefault();
         e.stopPropagation();
         if (modalOpen && !documentSearch.open) return;
@@ -1486,36 +1519,36 @@ export default function App() {
         return;
       }
       if (modalOpen) return;
-      if (k === "p" && !e.shiftKey) {
-        e.preventDefault();
-        setQuickOpenOpen(true);
-      } else if (k === "l" && e.shiftKey) {
-        e.preventDefault();
-        setSidebarVisible((v) => !v);
-      } else if (k === "/" || e.key === "?") {
-        e.preventDefault();
-        toggleEditorMode();
-      } else if (k === "t" && e.shiftKey) {
-        e.preventDefault();
-        void handleReopenClosed();
-      } else if (k === "s" && e.shiftKey) { e.preventDefault(); saveAs(); }
-      else if (k === "s") { e.preventDefault(); saveTab(); }
-      else if (k === "o") { e.preventDefault(); openFile(); }
-      else if (k === "n") { e.preventDefault(); handleNewFile(); }
-      else if (k === "w") { e.preventDefault(); handleCloseFile(); }
-      else if (k === "=" || k === "+") {
-        e.preventDefault();
-        const next = Math.min(150, getEditorZoom() + 10);
-        persistEditorZoom(next);
-        setEditorZoomState(next);
-        applyEditorLayoutPrefs();
-      } else if (k === "-") {
-        e.preventDefault();
-        const next = Math.max(80, getEditorZoom() - 10);
-        persistEditorZoom(next);
-        setEditorZoomState(next);
-        applyEditorLayoutPrefs();
-      } else if (k === ",") { e.preventDefault(); setSettingsOpen(true); }
+      e.preventDefault();
+      switch (action) {
+        case "quickOpen": setQuickOpenOpen(true); break;
+        case "toggleSidebar": setSidebarVisible((value) => !value); break;
+        case "toggleMode": toggleEditorMode(); break;
+        case "reopenClosed": void handleReopenClosed(); break;
+        case "saveAs": void saveAs(); break;
+        case "save": void saveTab(); break;
+        case "open": void openFile(); break;
+        case "new": void handleNewFile(); break;
+        case "closeFile": void handleCloseFile(); break;
+        case "focusMode": handleToggleFocus(); break;
+        case "typewriterMode": handleToggleTypewriter(); break;
+        case "fullscreen": void getCurrentWindow().isFullscreen().then((fs) => getCurrentWindow().setFullscreen(!fs)); break;
+        case "zoomIn": {
+          const next = Math.min(150, getEditorZoom() + 10);
+          persistEditorZoom(next);
+          setEditorZoomState(next);
+          applyEditorLayoutPrefs();
+          break;
+        }
+        case "zoomOut": {
+          const next = Math.max(80, getEditorZoom() - 10);
+          persistEditorZoom(next);
+          setEditorZoomState(next);
+          applyEditorLayoutPrefs();
+          break;
+        }
+        case "settings": setSettingsOpen(true); break;
+      }
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
@@ -1543,6 +1576,7 @@ export default function App() {
     quickOpenOpen,
     documentSearch.open,
     openDocumentSearch,
+    shortcutMap,
   ]);
 
   useEffect(() => {
@@ -1930,6 +1964,9 @@ export default function App() {
               newDocumentMetadata,
               metadataTitle,
               metadataAuthor,
+              launchAtLogin,
+              systemSettingsBusy,
+              shortcutMap,
             }}
             handlers={{
               onLocale: (next) => {
@@ -1990,6 +2027,18 @@ export default function App() {
               onMetadataAuthor: (value) => {
                 setMetadataAuthor(value);
                 persistMetadataAuthor(value);
+              },
+              onLaunchAtLogin: (enabled) => void handleLaunchAtLogin(enabled),
+              onConfigureMarkdownDefault: () => void handleConfigureMarkdownDefault(),
+              onShortcutMap: (next) => {
+                setShortcutMap(next);
+                persistShortcutMap(next);
+              },
+              onResetShortcuts: () => {
+                const next = getDefaultShortcutMap();
+                setShortcutMap(next);
+                persistShortcutMap(next);
+                showSuccess(t(locale, "toast.shortcutsReset"));
               },
             }}
           />
@@ -2086,7 +2135,7 @@ export default function App() {
           />
         )}
         {shortcutsOpen && (
-          <ShortcutsDialog locale={locale} onClose={() => setShortcutsOpen(false)} />
+          <ShortcutsDialog locale={locale} shortcutMap={shortcutMap} onClose={() => setShortcutsOpen(false)} />
         )}
         {aboutOpen && (
           <AboutDialog locale={locale} onClose={() => setAboutOpen(false)} />

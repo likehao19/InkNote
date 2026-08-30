@@ -894,6 +894,81 @@ fn supports_in_app_update() -> bool {
     }
 }
 
+#[cfg(windows)]
+#[tauri::command]
+fn configure_markdown_default_app() -> Result<&'static str, String> {
+    std::process::Command::new("explorer.exe")
+        .arg("ms-settings:defaultapps")
+        .spawn()
+        .map_err(|error| error.to_string())?;
+    Ok("opened-settings")
+}
+
+#[cfg(target_os = "linux")]
+#[tauri::command]
+fn configure_markdown_default_app() -> Result<&'static str, String> {
+    for mime in ["text/markdown", "text/x-markdown"] {
+        let status = std::process::Command::new("xdg-mime")
+            .args(["default", "InkNote.desktop", mime])
+            .status()
+            .map_err(|error| error.to_string())?;
+        if !status.success() {
+            return Err(format!("xdg-mime failed for {mime}: {status}"));
+        }
+    }
+    Ok("configured")
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn configure_markdown_default_app() -> Result<&'static str, String> {
+    use core_foundation::base::TCFType;
+    use core_foundation::string::{CFString, CFStringRef};
+
+    #[link(name = "CoreServices", kind = "framework")]
+    extern "C" {
+        fn UTTypeCreatePreferredIdentifierForTag(
+            tag_class: CFStringRef,
+            tag: CFStringRef,
+            conforming_to: CFStringRef,
+        ) -> CFStringRef;
+        fn LSSetDefaultRoleHandlerForContentType(
+            content_type: CFStringRef,
+            role: u32,
+            bundle_identifier: CFStringRef,
+        ) -> i32;
+    }
+
+    const VIEWER_AND_EDITOR_ROLES: u32 = 0x0000_0006;
+    let tag_class = CFString::new("public.filename-extension");
+    let bundle_identifier = CFString::new("com.inknote.desktop");
+    for extension in ["md", "markdown"] {
+        let tag = CFString::new(extension);
+        let content_type_ref = unsafe {
+            UTTypeCreatePreferredIdentifierForTag(
+                tag_class.as_concrete_TypeRef(),
+                tag.as_concrete_TypeRef(),
+                std::ptr::null(),
+            )
+        };
+        if content_type_ref.is_null() {
+            return Err(format!("unable to resolve the UTI for .{extension}"));
+        }
+        let content_type = unsafe { CFString::wrap_under_create_rule(content_type_ref) };
+        let status = unsafe {
+            LSSetDefaultRoleHandlerForContentType(
+                content_type.as_concrete_TypeRef(),
+                VIEWER_AND_EDITOR_ROLES,
+                bundle_identifier.as_concrete_TypeRef(),
+            )
+        };
+        if status != 0 {
+            return Err(format!("LaunchServices returned {status} for .{extension}"));
+        }
+    }
+    Ok("configured")
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let startup_file = find_markdown_file(&std::env::args().collect::<Vec<_>>());
@@ -901,6 +976,11 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(
+            tauri_plugin_autostart::Builder::new()
+                .app_name("InkNote")
+                .build(),
+        )
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             if let Some(path) = find_markdown_file(&argv) {
                 dispatch_open_file(app, path);
@@ -946,6 +1026,7 @@ pub fn run() {
             rename_path,
             remove_path,
             supports_in_app_update,
+            configure_markdown_default_app,
         ]);
 
     builder
