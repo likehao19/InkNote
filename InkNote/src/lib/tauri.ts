@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { getLocale, t, type MessageKey } from "./i18n";
+import { UTF8_TEXT_ENCODING, type TextEncoding } from "./textEncoding";
 export { isMac, isWin } from "./platform";
 
 export interface DirEntry {
@@ -21,6 +22,8 @@ const BACKEND_ERROR_KEYS: Record<string, MessageKey> = {
   parent_directory_missing: "error.parentDirectoryMissing",
   file_exists: "error.fileExists",
   pdf_export_unsupported: "error.pdfExportUnsupported",
+  text_encoding_invalid: "error.textEncodingInvalid",
+  text_encoding_unrepresentable: "error.textEncodingUnrepresentable",
 };
 
 function invokeLocalized<T>(command: string, args: Record<string, unknown>): Promise<T> {
@@ -31,8 +34,17 @@ function invokeLocalized<T>(command: string, args: Record<string, unknown>): Pro
   });
 }
 
-export function readFile(path: string): Promise<string> {
-  return invoke("read_file", { path });
+export interface TextFileContent {
+  content: string;
+  encoding: TextEncoding;
+}
+
+export function readTextFile(path: string): Promise<TextFileContent> {
+  return invokeLocalized("read_text_file", { path });
+}
+
+export async function readFile(path: string): Promise<string> {
+  return (await readTextFile(path)).content;
 }
 /**
  * 记录自己刚写出去的内容。
@@ -58,6 +70,17 @@ export function isSelfWritePending(path: string, diskContent: string): boolean {
 export function writeFile(path: string, content: string): Promise<void> {
   trackSelfWrite(path, content, 1);
   return invoke<void>("write_file", { path, content }).finally(() => {
+    trackSelfWrite(path, content, -1);
+  });
+}
+
+export function writeTextFile(
+  path: string,
+  content: string,
+  encoding: TextEncoding = UTF8_TEXT_ENCODING,
+): Promise<void> {
+  trackSelfWrite(path, content, 1);
+  return invokeLocalized<void>("write_text_file", { path, content, encoding }).finally(() => {
     trackSelfWrite(path, content, -1);
   });
 }

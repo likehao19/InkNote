@@ -1,3 +1,5 @@
+use chardetng::EncodingDetector;
+use encoding_rs::Encoding;
 use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use regex::RegexBuilder;
 use std::fs::{File, OpenOptions};
@@ -283,14 +285,142 @@ fn dispatch_open_file(app: &tauri::AppHandle, path: String) {
     }
 }
 
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TextEncoding {
+    name: String,
+    bom: bool,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TextFileContent {
+    content: String,
+    encoding: TextEncoding,
+}
+
+fn decode_utf16(bytes: &[u8], little_endian: bool) -> Result<String, String> {
+    if !bytes.len().is_multiple_of(2) {
+        return Err("text_encoding_invalid".to_string());
+    }
+    let units = bytes.chunks_exact(2).map(|pair| {
+        if little_endian {
+            u16::from_le_bytes([pair[0], pair[1]])
+        } else {
+            u16::from_be_bytes([pair[0], pair[1]])
+        }
+    });
+    String::from_utf16(&units.collect::<Vec<_>>()).map_err(|_| "text_encoding_invalid".to_string())
+}
+
+fn decode_text_bytes(bytes: &[u8]) -> Result<TextFileContent, String> {
+    let (content, encoding) = if let Some(payload) = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]) {
+        (
+            std::str::from_utf8(payload)
+                .map_err(|_| "text_encoding_invalid".to_string())?
+                .to_string(),
+            TextEncoding {
+                name: "UTF-8".to_string(),
+                bom: true,
+            },
+        )
+    } else if let Some(payload) = bytes.strip_prefix(&[0xFF, 0xFE]) {
+        (
+            decode_utf16(payload, true)?,
+            TextEncoding {
+                name: "UTF-16LE".to_string(),
+                bom: true,
+            },
+        )
+    } else if let Some(payload) = bytes.strip_prefix(&[0xFE, 0xFF]) {
+        (
+            decode_utf16(payload, false)?,
+            TextEncoding {
+                name: "UTF-16BE".to_string(),
+                bom: true,
+            },
+        )
+    } else if let Ok(content) = std::str::from_utf8(bytes) {
+        (
+            content.to_string(),
+            TextEncoding {
+                name: "UTF-8".to_string(),
+                bom: false,
+            },
+        )
+    } else {
+        let mut detector = EncodingDetector::new();
+        detector.feed(bytes, true);
+        let detected = detector.guess(None, true);
+        let (decoded, had_errors) = detected.decode_without_bom_handling(bytes);
+        if had_errors {
+            return Err("text_encoding_invalid".to_string());
+        }
+        (
+            decoded.into_owned(),
+            TextEncoding {
+                name: detected.name().to_string(),
+                bom: false,
+            },
+        )
+    };
+    Ok(TextFileContent { content, encoding })
+}
+
+fn encode_text_content(content: &str, encoding: &TextEncoding) -> Result<Vec<u8>, String> {
+    let normalized = encoding.name.to_ascii_lowercase();
+    let mut bytes = match normalized.as_str() {
+        "utf-8" | "utf8" => content.as_bytes().to_vec(),
+        "utf-16le" | "utf16le" => content.encode_utf16().flat_map(u16::to_le_bytes).collect(),
+        "utf-16be" | "utf16be" => content.encode_utf16().flat_map(u16::to_be_bytes).collect(),
+        _ => {
+            let selected = Encoding::for_label(encoding.name.as_bytes())
+                .ok_or_else(|| "text_encoding_invalid".to_string())?;
+            let (encoded, _, had_errors) = selected.encode(content);
+            if had_errors {
+                return Err("text_encoding_unrepresentable".to_string());
+            }
+            encoded.into_owned()
+        }
+    };
+
+    if encoding.bom {
+        let prefix: &[u8] = match normalized.as_str() {
+            "utf-8" | "utf8" => &[0xEF, 0xBB, 0xBF],
+            "utf-16le" | "utf16le" => &[0xFF, 0xFE],
+            "utf-16be" | "utf16be" => &[0xFE, 0xFF],
+            _ => &[],
+        };
+        if !prefix.is_empty() {
+            let mut with_bom = Vec::with_capacity(prefix.len() + bytes.len());
+            with_bom.extend_from_slice(prefix);
+            with_bom.append(&mut bytes);
+            bytes = with_bom;
+        }
+    }
+    Ok(bytes)
+}
+
+#[tauri::command]
+fn read_text_file(path: String) -> Result<TextFileContent, String> {
+    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    decode_text_bytes(&bytes)
+}
+
 #[tauri::command]
 fn read_file(path: String) -> Result<String, String> {
-    std::fs::read_to_string(&path).map_err(|e| e.to_string())
+    read_text_file(path).map(|file| file.content)
 }
 
 #[tauri::command]
 fn write_file(path: String, content: String) -> Result<(), String> {
     write_file_safely(Path::new(&path), content.as_bytes())
+}
+
+#[tauri::command]
+fn write_text_file(path: String, content: String, encoding: TextEncoding) -> Result<(), String> {
+    let bytes = encode_text_content(&content, &encoding)?;
+    write_file_safely(Path::new(&path), &bytes)
 }
 
 #[tauri::command]
@@ -1004,7 +1134,9 @@ pub fn run() {
             watched_dirs: Mutex::new(Vec::new()),
         })
         .invoke_handler(tauri::generate_handler![
+            read_text_file,
             read_file,
+            write_text_file,
             write_file,
             write_binary,
             search_regex,
@@ -1047,8 +1179,8 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        copy_file_with_overwrite, create_temporary_sibling, is_valid_entry_name, search_regex,
-        write_binary, OpenFileState,
+        copy_file_with_overwrite, create_temporary_sibling, decode_text_bytes, encode_text_content,
+        is_valid_entry_name, search_regex, write_binary, OpenFileState, TextEncoding,
     };
 
     fn test_directory(name: &str) -> std::path::PathBuf {
@@ -1081,6 +1213,52 @@ mod tests {
         assert_eq!(
             state.receive("warm-open.md".into()).as_deref(),
             Some("warm-open.md")
+        );
+    }
+
+    #[test]
+    fn decodes_bom_marked_utf8_and_utf16_documents() {
+        let utf8 = decode_text_bytes(b"\xEF\xBB\xBF# title").unwrap();
+        assert_eq!(utf8.content, "# title");
+        assert_eq!(utf8.encoding.name, "UTF-8");
+        assert!(utf8.encoding.bom);
+
+        let mut utf16le = vec![0xFF, 0xFE];
+        utf16le.extend("# 中文".encode_utf16().flat_map(u16::to_le_bytes));
+        let decoded = decode_text_bytes(&utf16le).unwrap();
+        assert_eq!(decoded.content, "# 中文");
+        assert_eq!(decoded.encoding.name, "UTF-16LE");
+        assert!(decoded.encoding.bom);
+        assert_eq!(
+            encode_text_content(&decoded.content, &decoded.encoding).unwrap(),
+            utf16le
+        );
+    }
+
+    #[test]
+    fn detects_and_preserves_legacy_chinese_encoding() {
+        let (encoded, _, had_errors) = encoding_rs::GBK.encode("# 中文标题\n正文");
+        assert!(!had_errors);
+        let decoded = decode_text_bytes(&encoded).unwrap();
+
+        assert_eq!(decoded.content, "# 中文标题\n正文");
+        assert_eq!(decoded.encoding.name, "GBK");
+        assert!(!decoded.encoding.bom);
+        assert_eq!(
+            encode_text_content(&decoded.content, &decoded.encoding).unwrap(),
+            encoded.into_owned()
+        );
+    }
+
+    #[test]
+    fn rejects_characters_that_the_original_encoding_cannot_store() {
+        let encoding = TextEncoding {
+            name: "GBK".into(),
+            bom: false,
+        };
+        assert_eq!(
+            encode_text_content("emoji 😀", &encoding).unwrap_err(),
+            "text_encoding_unrepresentable"
         );
     }
 

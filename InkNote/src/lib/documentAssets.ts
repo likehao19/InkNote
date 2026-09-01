@@ -196,13 +196,14 @@ export async function transferDocumentWithManagedImages(
     samePath(dirOf(sourcePath), destinationDirectory)
   ) return sourcePath;
 
-  const sourceContent = await api.readFile(sourcePath);
-  let overwrittenContent = "";
+  const sourceFile = await api.readTextFile(sourcePath);
+  const sourceContent = sourceFile.content;
+  let overwrittenFile: api.TextFileContent | null = null;
   let destinationExisted = false;
   const expectedDestinationPath = joinPath(destinationDirectory, basename(sourcePath));
   if (conflictAction === "overwrite") {
     try {
-      overwrittenContent = await api.readFile(expectedDestinationPath);
+      overwrittenFile = await api.readTextFile(expectedDestinationPath);
       destinationExisted = true;
     } catch {
       // The destination may disappear between conflict selection and the copy.
@@ -218,7 +219,7 @@ export async function transferDocumentWithManagedImages(
         : await api.copyFileToDirStrict(sourcePath, destinationDirectory);
 
     managedCopy = await copyManagedImages(sourcePath, destinationDirectory, sourceContent);
-    await api.writeFile(destinationPath, managedCopy.content);
+    await api.writeTextFile(destinationPath, managedCopy.content, sourceFile.encoding);
 
     if (mode === "move" && !samePath(sourcePath, destinationPath)) {
       await api.removePath(sourcePath);
@@ -227,7 +228,9 @@ export async function transferDocumentWithManagedImages(
     await managedCopy?.rollback();
     if (destinationPath && !samePath(destinationPath, sourcePath)) {
       try {
-        if (destinationExisted) await api.writeFile(destinationPath, overwrittenContent);
+        if (overwrittenFile) {
+          await api.writeTextFile(destinationPath, overwrittenFile.content, overwrittenFile.encoding);
+        }
         else await api.removePath(destinationPath);
       } catch { /* keep the original transfer error */ }
     }
@@ -235,7 +238,9 @@ export async function transferDocumentWithManagedImages(
   }
 
   if (destinationExisted) {
-    try { await cleanupRemovedManagedImages(destinationPath, overwrittenContent, managedCopy.content); } catch { /* best effort */ }
+    try {
+      await cleanupRemovedManagedImages(destinationPath, overwrittenFile?.content ?? "", managedCopy.content);
+    } catch { /* best effort */ }
   }
   if (mode === "move" && !samePath(sourcePath, destinationPath)) {
     try { await cleanupRemovedManagedImages(sourcePath, sourceContent, ""); } catch { /* best effort */ }

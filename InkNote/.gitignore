@@ -17,6 +17,9 @@ dist-ssr
 /tauri.svg
 /vite.svg
 
+# Local bug reports (never commit)
+/bug-reports/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

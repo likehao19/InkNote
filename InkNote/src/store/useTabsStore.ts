@@ -1,6 +1,11 @@
 import { create } from "zustand";
 import type { EditorMode } from "../editor";
 import { getDefaultEditorMode } from "../lib/preferences";
+import {
+  copyTextEncoding,
+  UTF8_TEXT_ENCODING,
+  type TextEncoding,
+} from "../lib/textEncoding";
 
 export interface TabDoc {
   id: string;
@@ -9,6 +14,7 @@ export interface TabDoc {
   diskContent: string;
   dirty: boolean;
   mode: EditorMode;
+  encoding: TextEncoding;
 }
 
 interface DocState {
@@ -17,7 +23,7 @@ interface DocState {
   focusMode: boolean;
   typewriterMode: boolean;
   newTab: (content?: string) => string;
-  openTab: (path: string, content: string) => string;
+  openTab: (path: string, content: string, encoding?: TextEncoding) => string;
   closeTab: (id: string) => void;
   restoreTab: (snap: {
     path: string | null;
@@ -25,13 +31,14 @@ interface DocState {
     diskContent: string;
     dirty: boolean;
     mode: EditorMode;
+    encoding: TextEncoding;
   }) => void;
   updateContent: (id: string, content: string) => void;
   setMode: (id: string, mode: EditorMode) => void;
   /** 保存完成：只更新磁盘基线，不动正在编辑的内容 */
-  markSaved: (id: string, path?: string, savedContent?: string) => void;
+  markSaved: (id: string, path?: string, savedContent?: string, encoding?: TextEncoding) => void;
   /** 用磁盘内容整体替换（外部修改 / 手动重新加载） */
-  loadFromDisk: (id: string, path: string, content: string) => void;
+  loadFromDisk: (id: string, path: string, content: string, encoding?: TextEncoding) => void;
   /** 仅改路径（重命名），不影响未保存状态 */
   setPath: (id: string, path: string) => void;
   getActive: () => TabDoc | undefined;
@@ -53,6 +60,7 @@ function emptyTab(): TabDoc {
     diskContent: "",
     dirty: false,
     mode: getDefaultEditorMode(),
+    encoding: copyTextEncoding(UTF8_TEXT_ENCODING),
   };
 }
 
@@ -71,7 +79,7 @@ export const useTabsStore = create<DocState>((set, get) => ({
     return tab.id;
   },
 
-  openTab: (path, content) => {
+  openTab: (path, content, encoding = UTF8_TEXT_ENCODING) => {
     set(() => {
       const tab: TabDoc = {
         id: newId(),
@@ -80,6 +88,7 @@ export const useTabsStore = create<DocState>((set, get) => ({
         diskContent: content,
         dirty: false,
         mode: getDefaultEditorMode(),
+        encoding: copyTextEncoding(encoding),
       };
       return { tabs: [tab], activeId: tab.id };
     });
@@ -99,6 +108,7 @@ export const useTabsStore = create<DocState>((set, get) => ({
       diskContent: snap.diskContent,
       dirty: snap.dirty,
       mode: snap.mode,
+      encoding: copyTextEncoding(snap.encoding),
     };
     set({ tabs: [tab], activeId: tab.id });
   },
@@ -124,7 +134,7 @@ export const useTabsStore = create<DocState>((set, get) => ({
    * 否则在 IPC 往返期间敲进去的字会被抹掉。dirty 由当前内容与基线比较得出，
    * 保存期间新输入的内容会继续保持 dirty，等待用户再次保存或退出时写回。
    */
-  markSaved: (id, path, savedContent) => {
+  markSaved: (id, path, savedContent, encoding) => {
     set((s) => ({
       tabs: s.tabs.map((t) => {
         if (t.id !== id) return t;
@@ -134,13 +144,14 @@ export const useTabsStore = create<DocState>((set, get) => ({
           path: path ?? t.path,
           diskContent: disk,
           dirty: t.content !== disk,
+          encoding: encoding ? copyTextEncoding(encoding) : t.encoding,
         };
       }),
     }));
   },
 
   /** 用磁盘内容整体替换当前文档 */
-  loadFromDisk: (id, path, content) => {
+  loadFromDisk: (id, path, content, encoding) => {
     set((s) => {
       let activeId = s.activeId;
       const tabs = s.tabs.map((t) => {
@@ -152,6 +163,7 @@ export const useTabsStore = create<DocState>((set, get) => ({
           content,
           diskContent: content,
           dirty: false,
+          encoding: encoding ? copyTextEncoding(encoding) : t.encoding,
         };
         if (activeId === id) activeId = next.id;
         return next;

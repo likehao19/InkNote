@@ -136,6 +136,7 @@ import {
   type FileConflictAction,
 } from "./lib/documentAssets";
 import { rewriteManagedImageReferences } from "./lib/imageAssets";
+import { UTF8_TEXT_ENCODING } from "./lib/textEncoding";
 import {
   APP_SHORTCUT_ACTIONS,
   getDefaultShortcutMap,
@@ -177,6 +178,7 @@ export default function App() {
     diskContent: string;
     dirty: boolean;
     mode: TabDoc["mode"];
+    encoding: TabDoc["encoding"];
     externalDocument: boolean;
     documentEditable: boolean;
     sampleDocument: boolean;
@@ -384,7 +386,7 @@ export default function App() {
     let documentWritten = false;
     try {
       preparedImages = await preparePendingImages(tab.path, tab.content);
-      await api.writeFile(tab.path, tab.content);
+      await api.writeTextFile(tab.path, tab.content, tab.encoding);
       documentWritten = true;
       commitPendingImages(preparedImages);
       editorRef.current?.refreshPreview();
@@ -416,10 +418,10 @@ export default function App() {
       const request = ++fileLoadRequestRef.current;
       const external = options.external === true;
       try {
-        const text = await api.readFile(path);
+        const file = await api.readTextFile(path);
         if (request !== fileLoadRequestRef.current) return false;
         clearPendingImages();
-        const openedId = openTab(path, text);
+        const openedId = openTab(path, file.content, file.encoding);
         if (external && externalOpenReadOnly) setMode(openedId, "preview");
         setExternalDocument(external);
         setDocumentEditable(!(external && externalOpenReadOnly));
@@ -500,7 +502,7 @@ export default function App() {
         // 先把未落盘的粘贴图片写出去，再写文档 —— 顺序反了会先触发一次
         // 「图片文件不存在」的重建
         preparedImages = await preparePendingImages(path, tab.content);
-        await api.writeFile(path, tab.content);
+        await api.writeTextFile(path, tab.content, tab.encoding);
         documentWritten = true;
         commitPendingImages(preparedImages);
         editorRef.current?.refreshPreview();
@@ -539,7 +541,7 @@ export default function App() {
     try {
       managedImages = await prepareManagedImagesForSaveAs(tab.path, p, tab.content);
       preparedImages = await preparePendingImages(p, managedImages.content);
-      await api.writeFile(p, managedImages.content);
+      await api.writeTextFile(p, managedImages.content, UTF8_TEXT_ENCODING);
       documentWritten = true;
       commitPendingImages(preparedImages);
       editorRef.current?.refreshPreview();
@@ -548,7 +550,7 @@ export default function App() {
         const currentContent = rewriteManagedImageReferences(currentTab.content, managedImages.replacements);
         if (currentContent !== currentTab.content) updateContent(tab.id, currentContent);
       }
-      markSaved(tab.id, p, managedImages.content);
+      markSaved(tab.id, p, managedImages.content, UTF8_TEXT_ENCODING);
       addRecentFile(p);
       setRecentFiles(getRecentFiles());
       setTitle(p);
@@ -630,6 +632,7 @@ export default function App() {
       diskContent: savedBeforeClose ? tab.content : tab.diskContent,
       dirty: savedBeforeClose ? false : tab.dirty,
       mode: tab.mode,
+      encoding: tab.encoding,
       externalDocument,
       documentEditable,
       sampleDocument,
@@ -875,14 +878,14 @@ export default function App() {
     const tab = getActive();
     if (!tab?.path) return;
     try {
-      const disk = await api.readFile(tab.path);
-      if (disk === tab.content || disk === tab.diskContent) return;
+      const disk = await api.readTextFile(tab.path);
+      if (disk.content === tab.content || disk.content === tab.diskContent) return;
       // 磁盘上就是当前基线或仍在进行的应用写入：不是外部修改
-      if (api.isSelfWritePending(tab.path, disk)) return;
+      if (api.isSelfWritePending(tab.path, disk.content)) return;
       if (tab.dirty) {
         setReloadPrompt(true);
       } else {
-        loadFromDisk(tab.id, tab.path, disk);
+        loadFromDisk(tab.id, tab.path, disk.content, disk.encoding);
         show(t(locale, "toast.externalReload"));
       }
     } catch {
@@ -894,8 +897,8 @@ export default function App() {
     const tab = getActive();
     if (!tab?.path) return;
     try {
-      const disk = await api.readFile(tab.path);
-      loadFromDisk(tab.id, tab.path, disk);
+      const disk = await api.readTextFile(tab.path);
+      loadFromDisk(tab.id, tab.path, disk.content, disk.encoding);
       setReloadPrompt(false);
       show(t(locale, "toast.reloaded"));
     } catch (error) {
@@ -927,7 +930,7 @@ export default function App() {
   const handleDroppedMarkdown = useCallback(
     async (content: string, path?: string) => {
       if (path) {
-        if (await loadFile(path, { external: true })) showOutlineForExternalOpen();
+        await loadFile(path, { external: true });
         return;
       }
       if (!(await confirmDiscardIfNeeded())) return;
@@ -942,7 +945,7 @@ export default function App() {
       if (tab) updateContent(tab.id, content);
       setTitle(null);
     },
-    [loadFile, showOutlineForExternalOpen, confirmDiscardIfNeeded, newTab, getActive, updateContent, setTitle],
+    [loadFile, confirmDiscardIfNeeded, newTab, getActive, updateContent, setTitle],
   );
 
   const handleToggleFocus = useCallback(() => {
@@ -1227,9 +1230,7 @@ export default function App() {
 
     const handleOpenFile = (p: string) => {
       if (!disposed) {
-        void bootRef.current.loadFile(p, { external: true }).then((opened) => {
-          if (opened && !disposed) showOutlineForExternalOpen();
-        });
+        void bootRef.current.loadFile(p, { external: true });
       }
     };
     track(api.onFileChanged(() => { if (!disposed) void bootRef.current.handleExternalChange(); }));
@@ -1414,7 +1415,7 @@ export default function App() {
             }
             return;
           }
-          if (await loadFile(path, { external: true })) showOutlineForExternalOpen();
+          await loadFile(path, { external: true });
         });
       }
     }).then((fn) => {
@@ -1425,7 +1426,7 @@ export default function App() {
       disposed = true;
       unlisten?.();
     };
-  }, [loadFile, showOutlineForExternalOpen, finishImportedFile, handleTransferPath, showError]);
+  }, [loadFile, finishImportedFile, handleTransferPath, showError]);
 
   const closeRequestRef = useRef<() => Promise<void>>(async () => undefined);
   closeRequestRef.current = async () => {
@@ -1718,6 +1719,13 @@ export default function App() {
     () => extractMarkdownOutline(active?.content ?? ""),
     [active?.content],
   );
+
+  useEffect(() => {
+    if (!externalDocument || !active?.id || !active.path) return;
+    // 外部文件冷启动时，等文档内容进入活动标签后再显示大纲。
+    // 这避免侧边栏先于 Zustand 文档状态提交而短暂保留空大纲，且不阻塞首屏。
+    showOutlineForExternalOpen();
+  }, [externalDocument, active?.id, showOutlineForExternalOpen]);
 
   const setDocumentAccessMode = useCallback((editable: boolean) => {
     if (documentEditable === editable) return;

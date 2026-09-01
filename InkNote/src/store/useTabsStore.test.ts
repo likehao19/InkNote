@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { UTF8_TEXT_ENCODING } from "../lib/textEncoding";
 import { useTabsStore } from "./useTabsStore";
 
 afterEach(() => {
@@ -14,6 +15,7 @@ describe("document restoration", () => {
       diskContent: "sample",
       dirty: false,
       mode: "source",
+      encoding: UTF8_TEXT_ENCODING,
     });
 
     expect(useTabsStore.getState().getActive()?.mode).toBe("source");
@@ -68,6 +70,7 @@ describe("document identity", () => {
       diskContent: "saved",
       dirty: true,
       mode: "source",
+      encoding: UTF8_TEXT_ENCODING,
     });
 
     expect(useTabsStore.getState().activeId).not.toBe(initialId);
@@ -81,9 +84,9 @@ describe("document identity", () => {
   });
 
   it("starts a new editor history when disk content replaces the document", () => {
-    const id = useTabsStore.getState().openTab("A.md", "old");
+    const id = useTabsStore.getState().openTab("A.md", "old", { name: "GBK", bom: false });
 
-    useTabsStore.getState().loadFromDisk(id, "A.md", "new");
+    useTabsStore.getState().loadFromDisk(id, "A.md", "new", { name: "UTF-16LE", bom: true });
 
     expect(useTabsStore.getState().activeId).not.toBe(id);
     expect(useTabsStore.getState().getActive()).toMatchObject({
@@ -91,6 +94,7 @@ describe("document identity", () => {
       content: "new",
       diskContent: "new",
       dirty: false,
+      encoding: { name: "UTF-16LE", bom: true },
     });
   });
 });

@@ -8,7 +8,9 @@ import {
 
 vi.mock("./tauri", () => ({
   readFile: vi.fn(),
+  readTextFile: vi.fn(),
   writeFile: vi.fn(),
+  writeTextFile: vi.fn(),
   listDir: vi.fn(),
   createDir: vi.fn(),
   copyFileToDir: vi.fn(),
@@ -23,12 +25,16 @@ describe("managed document assets", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockedApi.writeFile.mockResolvedValue(undefined);
+    mockedApi.writeTextFile.mockResolvedValue(undefined);
     mockedApi.createDir.mockResolvedValue(undefined);
     mockedApi.removePath.mockResolvedValue(undefined);
   });
 
   it("copies managed images and rewrites renamed asset references", async () => {
-    mockedApi.readFile.mockResolvedValue("![image](.inknote-assets/photo.png)");
+    mockedApi.readTextFile.mockResolvedValue({
+      content: "![image](.inknote-assets/photo.png)",
+      encoding: { name: "GBK", bom: false },
+    });
     mockedApi.copyFileToDirStrict.mockResolvedValue("D:\\target\\note.md");
     mockedApi.listDir.mockImplementation(async (path) => {
       if (path === "D:/source/.inknote-assets") {
@@ -46,9 +52,10 @@ describe("managed document assets", () => {
     )).resolves.toBe("D:\\target\\note.md");
 
     expect(mockedApi.createDir).toHaveBeenCalledWith("D:/target", ".inknote-assets");
-    expect(mockedApi.writeFile).toHaveBeenCalledWith(
+    expect(mockedApi.writeTextFile).toHaveBeenCalledWith(
       "D:\\target\\note.md",
       "![image](.inknote-assets/photo%20%281%29.png)",
+      { name: "GBK", bom: false },
     );
   });
 
@@ -87,7 +94,10 @@ describe("managed document assets", () => {
   });
 
   it("rolls back the copied document when copying a managed image fails", async () => {
-    mockedApi.readFile.mockResolvedValue("![image](.inknote-assets/photo.png)");
+    mockedApi.readTextFile.mockResolvedValue({
+      content: "![image](.inknote-assets/photo.png)",
+      encoding: { name: "UTF-8", bom: false },
+    });
     mockedApi.copyFileToDirStrict.mockResolvedValue("D:\\target\\note.md");
     mockedApi.listDir.mockImplementation(async (path) => {
       if (path === "D:/source/.inknote-assets") {

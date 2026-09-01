@@ -413,6 +413,8 @@ export const messages = {
     "error.fileExists": "文件已存在",
     "error.externalFileMissing": "当前文件已被移动、删除或暂时无法读取，请另存或重新打开文件。",
     "error.pdfExportUnsupported": "当前系统暂不支持直接导出 PDF，请先导出 HTML 后使用系统的 PDF 功能转换。",
+    "error.textEncodingInvalid": "无法识别或解码该文本文件的字符编码。",
+    "error.textEncodingUnrepresentable": "文档包含原字符编码无法保存的内容，请使用“另存为”转换为 UTF-8。",
 
     "about.title": "关于墨笺",
     "about.body": "墨笺 InkNote 是一款轻量 Markdown 编辑器，专注本地写作与实时预览。支持数学公式、Mermaid 图表、表格编辑和主题定制，保持简洁专注。",
@@ -845,6 +847,8 @@ export const messages = {
     "error.fileExists": "The file already exists",
     "error.externalFileMissing": "The current file was moved, deleted, or cannot be read. Save it elsewhere or reopen it.",
     "error.pdfExportUnsupported": "Direct PDF export is not supported on this system. Export HTML first, then convert it using the system PDF tools.",
+    "error.textEncodingInvalid": "The text encoding could not be detected or decoded.",
+    "error.textEncodingUnrepresentable": "This document contains characters that its original encoding cannot save. Use Save As to convert it to UTF-8.",
 
     "about.title": "About InkNote",
     "about.body": "InkNote is a lightweight Markdown editor focused on local writing and live preview. It supports math, Mermaid diagrams, tables, and themes while staying simple and focused.",
