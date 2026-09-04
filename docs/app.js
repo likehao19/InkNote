@@ -19,9 +19,18 @@ const messages = {
     feature6Title: "导出与更新", feature6Text: "直接导出 HTML（Windows/macOS 也支持 PDF），并可在应用内检查、下载和安装新版本。",
     workflowTitle: "从打开到交付，保持一条写作流", workflowText: "使用文件关联快速预览，切换到编辑模式继续修改；需要交付时直接导出 HTML，Windows/macOS 还可导出 PDF。源文件始终是标准 Markdown。",
     flow1Title: "打开", flow1Text: "文件、文件夹或最近文档", flow2Title: "写作", flow2Text: "实时预览或源码模式", flow3Title: "交付", flow3Text: "保存 Markdown，导出 HTML/PDF",
-    downloadTitle: "选择你的平台", downloadLead: "按钮将直接下载 GitHub 最新 Release 中的安装包。", checking: "正在检查最新版本…", releaseReady: "已找到 {version}", releaseFallback: "暂时使用稳定版下载地址",
-    windowsMeta: "Windows 10/11 · x64 · 中文安装程序", macIntelMeta: "Intel 芯片 · x86_64 · DMG", macArmMeta: "Apple 芯片 · ARM64 · DMG", linuxX64Meta: "Intel/AMD · AppImage；DEB/RPM 见 Releases", linuxArmMeta: "aarch64 · AppImage；DEB/RPM 见 Releases",
-    downloadWindows: "下载 Windows 版", downloadMacIntel: "下载 Mac Intel 版", downloadMacArm: "下载 Mac ARM 版", downloadLinuxX64: "下载 Linux x86_64", downloadLinuxArm: "下载 Linux ARM64", otherPackages: "Linux DEB/RPM 或历史版本：", allReleases: "查看全部 Releases ↗",
+    downloadTitle: "下载 InkNote", downloadLead: "已覆盖 Windows、macOS 与主流 Linux 发行版。", checking: "正在检查最新版本…", releaseReady: "最新版本 {version}", releaseFallback: "暂时使用稳定版下载地址",
+    detectedKicker: "智能推荐", recommended: "推荐", windowsMeta: "Windows 10/11 · x64 · 中文安装程序", macMeta: "支持 Apple 芯片与 Intel Mac · DMG", appleSilicon: "Apple 芯片", linuxMeta: "AppImage、DEB 与 RPM · x64 / ARM64",
+    downloadWindows: "下载 Windows 版", otherPackages: "校验签名或下载历史版本：", allReleases: "查看全部 Releases ↗",
+    detectedWindowsTitle: "已识别 Windows", detectedWindowsDescription: "推荐 Windows 10/11 x64 中文安装程序。", detectedWindowsLabel: "下载 Windows x64",
+    detectedMacArmTitle: "已识别 Apple 芯片 Mac", detectedMacArmDescription: "推荐适用于 M 系列芯片的 ARM64 DMG 安装包。", detectedMacArmLabel: "下载 macOS ARM64",
+    detectedMacIntelTitle: "已识别 Intel Mac", detectedMacIntelDescription: "推荐适用于 Intel 处理器的 x86_64 DMG 安装包。", detectedMacIntelLabel: "下载 macOS Intel",
+    detectedMacTitle: "已识别 macOS", detectedMacDescription: "请选择与你的 Mac 芯片对应的安装包。", detectedMacLabel: "选择 macOS 版本",
+    detectedLinuxX64Title: "已识别 Linux x86_64", detectedLinuxX64Description: "推荐通用 AppImage，也可选择 DEB 或 RPM。", detectedLinuxX64Label: "下载 Linux AppImage",
+    detectedLinuxArmTitle: "已识别 Linux ARM64", detectedLinuxArmDescription: "推荐 ARM64 AppImage，也可选择 DEB 或 RPM。", detectedLinuxArmLabel: "下载 Linux ARM64",
+    detectedLinuxTitle: "已识别 Linux", detectedLinuxDescription: "请选择处理器架构与发行版对应的安装格式。", detectedLinuxLabel: "选择 Linux 安装包",
+    detectedUnknownTitle: "选择适合你的桌面版本", detectedUnknownDescription: "支持 Windows、macOS 和 Linux，可在下方按系统与架构选择。", detectedUnknownLabel: "查看全部下载",
+    detectedMetaWindows: "已匹配 Windows x64", detectedMetaMacArm: "已匹配 macOS ARM64", detectedMetaMacIntel: "已匹配 macOS Intel", detectedMetaMac: "macOS · 请选择芯片", detectedMetaLinuxX64: "已匹配 Linux x86_64", detectedMetaLinuxArm: "已匹配 Linux ARM64", detectedMetaLinux: "Linux · 请选择架构", detectedMetaUnknown: "支持 Windows / macOS / Linux",
     footerText: "为专注的 Markdown 写作而设计。", issues: "问题反馈"
   },
   en: {
@@ -41,9 +50,18 @@ const messages = {
     feature6Title: "Export and updates", feature6Text: "Export directly to HTML (or PDF on Windows and macOS), and check, download, and install updates inside the app.",
     workflowTitle: "One writing flow, from open to delivery", workflowText: "Preview files opened through system associations, switch to edit mode when needed, and export to HTML or, on Windows and macOS, PDF. The source always remains standard Markdown.",
     flow1Title: "Open", flow1Text: "A file, folder, or recent document", flow2Title: "Write", flow2Text: "Live preview or source mode", flow3Title: "Deliver", flow3Text: "Save Markdown or export HTML/PDF",
-    downloadTitle: "Choose your platform", downloadLead: "Each button downloads the matching installer from the latest GitHub Release.", checking: "Checking the latest release…", releaseReady: "Latest release: {version}", releaseFallback: "Using stable download links",
-    windowsMeta: "Windows 10/11 · x64 · Chinese installer", macIntelMeta: "Intel · x86_64 · DMG", macArmMeta: "Apple silicon · ARM64 · DMG", linuxX64Meta: "Intel/AMD · AppImage; DEB/RPM in Releases", linuxArmMeta: "aarch64 · AppImage; DEB/RPM in Releases",
-    downloadWindows: "Download for Windows", downloadMacIntel: "Download for Mac Intel", downloadMacArm: "Download for Mac ARM", downloadLinuxX64: "Download Linux x86_64", downloadLinuxArm: "Download Linux ARM64", otherPackages: "Linux DEB/RPM or older builds:", allReleases: "View all Releases ↗",
+    downloadTitle: "Download InkNote", downloadLead: "Available for Windows, macOS, and major Linux distributions.", checking: "Checking the latest release…", releaseReady: "Latest release {version}", releaseFallback: "Using stable download links",
+    detectedKicker: "Recommended for you", recommended: "Recommended", windowsMeta: "Windows 10/11 · x64 · Chinese installer", macMeta: "Apple silicon and Intel Mac · DMG", appleSilicon: "Apple silicon", linuxMeta: "AppImage, DEB, and RPM · x64 / ARM64",
+    downloadWindows: "Download for Windows", otherPackages: "Signatures or previous versions:", allReleases: "View all Releases ↗",
+    detectedWindowsTitle: "Windows detected", detectedWindowsDescription: "The Windows 10/11 x64 installer is recommended for this device.", detectedWindowsLabel: "Download Windows x64",
+    detectedMacArmTitle: "Apple silicon Mac detected", detectedMacArmDescription: "The ARM64 DMG is recommended for M-series Macs.", detectedMacArmLabel: "Download macOS ARM64",
+    detectedMacIntelTitle: "Intel Mac detected", detectedMacIntelDescription: "The x86_64 DMG is recommended for Intel-based Macs.", detectedMacIntelLabel: "Download macOS Intel",
+    detectedMacTitle: "macOS detected", detectedMacDescription: "Choose the download that matches your Mac's processor.", detectedMacLabel: "Choose a macOS build",
+    detectedLinuxX64Title: "Linux x86_64 detected", detectedLinuxX64Description: "Use the universal AppImage, or choose DEB or RPM below.", detectedLinuxX64Label: "Download Linux AppImage",
+    detectedLinuxArmTitle: "Linux ARM64 detected", detectedLinuxArmDescription: "Use the ARM64 AppImage, or choose DEB or RPM below.", detectedLinuxArmLabel: "Download Linux ARM64",
+    detectedLinuxTitle: "Linux detected", detectedLinuxDescription: "Choose your processor architecture and preferred package format.", detectedLinuxLabel: "Choose a Linux package",
+    detectedUnknownTitle: "Choose your desktop build", detectedUnknownDescription: "InkNote supports Windows, macOS, and Linux. Pick your system and architecture below.", detectedUnknownLabel: "View all downloads",
+    detectedMetaWindows: "Matched Windows x64", detectedMetaMacArm: "Matched macOS ARM64", detectedMetaMacIntel: "Matched macOS Intel", detectedMetaMac: "macOS · choose your chip", detectedMetaLinuxX64: "Matched Linux x86_64", detectedMetaLinuxArm: "Matched Linux ARM64", detectedMetaLinux: "Linux · choose architecture", detectedMetaUnknown: "Windows / macOS / Linux",
     footerText: "Designed for focused Markdown writing.", issues: "Report an issue"
   }
 };
@@ -51,6 +69,7 @@ const messages = {
 let currentLanguage = localStorage.getItem("inknote-site-language") || (navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en");
 let releaseStateKey = "checking";
 let releaseStateVersion = "";
+let detectedSystem = { family: "unknown", platform: null, symbol: "OS" };
 
 function translate(language) {
   const dictionary = messages[language] || messages.en;
@@ -66,6 +85,7 @@ function translate(language) {
     button.setAttribute("aria-pressed", String(button.dataset.lang === language));
   });
   setReleaseState(releaseStateKey, releaseStateVersion);
+  renderRecommendation();
   localStorage.setItem("inknote-site-language", language);
 }
 
@@ -75,8 +95,12 @@ function chooseAsset(assets, platform) {
     windows: [/^InkNote-Windows-x64-Setup\.exe$/i, /x64[-_]setup\.exe$/i, /setup\.exe$/i],
     "macos-x64": [/^InkNote-macOS-x86_64\.dmg$/i, /x86_64\.dmg$/i, /x64\.dmg$/i],
     "macos-arm64": [/^InkNote-macOS-arm64\.dmg$/i, /aarch64\.dmg$/i, /arm64\.dmg$/i],
-    "linux-x64": [/^InkNote-Linux-x86_64\.AppImage$/i],
-    "linux-arm64": [/^InkNote-Linux-arm64\.AppImage$/i]
+    "linux-x64-appimage": [/^InkNote-Linux-x86_64\.AppImage$/i],
+    "linux-x64-deb": [/^InkNote-Linux-x86_64\.deb$/i],
+    "linux-x64-rpm": [/^InkNote-Linux-x86_64\.rpm$/i],
+    "linux-arm64-appimage": [/^InkNote-Linux-arm64\.AppImage$/i],
+    "linux-arm64-deb": [/^InkNote-Linux-arm64\.deb$/i],
+    "linux-arm64-rpm": [/^InkNote-Linux-arm64\.rpm$/i]
   };
   for (const pattern of tests[platform] || []) {
     const match = candidates.find((asset) => pattern.test(asset.name));
@@ -90,6 +114,105 @@ function setReleaseState(key, version = "") {
   releaseStateVersion = version;
   const state = document.querySelector("[data-release-state]");
   if (state) state.textContent = messages[currentLanguage][key].replace("{version}", version);
+}
+
+function normalizeArchitecture(value) {
+  const architecture = String(value || "").toLowerCase();
+  if (/arm64|aarch64|\barm\b/.test(architecture)) return "arm64";
+  if (/x86_64|amd64|x64|\bx86\b/.test(architecture)) return "x64";
+  return null;
+}
+
+async function detectSystem() {
+  const userAgentData = navigator.userAgentData;
+  const platform = String(userAgentData?.platform || navigator.platform || navigator.userAgent || "").toLowerCase();
+  const userAgent = String(navigator.userAgent || "").toLowerCase();
+  let architecture = normalizeArchitecture(userAgentData?.architecture);
+
+  if (userAgentData?.getHighEntropyValues) {
+    try {
+      const details = await userAgentData.getHighEntropyValues(["architecture", "bitness"]);
+      architecture = normalizeArchitecture(details.architecture) || architecture;
+      if (details.architecture === "x86" && details.bitness === "64") architecture = "x64";
+    } catch (error) {
+      console.debug("Detailed system detection is unavailable.", error);
+    }
+  }
+
+  if (/windows|win32|win64/.test(platform) || /windows/.test(userAgent)) {
+    return { family: "windows", platform: "windows", symbol: "WIN" };
+  }
+
+  if (/android|cros/.test(platform) || /android|cros/.test(userAgent)) {
+    return { family: "unknown", platform: null, symbol: "OS" };
+  }
+
+  const isTouchMac = /mac/.test(platform) && navigator.maxTouchPoints > 1;
+  if (!isTouchMac && (/mac/.test(platform) || /macintosh/.test(userAgent))) {
+    if (architecture === "arm64" || /arm64|aarch64/.test(userAgent)) {
+      return { family: "macos", platform: "macos-arm64", symbol: "MAC" };
+    }
+    if (userAgentData && architecture === "x64") {
+      return { family: "macos", platform: "macos-x64", symbol: "MAC" };
+    }
+    return { family: "macos", platform: null, symbol: "MAC" };
+  }
+
+  if (/linux/.test(platform) || /linux/.test(userAgent)) {
+    architecture = architecture || normalizeArchitecture(userAgent);
+    if (architecture === "arm64") {
+      return { family: "linux", platform: "linux-arm64-appimage", symbol: "LNX" };
+    }
+    if (architecture === "x64") {
+      return { family: "linux", platform: "linux-x64-appimage", symbol: "LNX" };
+    }
+    return { family: "linux", platform: null, symbol: "LNX" };
+  }
+
+  return { family: "unknown", platform: null, symbol: "OS" };
+}
+
+function recommendationKeys(system) {
+  if (system.platform === "windows") return ["detectedWindowsTitle", "detectedWindowsDescription", "detectedWindowsLabel", "detectedMetaWindows"];
+  if (system.platform === "macos-arm64") return ["detectedMacArmTitle", "detectedMacArmDescription", "detectedMacArmLabel", "detectedMetaMacArm"];
+  if (system.platform === "macos-x64") return ["detectedMacIntelTitle", "detectedMacIntelDescription", "detectedMacIntelLabel", "detectedMetaMacIntel"];
+  if (system.family === "macos") return ["detectedMacTitle", "detectedMacDescription", "detectedMacLabel", "detectedMetaMac"];
+  if (system.platform === "linux-x64-appimage") return ["detectedLinuxX64Title", "detectedLinuxX64Description", "detectedLinuxX64Label", "detectedMetaLinuxX64"];
+  if (system.platform === "linux-arm64-appimage") return ["detectedLinuxArmTitle", "detectedLinuxArmDescription", "detectedLinuxArmLabel", "detectedMetaLinuxArm"];
+  if (system.family === "linux") return ["detectedLinuxTitle", "detectedLinuxDescription", "detectedLinuxLabel", "detectedMetaLinux"];
+  return ["detectedUnknownTitle", "detectedUnknownDescription", "detectedUnknownLabel", "detectedMetaUnknown"];
+}
+
+function renderRecommendation() {
+  const dictionary = messages[currentLanguage] || messages.en;
+  const [titleKey, descriptionKey, labelKey, metaKey] = recommendationKeys(detectedSystem);
+  const sourceLink = detectedSystem.platform
+    ? document.querySelector(`[data-platform="${detectedSystem.platform}"]`)
+    : null;
+  const destination = sourceLink?.href || "#platform-downloads";
+
+  const symbol = document.querySelector("[data-detected-symbol]");
+  const title = document.querySelector("[data-detected-title]");
+  const description = document.querySelector("[data-detected-description]");
+  const detectedLabel = document.querySelector("[data-detected-label]");
+  const detectedLink = document.querySelector("[data-detected-link]");
+  const heroLabel = document.querySelector("[data-recommended-label]");
+  const heroMeta = document.querySelector("[data-recommended-meta]");
+  const heroLink = document.querySelector(".recommended-download");
+
+  if (symbol) symbol.textContent = detectedSystem.symbol;
+  if (title) title.textContent = dictionary[titleKey];
+  if (description) description.textContent = dictionary[descriptionKey];
+  if (detectedLabel) detectedLabel.textContent = dictionary[labelKey];
+  if (heroLabel) heroLabel.textContent = dictionary[labelKey];
+  if (heroMeta) heroMeta.textContent = dictionary[metaKey];
+  if (detectedLink) detectedLink.href = destination;
+  if (heroLink) heroLink.href = destination;
+
+  document.querySelector("[data-detected-download]")?.setAttribute("data-system", detectedSystem.family);
+  document.querySelectorAll("[data-download-card]").forEach((card) => {
+    card.classList.toggle("is-recommended", card.dataset.downloadCard === detectedSystem.family);
+  });
 }
 
 async function loadLatestRelease() {
@@ -107,6 +230,7 @@ async function loadLatestRelease() {
       }
     });
     setReleaseState("releaseReady", version);
+    renderRecommendation();
   } catch (error) {
     console.warn("Unable to refresh release links; keeping stable fallbacks.", error);
     setReleaseState("releaseFallback");
@@ -116,4 +240,8 @@ async function loadLatestRelease() {
 document.querySelectorAll("[data-lang]").forEach((button) => button.addEventListener("click", () => translate(button.dataset.lang)));
 document.querySelector("[data-current-year]").textContent = new Date().getFullYear();
 translate(currentLanguage);
-loadLatestRelease();
+void detectSystem().then((system) => {
+  detectedSystem = system;
+  renderRecommendation();
+});
+void loadLatestRelease();

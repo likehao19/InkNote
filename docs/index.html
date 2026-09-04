@@ -47,10 +47,10 @@
             <h1 data-i18n="heroTitle">写 Markdown，<br />只看内容本身。</h1>
             <p class="hero-lead" data-i18n="heroLead">墨笺是一款所见即所得的桌面 Markdown 编辑器。没有割裂的双栏预览，点击即可编辑，移开焦点即呈现最终排版。</p>
             <div class="hero-actions">
-              <a class="button button-primary recommended-download" href="#download"><span data-i18n="downloadNow">立即下载</span><span aria-hidden="true">↓</span></a>
+              <a class="button button-primary recommended-download" href="#download"><span data-recommended-label>为当前系统下载</span><span aria-hidden="true">↓</span></a>
               <a class="button button-secondary" href="https://github.com/likehao19/InkNote" target="_blank" rel="noreferrer"><span data-i18n="viewGithub">查看 GitHub</span><span aria-hidden="true">↗</span></a>
             </div>
-            <p class="release-note"><span data-i18n="latest">最新版本</span> <strong data-release-version>v0.2.3</strong><span class="dot-separator">·</span><span data-i18n="freeDownload">免费下载</span></p>
+            <p class="release-note"><span data-i18n="latest">最新版本</span> <strong data-release-version>v0.2.9</strong><span class="dot-separator">·</span><span data-i18n="freeDownload">免费下载</span><span class="dot-separator">·</span><span data-recommended-meta>正在识别你的系统…</span></p>
           </div>
           <div class="hero-aside" aria-label="InkNote application icon">
             <div class="icon-card"><img src="./assets/inknote-icon.png" alt="InkNote" /></div>
@@ -152,15 +152,59 @@
 
       <section class="section download-section" id="download">
         <div class="container">
-          <div class="section-heading"><span class="section-index">03</span><div><h2 data-i18n="downloadTitle">选择你的平台</h2><p><span data-i18n="downloadLead">按钮将直接下载 GitHub 最新 Release 中的安装包。</span> <span class="release-state" data-release-state data-i18n="checking">正在检查最新版本…</span></p></div></div>
-          <div class="download-grid">
-            <article class="download-card featured"><div class="platform-mark windows"><span></span><span></span><span></span><span></span></div><div><h3>Windows</h3><p data-i18n="windowsMeta">Windows 10/11 · x64 · 中文安装程序</p></div><a class="button button-primary download-link" data-platform="windows" download href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Windows-x64-Setup.exe"><span data-i18n="downloadWindows">下载 Windows 版</span><span>↓</span></a></article>
-            <article class="download-card"><div class="platform-mark apple">●</div><div><h3>macOS Intel</h3><p data-i18n="macIntelMeta">Intel 芯片 · x86_64 · DMG</p></div><a class="button button-secondary download-link" data-platform="macos-x64" download href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-macOS-x86_64.dmg"><span data-i18n="downloadMacIntel">下载 Mac Intel 版</span><span>↓</span></a></article>
-            <article class="download-card"><div class="platform-mark apple">●</div><div><h3>macOS ARM</h3><p data-i18n="macArmMeta">Apple 芯片 · ARM64 · DMG</p></div><a class="button button-secondary download-link" data-platform="macos-arm64" download href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-macOS-arm64.dmg"><span data-i18n="downloadMacArm">下载 Mac ARM 版</span><span>↓</span></a></article>
-            <article class="download-card"><div class="platform-mark linux">&gt;_</div><div><h3>Linux x86_64</h3><p data-i18n="linuxX64Meta">Intel/AMD · AppImage；DEB/RPM 见 Releases</p></div><a class="button button-secondary download-link" data-platform="linux-x64" download href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-x86_64.AppImage"><span data-i18n="downloadLinuxX64">下载 Linux x86_64</span><span>↓</span></a></article>
-            <article class="download-card"><div class="platform-mark linux">&gt;_</div><div><h3>Linux ARM64</h3><p data-i18n="linuxArmMeta">aarch64 · AppImage；DEB/RPM 见 Releases</p></div><a class="button button-secondary download-link" data-platform="linux-arm64" download href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-arm64.AppImage"><span data-i18n="downloadLinuxArm">下载 Linux ARM64</span><span>↓</span></a></article>
+          <div class="section-heading"><span class="section-index">03</span><div><h2 data-i18n="downloadTitle">下载 InkNote</h2><p><span data-i18n="downloadLead">已覆盖 Windows、macOS 与主流 Linux 发行版。</span> <span class="release-state" data-release-state data-i18n="checking">正在检查最新版本…</span></p></div></div>
+
+          <div class="detected-download" data-detected-download aria-live="polite">
+            <div class="detected-symbol" data-detected-symbol aria-hidden="true">OS</div>
+            <div class="detected-copy">
+              <span data-i18n="detectedKicker">智能推荐</span>
+              <h3 data-detected-title>正在识别你的系统</h3>
+              <p data-detected-description>稍后将为你匹配合适的安装包，也可以在下方手动选择。</p>
+            </div>
+            <a class="button detected-button" data-detected-link href="#platform-downloads"><span data-detected-label>选择下载版本</span><span aria-hidden="true">↓</span></a>
           </div>
-          <p class="download-footnote"><span data-i18n="otherPackages">Linux DEB/RPM 或历史版本：</span> <a href="https://github.com/likehao19/InkNote/releases" target="_blank" rel="noreferrer" data-i18n="allReleases">查看全部 Releases ↗</a></p>
+
+          <div class="download-grid" id="platform-downloads">
+            <article class="download-card" data-download-card="windows">
+              <div class="download-card-head">
+                <div class="platform-mark windows" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+                <span class="recommended-badge" data-recommended-badge data-i18n="recommended">推荐</span>
+              </div>
+              <div><h3>Windows</h3><p data-i18n="windowsMeta">Windows 10/11 · x64 · 中文安装程序</p></div>
+              <a class="button button-primary download-link" data-platform="windows" href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Windows-x64-Setup.exe"><span data-i18n="downloadWindows">下载 Windows 版</span><span>↓</span></a>
+            </article>
+
+            <article class="download-card" data-download-card="macos">
+              <div class="download-card-head">
+                <div class="platform-mark apple" aria-hidden="true">⌘</div>
+                <span class="recommended-badge" data-recommended-badge data-i18n="recommended">推荐</span>
+              </div>
+              <div><h3>macOS</h3><p data-i18n="macMeta">支持 Apple 芯片与 Intel Mac · DMG</p></div>
+              <div class="download-options">
+                <a class="package-link download-link" data-platform="macos-arm64" href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-macOS-arm64.dmg"><span><strong data-i18n="appleSilicon">Apple 芯片</strong><small>ARM64 · DMG</small></span><span>↓</span></a>
+                <a class="package-link download-link" data-platform="macos-x64" href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-macOS-x86_64.dmg"><span><strong>Intel Mac</strong><small>x86_64 · DMG</small></span><span>↓</span></a>
+              </div>
+            </article>
+
+            <article class="download-card download-card-linux" data-download-card="linux">
+              <div class="download-card-head">
+                <div class="platform-mark linux" aria-hidden="true">&gt;_</div>
+                <span class="recommended-badge" data-recommended-badge data-i18n="recommended">推荐</span>
+              </div>
+              <div><h3>Linux</h3><p data-i18n="linuxMeta">AppImage、DEB 与 RPM · x64 / ARM64</p></div>
+              <div class="linux-packages">
+                <div class="linux-architecture">
+                  <strong>x86_64</strong>
+                  <div><a class="download-link" data-platform="linux-x64-appimage" href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-x86_64.AppImage">AppImage</a><a class="download-link" data-platform="linux-x64-deb" href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-x86_64.deb">DEB</a><a class="download-link" data-platform="linux-x64-rpm" href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-x86_64.rpm">RPM</a></div>
+                </div>
+                <div class="linux-architecture">
+                  <strong>ARM64</strong>
+                  <div><a class="download-link" data-platform="linux-arm64-appimage" href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-arm64.AppImage">AppImage</a><a class="download-link" data-platform="linux-arm64-deb" href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-arm64.deb">DEB</a><a class="download-link" data-platform="linux-arm64-rpm" href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-arm64.rpm">RPM</a></div>
+                </div>
+              </div>
+            </article>
+          </div>
+          <p class="download-footnote"><span data-i18n="otherPackages">校验签名或下载历史版本：</span> <a href="https://github.com/likehao19/InkNote/releases" target="_blank" rel="noreferrer" data-i18n="allReleases">查看全部 Releases ↗</a></p>
         </div>
       </section>
 
