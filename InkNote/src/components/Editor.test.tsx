@@ -12,6 +12,38 @@ afterEach(() => {
 });
 
 describe("Editor document replacement", () => {
+  it("does not replace an unchanged document when editing is enabled", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    root = createRoot(host);
+    const ref = createRef<EditorRef>();
+    const onChange = vi.fn();
+    const content = Array.from({ length: 100 }, (_, i) => `line ${i}`).join("\n");
+
+    act(() => root?.render(
+      <Editor
+        ref={ref}
+        locale="en"
+        value={content}
+        mode="preview"
+        filePath={null}
+        typewriter={false}
+        lineNumbers={false}
+        wordWrap
+        tabSize={2}
+        spellCheck={false}
+        readOnly
+        onChange={onChange}
+        onModeChange={() => {}}
+      />,
+    ));
+    onChange.mockClear();
+
+    act(() => ref.current?.resetContent(content));
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it("clamps the selection to CodeMirror's normalized CRLF document length", () => {
     const host = document.createElement("div");
     document.body.appendChild(host);

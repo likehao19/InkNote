@@ -118,6 +118,9 @@ const Editor = forwardRef<EditorRef, Props>(function Editor(
       const nextDoc = Text.of(content.split(/\r\n?|\n/));
       const { anchor, head } = view.state.selection.main;
       lastEmittedRef.current = content;
+      // 预览切回编辑时通常只是解除只读。相同内容若仍整篇替换，
+      // CodeMirror 会重新估算长文档高度并改变当前阅读位置。
+      if (view.state.doc.eq(nextDoc)) return;
       if (readOnly) handle.setReadOnly(false);
       view.dispatch({
         changes: { from: 0, to: view.state.doc.length, insert: nextDoc },
