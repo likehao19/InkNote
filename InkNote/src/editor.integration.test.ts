@@ -211,7 +211,7 @@ describe("Markdown 所见即所得预览", () => {
     expect(marker?.classList.contains("cm-md-heading-mark")).toBe(true);
   });
 
-  it("compresses structural and repeated Markdown blank lines in preview", () => {
+  it("marks every Markdown blank line without dropping repeated empty paragraphs", () => {
     const { parent } = mount("First paragraph\n\n\nSecond paragraph\n\n# Heading");
     expect(parent.querySelectorAll(".cm-line.md-blank-line")).toHaveLength(3);
     expect(parent.querySelectorAll(".cm-line.md-blank-line-extra")).toHaveLength(1);

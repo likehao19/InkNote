@@ -1302,28 +1302,17 @@ html:not([data-theme="dark"]) .md-codeblock-widget code::selection {
 .cm-line.md-heading-5,
 .cm-line.md-heading-6 { padding-top: 0.65em; }
 
-/* 空白源码行只负责分隔 Markdown 块；实时预览中完全折叠，不生成可点击空行。 */
+/* 空白行必须保留正常行高，否则连续回车只会增加文档行号，光标不会在视觉上换行。 */
 .editor-host--preview .cm-line.md-blank-line {
-  min-height: 0;
-  height: 0;
-  line-height: 0;
-  overflow: hidden;
+  min-height: 1em;
+  height: auto;
+  line-height: inherit;
+  overflow: visible;
 }
 .editor-loading {
   flex: 1;
   min-height: 0;
   background: var(--bg-editor);
-}
-.editor-host--preview .cm-line.md-blank-line-extra {
-  height: 0;
-  line-height: 0;
-}
-/* 结构空行不可点击；但在组件边界按回车后，当前空行必须成为可输入的新段落。 */
-.editor-host--preview .cm-line.md-blank-line.cm-activeLine {
-  min-height: 1em;
-  height: auto;
-  line-height: inherit;
-  overflow: visible;
 }
 .cm-md-code {
   background: var(--md-panel-bg);

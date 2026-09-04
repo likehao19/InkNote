@@ -764,8 +764,8 @@ function buildPreviewSets(
     );
   }
 
-  // Markdown 的空白源码行只用于分隔块，不应该在所见即所得模式中继续占满
-  // 一整行高度；连续空行在渲染语义上也不会制造多份段间距。
+  // 标记 Markdown 空行，供组件边界和相邻块样式识别。
+  // 空行本身仍保留正常行高，确保连续回车时光标会真实向下移动。
   const sortedBlocks = [...atomicBlocks].sort((a, b) => a.from - b.from);
   let blockIndex = 0;
   let previousBlank = false;
