@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="420" viewBox="0 0 960 420" role="img" aria-labelledby="title description">
   <title id="title">likehao19/InkNote Star history</title>
-  <desc id="description">41 GitHub Stars since 2026-08-24</desc>
+  <desc id="description">47 GitHub Stars since 2026-08-24</desc>
   <style>
     .background { fill: #ffffff; }
     .grid { stroke: #d8dee4; stroke-width: 1; }
@@ -22,7 +22,7 @@
   </style>
   <rect class="background" width="960" height="420" />
   <text class="heading" x="72" y="28">likehao19/InkNote Star history</text>
-  <text class="count" x="888" y="28" text-anchor="end">41 Stars</text>
+  <text class="count" x="888" y="28" text-anchor="end">47 Stars</text>
   <line class="grid" x1="72" y1="362.00" x2="888" y2="362.00" />
   <text class="label" x="58" y="362.00" text-anchor="end" dominant-baseline="middle">0</text>
   <line class="grid" x1="72" y1="299.20" x2="888" y2="299.20" />
@@ -37,10 +37,10 @@
   <text class="label" x="58" y="48.00" text-anchor="end" dominant-baseline="middle">50</text>
   <text class="label" x="72.00" y="396" text-anchor="middle">2026-08-24</text>
   <text class="label" x="276.00" y="396" text-anchor="middle">2026-08-28</text>
-  <text class="label" x="480.00" y="396" text-anchor="middle">2026-08-31</text>
-  <text class="label" x="684.00" y="396" text-anchor="middle">2026-09-04</text>
-  <text class="label" x="888.00" y="396" text-anchor="middle">2026-09-08</text>
-  <path class="area" d="M 72.00 362.00 H 237.43 V 355.72 H 278.82 V 349.44 H 287.65 V 343.16 H 287.78 V 336.88 H 288.48 V 330.60 H 288.73 V 324.32 H 289.00 V 318.04 H 289.25 V 311.76 H 290.73 V 305.48 H 292.68 V 299.20 H 292.91 V 292.92 H 293.40 V 286.64 H 293.55 V 280.36 H 299.29 V 274.08 H 327.11 V 267.80 H 328.74 V 261.52 H 328.84 V 255.24 H 330.35 V 248.96 H 331.96 V 242.68 H 337.42 V 236.40 H 339.71 V 230.12 H 340.75 V 223.84 H 345.68 V 217.56 H 350.24 V 211.28 H 351.30 V 205.00 H 402.24 V 198.72 H 440.99 V 192.44 H 441.63 V 186.16 H 444.47 V 179.88 H 464.71 V 173.60 H 524.68 V 167.32 H 628.07 V 161.04 H 628.39 V 154.76 H 670.70 V 148.48 H 670.79 V 142.20 H 672.56 V 135.92 H 677.83 V 129.64 H 799.26 V 123.36 H 825.44 V 117.08 H 849.32 V 110.80 H 886.30 V 104.52 H 888.00 V 362.00 H 72.00 Z" />
-  <path class="line" d="M 72.00 362.00 H 237.43 V 355.72 H 278.82 V 349.44 H 287.65 V 343.16 H 287.78 V 336.88 H 288.48 V 330.60 H 288.73 V 324.32 H 289.00 V 318.04 H 289.25 V 311.76 H 290.73 V 305.48 H 292.68 V 299.20 H 292.91 V 292.92 H 293.40 V 286.64 H 293.55 V 280.36 H 299.29 V 274.08 H 327.11 V 267.80 H 328.74 V 261.52 H 328.84 V 255.24 H 330.35 V 248.96 H 331.96 V 242.68 H 337.42 V 236.40 H 339.71 V 230.12 H 340.75 V 223.84 H 345.68 V 217.56 H 350.24 V 211.28 H 351.30 V 205.00 H 402.24 V 198.72 H 440.99 V 192.44 H 441.63 V 186.16 H 444.47 V 179.88 H 464.71 V 173.60 H 524.68 V 167.32 H 628.07 V 161.04 H 628.39 V 154.76 H 670.70 V 148.48 H 670.79 V 142.20 H 672.56 V 135.92 H 677.83 V 129.64 H 799.26 V 123.36 H 825.44 V 117.08 H 849.32 V 110.80 H 886.30 V 104.52 H 888.00" />
-  <circle class="point" cx="888.00" cy="104.52" r="5" />
+  <text class="label" x="480.00" y="396" text-anchor="middle">2026-09-01</text>
+  <text class="label" x="684.00" y="396" text-anchor="middle">2026-09-05</text>
+  <text class="label" x="888.00" y="396" text-anchor="middle">2026-09-09</text>
+  <path class="area" d="M 72.00 362.00 H 227.03 V 355.72 H 265.82 V 349.44 H 274.10 V 343.16 H 274.21 V 336.88 H 274.87 V 330.60 H 275.10 V 324.32 H 275.36 V 318.04 H 275.59 V 311.76 H 276.98 V 305.48 H 278.81 V 299.20 H 279.02 V 292.92 H 279.48 V 286.64 H 279.62 V 280.36 H 285.00 V 274.08 H 311.07 V 267.80 H 312.60 V 261.52 H 312.69 V 255.24 H 314.10 V 248.96 H 315.62 V 242.68 H 320.74 V 236.40 H 322.88 V 230.12 H 323.85 V 223.84 H 328.47 V 217.56 H 332.75 V 211.28 H 333.74 V 205.00 H 381.48 V 198.72 H 417.79 V 192.44 H 418.39 V 186.16 H 421.05 V 179.88 H 440.02 V 173.60 H 496.22 V 167.32 H 593.11 V 161.04 H 593.41 V 154.76 H 633.06 V 148.48 H 633.14 V 142.20 H 634.81 V 135.92 H 639.74 V 129.64 H 753.54 V 123.36 H 778.08 V 117.08 H 800.45 V 110.80 H 835.11 V 104.52 H 845.52 V 98.24 H 853.07 V 91.96 H 853.26 V 85.68 H 853.43 V 79.40 H 854.93 V 73.12 H 881.27 V 66.84 H 888.00 V 362.00 H 72.00 Z" />
+  <path class="line" d="M 72.00 362.00 H 227.03 V 355.72 H 265.82 V 349.44 H 274.10 V 343.16 H 274.21 V 336.88 H 274.87 V 330.60 H 275.10 V 324.32 H 275.36 V 318.04 H 275.59 V 311.76 H 276.98 V 305.48 H 278.81 V 299.20 H 279.02 V 292.92 H 279.48 V 286.64 H 279.62 V 280.36 H 285.00 V 274.08 H 311.07 V 267.80 H 312.60 V 261.52 H 312.69 V 255.24 H 314.10 V 248.96 H 315.62 V 242.68 H 320.74 V 236.40 H 322.88 V 230.12 H 323.85 V 223.84 H 328.47 V 217.56 H 332.75 V 211.28 H 333.74 V 205.00 H 381.48 V 198.72 H 417.79 V 192.44 H 418.39 V 186.16 H 421.05 V 179.88 H 440.02 V 173.60 H 496.22 V 167.32 H 593.11 V 161.04 H 593.41 V 154.76 H 633.06 V 148.48 H 633.14 V 142.20 H 634.81 V 135.92 H 639.74 V 129.64 H 753.54 V 123.36 H 778.08 V 117.08 H 800.45 V 110.80 H 835.11 V 104.52 H 845.52 V 98.24 H 853.07 V 91.96 H 853.26 V 85.68 H 853.43 V 79.40 H 854.93 V 73.12 H 881.27 V 66.84 H 888.00" />
+  <circle class="point" cx="888.00" cy="66.84" r="5" />
 </svg>
