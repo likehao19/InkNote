@@ -1104,6 +1104,7 @@ pub fn run() {
     let startup_file = find_markdown_file(&std::env::args().collect::<Vec<_>>());
 
     let builder = tauri::Builder::default()
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(

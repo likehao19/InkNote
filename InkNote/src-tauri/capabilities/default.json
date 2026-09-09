@@ -9,6 +9,7 @@
     "dialog:default",
     "os:default",
     "autostart:default",
+    "clipboard-manager:allow-read-text",
     "core:window:allow-start-dragging",
     "core:window:allow-close",
     "core:window:allow-destroy",

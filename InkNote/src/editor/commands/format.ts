@@ -6,6 +6,7 @@ import { editorPickLink, editorPickImage, editorRequestSearch, editorShowError, 
 import { getLocale, t } from "../../lib/i18n";
 import { buildMarkdownToc } from "../../lib/markdownOutline";
 import { isMac } from "../../lib/platform";
+import { readText as readClipboardText } from "@tauri-apps/plugin-clipboard-manager";
 
 export type EditorAction =
   | "undo"
@@ -247,10 +248,9 @@ function clipboardAction(view: EditorView, action: "cut" | "copy" | "paste" | "p
   const dom = view.contentDOM;
   dom.focus();
   if (action === "paste" || action === "pastePlain") {
-    if (action === "paste" && document.execCommand("paste")) return true;
     void (async () => {
       try {
-        const text = await navigator.clipboard.readText();
+        const text = await readClipboardText();
         const { from, to } = view.state.selection.main;
         view.dispatch({
           changes: { from, to, insert: text },
