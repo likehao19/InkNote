@@ -18,12 +18,13 @@ import {
 } from "@codemirror/state";
 import {
   HighlightStyle,
-  ensureSyntaxTree,
   syntaxHighlighting,
   syntaxTree,
 } from "@codemirror/language";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { search, searchKeymap, highlightSelectionMatches } from "@codemirror/search";
+import { acceptCompletion, closeCompletion, moveCompletionSelection } from "@codemirror/autocomplete";
+import { CODE_FENCE, codeFenceExtensions, draftFences, previewSyntaxTree, setDraftFences } from "./editor/codeFence";
 import { markdown, markdownKeymap, markdownLanguage } from "@codemirror/lang-markdown";
 import { tags as t } from "@lezer/highlight";
 import type { SyntaxNode, SyntaxNodeRef } from "@lezer/common";
@@ -258,7 +259,7 @@ function buildPreviewSets(
   const doc = state.doc;
   // 长文档初始化时 Lezer 可能只同步解析前半段。若直接拿这棵临时树构建
   // 装饰，靠后的表格、围栏代码和 Mermaid 就会永久停留为源码。
-  const tree = ensureSyntaxTree(state, doc.length, 100) ?? syntaxTree(state);
+  const tree = previewSyntaxTree(state);
   const text = documentText(doc);
   const linkDefinitions = collectLinkDefinitions(tree, doc);
 
@@ -842,7 +843,7 @@ function livePreview(ctx: { filePath: string | null; readOnly: boolean }): Exten
       return { ...built, visible: visiblePreview(built.statics, state, ctx.readOnly) };
     },
     update(value, tr) {
-      if (tr.docChanged || tr.effects.some((e) => e.is(rebuildPreviewEffect))) {
+      if (tr.docChanged || tr.effects.some((e) => e.is(rebuildPreviewEffect) || e.is(setDraftFences))) {
         const built = buildPreviewSets(tr.state, ctx.filePath);
         return { ...built, visible: visiblePreview(built.statics, tr.state, ctx.readOnly) };
       }
@@ -878,7 +879,7 @@ function spellCheckExt(enabled: boolean): Extension {
 
 function previewExt(mode: EditorMode, ctx: { filePath: string | null; readOnly: boolean }): Extension {
   return mode === "preview"
-    ? [livePreview(ctx), tableSelectionSnap()]
+    ? [codeFenceExtensions(), livePreview(ctx), tableSelectionSnap()]
     : [];
 }
 
@@ -990,13 +991,14 @@ function openBlockOnEnter(view: EditorView): boolean {
   const line = state.doc.lineAt(sel.head);
   if (sel.head !== line.to) return false;
 
-  const fence = /^(`{3,}|~{3,})([^\s`~]*)\s*$/.exec(line.text);
+  const fence = CODE_FENCE.exec(line.text);
   const math = /^\$\$\s*$/.test(line.text);
   if (!fence && !math) return false;
 
   // 已经是完整代码块（比如光标停在被展开的源码里）就别再插一道围栏，
   // 直接进组件编辑
-  if (fence) {
+  const drafts = state.field(draftFences, false) ?? [];
+  if (fence && !drafts.includes(line.from)) {
     let node: SyntaxNode | null = syntaxTree(state).resolveInner(line.from, 1);
     for (; node; node = node.parent) {
       if (node.name !== "FencedCode") continue;
@@ -1017,6 +1019,9 @@ function openBlockOnEnter(view: EditorView): boolean {
     changes: { from: line.to, insert },
     // 光标先停在块外，随后把焦点交给组件内部的编辑区
     selection: { anchor: blockTo },
+    effects: setDraftFences.of(drafts.filter((from) => from !== blockFrom).map((from) => (
+      from > line.to ? from + insert.length : from
+    ))),
     userEvent: "input.block",
     scrollIntoView: true,
   });
@@ -1363,10 +1368,17 @@ export function createEditor(
         // 与 App 的全局 Ctrl+/ 冲突：不阻断冒泡的话会被切回来
         { key: "Mod-/", run: () => { toggleMode(); return true; }, stopPropagation: true },
         ...editorActionKeymap(),
+        { key: "Tab", run: acceptCompletion },
+        { key: "ArrowDown", run: moveCompletionSelection(true) },
+        { key: "ArrowUp", run: moveCompletionSelection(false) },
+        { key: "Escape", run: closeCompletion },
+        // 先确认正在输入的围栏，再处理已有组件的边界回车。
+        { key: "Enter", run: (v: EditorView) => mode === "preview"
+          && Boolean(v.state.field(draftFences, false)?.includes(v.state.doc.lineAt(v.state.selection.main.head).from))
+          && openBlockOnEnter(v) },
         { key: "Enter", run: (v: EditorView) => mode === "preview" && insertParagraphBeforeHeading(v) },
         // 组件位于文档首尾时，边界没有相邻正文行可承接原生回车
         { key: "Enter", run: (v: EditorView) => mode === "preview" && insertParagraphAtBlockBoundary(v) },
-        // ```java + 回车 直接生成 java 代码块（$$ 同理）
         { key: "Enter", run: (v: EditorView) => mode === "preview" && openBlockOnEnter(v) },
         // 块级组件是原子区间，光标会整块跳过；在边界上把焦点交给组件内部编辑器
         { key: "ArrowDown", run: (v: EditorView) => enterAdjacentBlock(v, true, false) },

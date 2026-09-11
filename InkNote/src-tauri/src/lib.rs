@@ -274,6 +274,7 @@ fn find_markdown_file(args: &[String]) -> Option<String> {
 }
 
 fn dispatch_open_file(app: &tauri::AppHandle, path: String) {
+    activate_main_window(app);
     let ready_path = app
         .state::<AppState>()
         .open_file
@@ -282,6 +283,14 @@ fn dispatch_open_file(app: &tauri::AppHandle, path: String) {
         .receive(path);
     if let Some(path) = ready_path {
         let _ = app.emit("open-file", path);
+    }
+}
+
+fn activate_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
     }
 }
 
@@ -1114,10 +1123,8 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             if let Some(path) = find_markdown_file(&argv) {
                 dispatch_open_file(app, path);
-            }
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.set_focus();
+            } else {
+                activate_main_window(app);
             }
         }))
         .plugin(tauri_plugin_opener::init())

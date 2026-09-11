@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
+import { CompletionContext, completionStatus, startCompletion } from "@codemirror/autocomplete";
+import { undo, redo, isolateHistory } from "@codemirror/commands";
+import { codeLanguageCompletion } from "./editor/codeFence";
 import { createEditor, type EditorHandle } from "./editor";
 import sampleMarkdown from "../sample.md?raw";
 
@@ -36,6 +39,85 @@ afterEach(() => {
 });
 
 describe("Markdown 所见即所得预览", () => {
+  function typeText(handle: EditorHandle, text: string) {
+    for (const character of text) {
+      const from = handle.view.state.selection.main.head;
+      handle.view.dispatch({
+        changes: { from, insert: character },
+        selection: { anchor: from + character.length },
+        userEvent: "input.type",
+      });
+    }
+  }
+
+  function press(handle: EditorHandle, key: string) {
+    handle.view.contentDOM.dispatchEvent(new KeyboardEvent("keydown", {
+      key, bubbles: true, cancelable: true,
+    }));
+  }
+
+  it.each(["```", "~~~~"])("keeps following content intact while typing %s and focuses the confirmed block", async (fence) => {
+    const following = "\n\n## Keep this heading\n\n```js\nconsole.log(1);\n```";
+    const { parent, handle } = mount(following);
+    typeText(handle, fence + "cpp");
+    expect(parent.querySelectorAll(".md-codeblock-widget")).toHaveLength(1);
+    expect(parent.querySelector(".md-codeblock-widget code")?.textContent).toBe("console.log(1);");
+    expect(handle.view.state.doc.toString()).toBe(fence + "cpp" + following);
+    const completion = codeLanguageCompletion(new CompletionContext(handle.view.state, handle.view.state.selection.main.head, true));
+    expect(completion?.options.some((option) => option.label === "cpp")).toBe(true);
+
+    handle.view.dispatch({ annotations: isolateHistory.of("full") });
+    press(handle, "Enter");
+    await nextFrame();
+    expect(handle.view.state.doc.toString()).toBe(fence + "cpp\n\n" + fence + following);
+    expect(parent.querySelectorAll(".md-codeblock-widget")).toHaveLength(2);
+    expect(document.activeElement).toBe(parent.querySelector(".md-codeblock-widget code"));
+
+    undo(handle.view);
+    expect(handle.view.state.doc.toString()).toBe(fence + "cpp" + following);
+    expect(parent.querySelectorAll(".md-codeblock-widget")).toHaveLength(1);
+    redo(handle.view);
+    expect(parent.querySelectorAll(".md-codeblock-widget")).toHaveLength(2);
+  });
+
+  it("completes a language with Tab but confirms the typed language with Enter", async () => {
+    const { parent, handle } = mount("");
+    typeText(handle, "```py");
+    startCompletion(handle.view);
+    await vi.waitFor(() => expect(completionStatus(handle.view.state)).toBe("active"));
+    press(handle, "Tab");
+    expect(handle.view.state.doc.toString()).toBe("```python");
+    press(handle, "Enter");
+    await nextFrame();
+    expect(handle.view.state.doc.toString()).toBe("```python\n\n```");
+    expect(document.activeElement).toBe(parent.querySelector(".md-codeblock-widget code"));
+
+    const custom = mount("");
+    typeText(custom.handle, "```customlang");
+    press(custom.handle, "Enter");
+    expect(custom.handle.view.state.doc.toString()).toBe("```customlang\n\n```");
+  });
+
+  it("does not start a new draft when typing a closing fence inside source code", () => {
+    const { handle } = mount("```js\ntext\n");
+    handle.view.dispatch({ selection: { anchor: handle.view.state.doc.length } });
+    typeText(handle, "```");
+    expect(codeLanguageCompletion(new CompletionContext(handle.view.state, handle.view.state.doc.length, true))).toBeNull();
+  });
+
+  it("keeps a language label in read-only preview", () => {
+    const { parent } = mount("```typescript\nconst value = 1;\n```", true);
+    expect(parent.querySelector(".md-codeblock-language-label")?.textContent).toBe("TypeScript");
+  });
+
+  it("still inserts a paragraph after an existing code block", () => {
+    const markdown = "```js\nconst value = 1;\n```";
+    const { handle } = mount(markdown);
+    handle.view.dispatch({ selection: { anchor: markdown.length } });
+    press(handle, "Enter");
+    expect(handle.view.state.doc.toString()).toBe(markdown + "\n");
+  });
+
   it("keeps the complete bundled sample in live preview mode", () => {
     const { parent, handle } = mount(sampleMarkdown);
     expect(sampleMarkdown).not.toContain("\b");

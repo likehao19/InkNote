@@ -68,7 +68,7 @@ for (const [lang, mod] of [
 }
 
 /** 语言下拉里的候选项（都是能真正高亮的） */
-const LANGUAGE_OPTIONS = [
+export const LANGUAGE_OPTIONS = [
   "", "bash", "c", "cpp", "csharp", "css", "diff", "go", "html", "ini", "java",
   "javascript", "json", "markdown", "mermaid", "php", "python", "ruby", "rust",
   "sql", "toml", "typescript", "xml", "yaml",
@@ -204,6 +204,9 @@ export class CodeBlockWidget extends WidgetType {
       select.appendChild(opt);
     }
     select.value = current;
+    const languageLabel = document.createElement("span");
+    languageLabel.className = "md-codeblock-language-label";
+    languageLabel.textContent = langLabel(current);
     select.addEventListener("mousedown", (e) => e.stopPropagation());
     select.addEventListener("change", () => {
       const view = EditorView.findFromDOM(wrap);
@@ -237,6 +240,7 @@ export class CodeBlockWidget extends WidgetType {
 
     header.appendChild(copyBtn);
     languageControl.appendChild(select);
+    languageControl.appendChild(languageLabel);
     box.appendChild(header);
     box.appendChild(languageControl);
     bindBlockBoundaryCursor(wrap, box);
@@ -284,6 +288,8 @@ export class CodeBlockWidget extends WidgetType {
     stampBlockRange(dom, this.from, this.to);
 
     const lang = normalizeLang(this.lang);
+    const languageLabel = dom.querySelector<HTMLElement>(".md-codeblock-language-label");
+    if (languageLabel) languageLabel.textContent = langLabel(lang);
     if (select.value !== lang) {
       if (!Array.from(select.options).some((o) => o.value === lang)) {
         const opt = document.createElement("option");

@@ -1125,7 +1125,16 @@ html[data-theme="dark"] .file-tree .tree-filter-highlight {
 .editor-host--readonly .cm-content { caret-color: transparent; }
 .editor-host--readonly [contenteditable="true"] { caret-color: transparent; }
 .editor-host--readonly .md-table-toolbar,
-.editor-host--readonly .md-codeblock-language-control { display: none; }
+.editor-host--readonly .md-codeblock-lang,
+.editor-host--readonly .md-codeblock-language-control::after { display: none; }
+.md-codeblock-language-label { display: none; }
+.editor-host--readonly .md-codeblock-language-label {
+  display: inline-block;
+  padding: 0 8px;
+  color: var(--fg-muted);
+  font-size: 11px;
+  line-height: 22px;
+}
 .editor-host--readonly .md-task-item::before { cursor: pointer; }
 .editor-host {
   flex: 1;
