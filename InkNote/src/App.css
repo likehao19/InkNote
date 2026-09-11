@@ -1095,6 +1095,22 @@ html[data-theme="dark"] .file-tree .tree-filter-highlight {
    编辑器 — Typora 式居中排版
    ============================================================ */
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg-editor); position: relative; }
+.document-tabs { display: flex; flex-shrink: 0; height: 38px; border-bottom: 1px solid var(--border); background: var(--bg); }
+.document-tab-list { display: flex; min-width: 0; overflow-x: auto; scrollbar-width: thin; }
+.document-tab { display: flex; align-items: center; min-width: 110px; max-width: 230px; border-right: 1px solid var(--border); border-bottom: 2px solid transparent; color: var(--fg-muted); }
+.document-tab.is-active { color: var(--fg); background: var(--bg-editor); border-bottom-color: var(--accent); }
+.document-tab > [role="tab"] { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; height: 100%; padding: 0 10px 0 14px; border: 0; background: transparent; color: inherit; font-size: 12px; cursor: pointer; }
+.document-tab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.document-tab-dirty { color: var(--accent); font-size: 8px; }
+.document-tab-close, .document-tab-new { display: grid; place-items: center; flex-shrink: 0; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--fg-muted); cursor: pointer; }
+.document-tab-close { margin-right: 5px; }
+.document-tab-new { margin: 5px; }
+.document-tab-close:hover, .document-tab-new:hover { background: var(--bg-hover); color: var(--fg); }
+.document-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.document-editors { position: relative; display: flex; flex: 1; min-height: 0; }
+.document-editor-panel { display: flex; flex-direction: column; width: 100%; min-height: 0; }
+.document-editor-panel.is-inactive { position: absolute; inset: 0; visibility: hidden; pointer-events: none; }
+.main:has(> .document-tabs) > .document-access-control { top: 50px; }
 .document-access-control {
   position: absolute;
   top: 12px;

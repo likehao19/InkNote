@@ -920,11 +920,12 @@ async function insertImage(
   bytes: Uint8Array,
   ext = "png",
   mime = "image/png",
+  documentId = "",
 ) {
   const id = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${++fallbackImageId}`;
   const name = `image-${id}.${ext}`;
   const rel = `${IMAGE_ASSET_DIR}/${name}`;
-  addPendingImage(rel, bytes, mime);
+  addPendingImage(rel, bytes, mime, documentId);
 
   const insert = `![](${rel})`;
   const pos = view.state.selection.main.head;
@@ -1120,7 +1121,7 @@ function urlAtPos(state: EditorState, pos: number): string | null {
   return null;
 }
 
-function mediaHandlers(onOpenMarkdown?: (content: string, path?: string) => void): Extension {
+function mediaHandlers(onOpenMarkdown?: (content: string, path?: string) => void, documentId = ""): Extension {
   return EditorView.domEventHandlers({
     paste(event, view) {
       // Ctrl/Cmd+Shift+V：粘贴为纯文本，跳过 HTML → Markdown 转换
@@ -1154,7 +1155,7 @@ function mediaHandlers(onOpenMarkdown?: (content: string, path?: string) => void
           if (!file) return true;
           void file.arrayBuffer().then((buf) => {
             const ext = file.type.split("/")[1] || "png";
-            void insertImage(view, new Uint8Array(buf), ext, file.type || "image/png");
+            void insertImage(view, new Uint8Array(buf), ext, file.type || "image/png", documentId);
           });
           return true;
         }
@@ -1183,7 +1184,7 @@ function mediaHandlers(onOpenMarkdown?: (content: string, path?: string) => void
       event.preventDefault();
       void file.arrayBuffer().then((buf) => {
         const ext = file.name.split(".").pop() || "png";
-        void insertImage(view, new Uint8Array(buf), ext, file.type || "image/png");
+        void insertImage(view, new Uint8Array(buf), ext, file.type || "image/png", documentId);
       });
       return true;
     },
@@ -1305,6 +1306,7 @@ export interface EditorHandle {
 }
 
 export interface EditorOptions {
+  documentId?: string;
   mode: EditorMode;
   filePath: string | null;
   typewriter: boolean;
@@ -1401,7 +1403,7 @@ export function createEditor(
       highlightSelectionMatches(),
       previewCompartment.of(previewExt(mode, assetContext)),
       typewriterCompartment.of(typewriterExt(typewriter)),
-      mediaHandlers(opts.onOpenMarkdown),
+      mediaHandlers(opts.onOpenMarkdown, opts.documentId),
       EditorView.updateListener.of((u) => {
         if (u.docChanged) opts.onChange(documentText(u.state.doc));
         if (u.selectionSet) {

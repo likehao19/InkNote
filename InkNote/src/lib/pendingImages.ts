@@ -9,6 +9,7 @@ import { removePath, writeBinary } from "./tauri";
  * 用 blob URL 立刻回显，等文档拿到真实路径时再统一落盘到 .inknote-assets/。
  */
 interface PendingImage {
+  owner: string;
   bytes: Uint8Array;
   mime: string;
   url: string;
@@ -17,11 +18,11 @@ interface PendingImage {
 const pending = new Map<string, PendingImage>();
 
 /** 暂存并返回可立即用于 <img> 的 URL；key 是插入到 Markdown 里的相对路径 */
-export function addPendingImage(relPath: string, bytes: Uint8Array, mime: string): string {
+export function addPendingImage(relPath: string, bytes: Uint8Array, mime: string, owner = ""): string {
   const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: mime }));
   const previous = pending.get(relPath);
   if (previous) URL.revokeObjectURL(previous.url);
-  pending.set(relPath, { bytes, mime, url });
+  pending.set(relPath, { bytes, mime, url, owner });
   return url;
 }
 
@@ -29,9 +30,12 @@ export function pendingImageUrl(relPath: string): string | null {
   return pending.get(relPath)?.url ?? null;
 }
 
-export function clearPendingImages(): void {
-  for (const item of pending.values()) URL.revokeObjectURL(item.url);
-  pending.clear();
+export function clearPendingImages(owner?: string): void {
+  for (const [key, item] of pending) {
+    if (owner !== undefined && item.owner !== owner) continue;
+    URL.revokeObjectURL(item.url);
+    pending.delete(key);
+  }
 }
 
 export interface PendingImageSnapshot {
@@ -41,8 +45,8 @@ export interface PendingImageSnapshot {
 }
 
 /** 保存“重新打开已关闭文档”所需的数据，不复用即将失效的 blob URL。 */
-export function snapshotPendingImages(): PendingImageSnapshot[] {
-  return [...pending.entries()].map(([relPath, item]) => ({
+export function snapshotPendingImages(owner?: string): PendingImageSnapshot[] {
+  return [...pending.entries()].filter(([, item]) => owner === undefined || item.owner === owner).map(([relPath, item]) => ({
     relPath,
     bytes: item.bytes.slice(),
     mime: item.mime,
@@ -65,9 +69,9 @@ export async function pendingImageDataUrls(): Promise<Map<string, string>> {
 }
 
 /** 恢复关闭文档随附的内存图片，并重新创建可显示的 blob URL。 */
-export function restorePendingImages(snapshot: PendingImageSnapshot[]): void {
-  clearPendingImages();
-  for (const item of snapshot) addPendingImage(item.relPath, item.bytes, item.mime);
+export function restorePendingImages(snapshot: PendingImageSnapshot[], owner?: string): void {
+  clearPendingImages(owner);
+  for (const item of snapshot) addPendingImage(item.relPath, item.bytes, item.mime, owner);
 }
 
 export interface PreparedPendingImage {
@@ -83,12 +87,14 @@ export interface PreparedPendingImage {
 export async function preparePendingImages(
   docPath: string,
   content: string,
+  owner = "",
 ): Promise<PreparedPendingImage[]> {
   if (!pending.size) return [];
   const referencedNames = new Set(
     extractManagedImageReferences(content).map((reference) => reference.fileName.toLowerCase()),
   );
   for (const [relPath, item] of [...pending.entries()]) {
+    if (item.owner !== owner) continue;
     const fileName = relPath.split(/[\\/]/).pop()?.toLowerCase() ?? "";
     if (referencedNames.has(fileName)) continue;
     URL.revokeObjectURL(item.url);
@@ -99,6 +105,7 @@ export async function preparePendingImages(
   const prepared: PreparedPendingImage[] = [];
   try {
     for (const [relPath, item] of [...pending.entries()]) {
+      if (item.owner !== owner) continue;
       const absPath = `${dir}/${relPath}`.replace(/\\/g, "/");
       await writeBinary(absPath, Array.from(item.bytes));
       prepared.push({ relPath, url: item.url, absPath });

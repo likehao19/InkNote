@@ -18,6 +18,8 @@ export interface EditorRef {
 }
 
 interface Props {
+  documentId?: string;
+  active?: boolean;
   locale: Locale;
   value: string;
   mode: EditorMode;
@@ -37,6 +39,8 @@ interface Props {
 
 const Editor = forwardRef<EditorRef, Props>(function Editor(
   {
+    documentId,
+    active = true,
     locale,
     value,
     mode,
@@ -174,6 +178,7 @@ const Editor = forwardRef<EditorRef, Props>(function Editor(
     const host = hostRef.current;
     if (!host) return;
     const handle = createEditor(host, value, {
+      documentId,
       mode,
       filePath,
       typewriter,
@@ -198,6 +203,16 @@ const Editor = forwardRef<EditorRef, Props>(function Editor(
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!active) return;
+    const view = handleRef.current?.view;
+    if (!view) return;
+    view.requestMeasure();
+    view.focus();
+    onCursorLineRef.current?.(view.state.doc.lineAt(view.state.selection.main.head).number);
+    onViewportRangeRef.current?.(view.state.doc.lineAt(view.viewport.from).number, view.state.doc.lineAt(view.viewport.to).number);
+  }, [active]);
 
   useEffect(() => {
     handleRef.current?.setTypewriter(typewriter);

@@ -132,6 +132,13 @@ export const messages = {
 
     "title.unsaved": "未保存",
     "title.untitled": "未命名",
+    "tabs.documents": "打开的文档",
+    "tabs.unsaved": "未保存",
+    "tabs.close": "关闭 {name}",
+    "tabs.new": "新建文档",
+    "tabs.saveChanges": "“{name}”有未保存的更改，是否保存？",
+    "tabs.discard": "不保存",
+    "tabs.pathOpen": "该文件已在另一个标签中打开，请切换到该标签保存，或选择其他路径。",
     "title.brand": "墨笺",
 
     "reload.title": "文件已更改",
@@ -566,6 +573,13 @@ export const messages = {
 
     "title.unsaved": "Unsaved",
     "title.untitled": "Untitled",
+    "tabs.documents": "Open documents",
+    "tabs.unsaved": "Unsaved",
+    "tabs.close": "Close {name}",
+    "tabs.new": "New document",
+    "tabs.saveChanges": "Save changes to “{name}”?",
+    "tabs.discard": "Don't save",
+    "tabs.pathOpen": "This file is open in another tab. Save from that tab or choose a different path.",
     "title.brand": "InkNote",
 
     "reload.title": "File Changed",

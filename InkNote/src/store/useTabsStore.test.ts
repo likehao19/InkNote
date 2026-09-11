@@ -4,7 +4,7 @@ import { useTabsStore } from "./useTabsStore";
 
 afterEach(() => {
   const state = useTabsStore.getState();
-  state.closeTab(state.activeId);
+  for (const tab of state.tabs) state.closeTab(tab.id);
 });
 
 describe("document restoration", () => {
@@ -33,6 +33,42 @@ describe("document restoration", () => {
 });
 
 describe("document identity", () => {
+  it("preserves modified documents and per-tab access modes when switching", () => {
+    const state = useTabsStore.getState();
+    const a = state.openTab("/notes/A.md", "A");
+    state.updateContent(a, "unsaved A");
+    state.setDocumentOptions(a, { externalDocument: true, documentEditable: false });
+    const b = state.openTab("/notes/B.md", "B");
+    expect(useTabsStore.getState().tabs).toHaveLength(2);
+    expect(useTabsStore.getState().activeId).toBe(b);
+    state.activateTab(a);
+    expect(useTabsStore.getState().getActive()).toMatchObject({ content: "unsaved A", dirty: true, documentEditable: false });
+    expect(state.openTab("/notes/A.md", "old disk content")).toBe(a);
+    expect(useTabsStore.getState().getActive()?.content).toBe("unsaved A");
+  });
+
+  it("deduplicates Windows paths and closes only the requested tab", () => {
+    const state = useTabsStore.getState();
+    const a = state.openTab("C:\\notes\\A.md", "A");
+    const b = state.newTab("B");
+    expect(state.openTab("c:/notes/a.md", "disk A")).toBe(a);
+    state.closeTab(b);
+    expect(useTabsStore.getState().activeId).toBe(a);
+    expect(useTabsStore.getState().tabs).toHaveLength(1);
+    state.closeTab(a);
+    expect(useTabsStore.getState().getActive()).toMatchObject({ path: null, content: "", dirty: false });
+  });
+
+  it("saves a background tab without changing the active tab or overwriting newer edits", () => {
+    const state = useTabsStore.getState();
+    const a = state.openTab("A.md", "A");
+    const b = state.newTab("B");
+    state.updateContent(a, "newer");
+    state.markSaved(a, "A.md", "snapshot");
+    expect(useTabsStore.getState().activeId).toBe(b);
+    expect(useTabsStore.getState().tabs.find((tab) => tab.id === a)).toMatchObject({ content: "newer", diskContent: "snapshot", dirty: true });
+  });
+
   it("starts a new editor history when another file is opened", () => {
     const initialId = useTabsStore.getState().activeId;
 
@@ -88,13 +124,14 @@ describe("document identity", () => {
 
     useTabsStore.getState().loadFromDisk(id, "A.md", "new", { name: "UTF-16LE", bom: true });
 
-    expect(useTabsStore.getState().activeId).not.toBe(id);
+    expect(useTabsStore.getState().activeId).toBe(id);
     expect(useTabsStore.getState().getActive()).toMatchObject({
       path: "A.md",
       content: "new",
       diskContent: "new",
       dirty: false,
       encoding: { name: "UTF-16LE", bom: true },
+      revision: 1,
     });
   });
 });

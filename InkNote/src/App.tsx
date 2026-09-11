@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -6,6 +6,7 @@ import { disable as disableAutostart, enable as enableAutostart, isEnabled as is
 import { Eye, Pencil } from "lucide-react";
 import type { EditorRef } from "./components/Editor";
 import Titlebar from "./components/Titlebar";
+import DocumentTabs from "./components/DocumentTabs";
 import Sidebar, { type SidebarTab } from "./components/Sidebar";
 import { SidebarPanel } from "./components/SidebarPanel";
 import StatusBar from "./components/StatusBar";
@@ -104,8 +105,8 @@ import {
   type EditorWidthPreset,
 } from "./lib/preferences";
 import { formatFrontMatter } from "./lib/frontmatter";
-import { dirOf, isValidEntryName, joinPath, basename, relativePath } from "./lib/paths";
-import { useTabsStore, type TabDoc } from "./store/useTabsStore";
+import { dirOf, isValidEntryName, joinPath, basename, relativePath, remapPath, isPathUnder } from "./lib/paths";
+import { sameDocumentPath, useTabsStore, type TabDoc } from "./store/useTabsStore";
 import type { EditorAction } from "./editor";
 import { setTableInsertRequestHandler } from "./editor/tableInsertBridge";
 import { useToast } from "./lib/useToast";
@@ -171,6 +172,10 @@ function formatLocalDate(timestamp: number): string {
 
 export default function App() {
   const editorRef = useRef<EditorRef>(null);
+  const editorRefs = useRef(new Map<string, EditorRef>());
+  const tabCloseRunningRef = useRef(false);
+  const saveChoiceRef = useRef<((choice: "save" | "discard" | "cancel") => void) | null>(null);
+  const [saveChoiceName, setSaveChoiceName] = useState<string | null>(null);
   const scrollAfterLoadRef = useRef<number | null>(null);
   const closedDocRef = useRef<{
     path: string | null;
@@ -205,6 +210,8 @@ export default function App() {
     openTab,
     newTab,
     closeTab,
+    activateTab,
+    setDocumentOptions,
     restoreTab,
     updateContent,
     setMode,
@@ -218,6 +225,9 @@ export default function App() {
 
   const active = getActive();
   const activeTabId = active?.id ?? activeId;
+  useLayoutEffect(() => {
+    editorRef.current = editorRefs.current.get(activeTabId) ?? null;
+  }, [activeTabId]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [launchAtLogin, setLaunchAtLogin] = useState<boolean | null>(null);
@@ -228,6 +238,7 @@ export default function App() {
   const sidebarVisibleRef = useRef(sidebarVisible);
   const skipSidebarPreferenceWriteRef = useRef(false);
   const dirWatchChainRef = useRef<Promise<void>>(Promise.resolve());
+  const fileWatchChainRef = useRef<Promise<void>>(Promise.resolve());
   const [sidebarWidth, setSidebarWidth] = useState(getSidebarWidth);
   const [folderPaths, setFolderPaths] = useState<string[]>([]);
   const [dirTick, setDirTick] = useState(0);
@@ -285,10 +296,12 @@ export default function App() {
   const [newDocumentMetadata, setNewDocumentMetadata] = useState(getNewDocumentMetadata);
   const [metadataTitle, setMetadataTitle] = useState(getMetadataTitle);
   const [metadataAuthor, setMetadataAuthor] = useState(getMetadataAuthor);
-  const [externalDocument, setExternalDocument] = useState(false);
-  const [documentEditable, setDocumentEditable] = useState(true);
-  const [sampleDocument, setSampleDocument] = useState(false);
-  const [welcomeDismissed, setWelcomeDismissed] = useState(false);
+  const externalDocument = active?.externalDocument ?? false;
+  const documentEditable = active?.documentEditable ?? true;
+  const welcomeDismissed = active?.welcomeDismissed ?? false;
+  const setDocumentEditable = useCallback((value: boolean) => {
+    setDocumentOptions(useTabsStore.getState().activeId, { documentEditable: value });
+  }, [setDocumentOptions]);
 
   const showOutlineForExternalOpen = useCallback(() => {
     const editorState = useTabsStore.getState();
@@ -380,57 +393,28 @@ export default function App() {
     setConfirmMessage(null);
   }, []);
 
-  const saveExistingTab = useCallback(async (tab: TabDoc): Promise<boolean> => {
-    if (!tab.path) return false;
-    let preparedImages: Awaited<ReturnType<typeof preparePendingImages>> = [];
-    let documentWritten = false;
-    try {
-      preparedImages = await preparePendingImages(tab.path, tab.content);
-      await api.writeTextFile(tab.path, tab.content, tab.encoding);
-      documentWritten = true;
-      commitPendingImages(preparedImages);
-      editorRef.current?.refreshPreview();
-      try {
-        await cleanupRemovedManagedImages(tab.path, tab.diskContent, tab.content);
-      } catch (error) {
-        showError(error);
-      }
-      markSaved(tab.id, tab.path, tab.content);
-      return true;
-    } catch (error) {
-      if (!documentWritten) await rollbackPendingImages(preparedImages);
-      showError(error);
-      return false;
-    }
-  }, [markSaved, showError]);
-
-  const confirmDiscardIfNeeded = useCallback(async () => {
-    const tab = getActive();
-    if (!tab?.dirty) return true;
-    if (tab.path) return saveExistingTab(tab);
-    if (!confirmDiscard) return true;
-    return askConfirm(t(locale, "confirm.discard"));
-  }, [getActive, saveExistingTab, confirmDiscard, locale, askConfirm]);
-
   const loadFile = useCallback(
     async (path: string, options: { external?: boolean } = {}) => {
-      if (!(await confirmDiscardIfNeeded())) return false;
       const request = ++fileLoadRequestRef.current;
+      const existing = useTabsStore.getState().tabs.find((tab) => tab.path && sameDocumentPath(tab.path, path));
+      if (existing) {
+        activateTab(existing.id);
+        return true;
+      }
       const external = options.external === true;
       try {
         const file = await api.readTextFile(path);
-        if (request !== fileLoadRequestRef.current) return false;
-        clearPendingImages();
+        const previousId = useTabsStore.getState().activeId;
         const openedId = openTab(path, file.content, file.encoding);
         if (external && externalOpenReadOnly) setMode(openedId, "preview");
-        setExternalDocument(external);
-        setDocumentEditable(!(external && externalOpenReadOnly));
-        setSampleDocument(false);
+        setDocumentOptions(openedId, { externalDocument: external, documentEditable: !(external && externalOpenReadOnly) });
+        if (request !== fileLoadRequestRef.current) activateTab(previousId);
         addRecentFile(path);
         setRecentFiles(getRecentFiles());
-        setTitle(path);
-        if (!external) setLastFile(path);
-        void api.watchFile(path).catch(showError);
+        if (useTabsStore.getState().activeId === openedId) {
+          setTitle(path);
+          if (!external) setLastFile(path);
+        }
         return true;
       } catch (e) {
         if (request !== fileLoadRequestRef.current) return false;
@@ -441,7 +425,7 @@ export default function App() {
         return false;
       }
     },
-    [openTab, setMode, setTitle, confirmDiscardIfNeeded, showError, externalOpenReadOnly],
+    [openTab, activateTab, setDocumentOptions, setMode, setTitle, showError, externalOpenReadOnly],
   );
 
   const openFileAtLine = useCallback(
@@ -460,7 +444,6 @@ export default function App() {
   );
 
   const openFile = useCallback(async () => {
-    // 不在这里问「是否放弃更改」：loadFile 里已经会问，否则会连问两次
     const p = await api.openFileDialog();
     if (p) await loadFile(p);
   }, [loadFile]);
@@ -489,23 +472,27 @@ export default function App() {
 
   const saveTab = useCallback(
     async (tabId?: string): Promise<string | null> => {
-      const tab = tabId ? tabs.find((t) => t.id === tabId) : getActive();
+      const tab = tabId ? useTabsStore.getState().tabs.find((t) => t.id === tabId) : getActive();
       if (!tab) return null;
       let path = tab.path;
       if (!path) {
         path = await api.saveFileDialog();
         if (!path) return null;
       }
+      if (useTabsStore.getState().tabs.some((other) => other.id !== tab.id && other.path && sameDocumentPath(other.path, path!))) {
+        showError(new Error(t(locale, "tabs.pathOpen")));
+        return null;
+      }
       let preparedImages: Awaited<ReturnType<typeof preparePendingImages>> = [];
       let documentWritten = false;
       try {
         // 先把未落盘的粘贴图片写出去，再写文档 —— 顺序反了会先触发一次
         // 「图片文件不存在」的重建
-        preparedImages = await preparePendingImages(path, tab.content);
+        preparedImages = await preparePendingImages(path, tab.content, tab.id);
         await api.writeTextFile(path, tab.content, tab.encoding);
         documentWritten = true;
         commitPendingImages(preparedImages);
-        editorRef.current?.refreshPreview();
+        editorRefs.current.get(tab.id)?.refreshPreview();
         if (tab.path && tab.path === path) {
           try {
             await cleanupRemovedManagedImages(path, tab.diskContent, tab.content);
@@ -516,9 +503,10 @@ export default function App() {
         markSaved(tab.id, path, tab.content);
         addRecentFile(path);
         setRecentFiles(getRecentFiles());
-        setTitle(path);
-        setLastFile(path);
-        await api.watchFile(path);
+        if (useTabsStore.getState().activeId === tab.id) {
+          setTitle(path);
+          setLastFile(path);
+        }
         showSuccess(t(locale, "toast.saved"));
         return path;
       } catch (e) {
@@ -527,7 +515,7 @@ export default function App() {
         return null;
       }
     },
-    [tabs, getActive, markSaved, setTitle, showError, showSuccess, locale],
+    [getActive, markSaved, setTitle, showError, showSuccess, locale],
   );
 
   const saveAs = useCallback(async () => {
@@ -535,16 +523,20 @@ export default function App() {
     if (!tab) return;
     const p = await api.saveFileDialog(tab.path ?? undefined);
     if (!p) return;
+    if (useTabsStore.getState().tabs.some((other) => other.id !== tab.id && other.path && sameDocumentPath(other.path, p))) {
+      showError(new Error(t(locale, "tabs.pathOpen")));
+      return;
+    }
     let managedImages: Awaited<ReturnType<typeof prepareManagedImagesForSaveAs>> | null = null;
     let preparedImages: Awaited<ReturnType<typeof preparePendingImages>> = [];
     let documentWritten = false;
     try {
       managedImages = await prepareManagedImagesForSaveAs(tab.path, p, tab.content);
-      preparedImages = await preparePendingImages(p, managedImages.content);
+      preparedImages = await preparePendingImages(p, managedImages.content, tab.id);
       await api.writeTextFile(p, managedImages.content, UTF8_TEXT_ENCODING);
       documentWritten = true;
       commitPendingImages(preparedImages);
-      editorRef.current?.refreshPreview();
+      editorRefs.current.get(tab.id)?.refreshPreview();
       const currentTab = useTabsStore.getState().tabs.find((candidate) => candidate.id === tab.id);
       if (currentTab) {
         const currentContent = rewriteManagedImageReferences(currentTab.content, managedImages.replacements);
@@ -553,9 +545,10 @@ export default function App() {
       markSaved(tab.id, p, managedImages.content, UTF8_TEXT_ENCODING);
       addRecentFile(p);
       setRecentFiles(getRecentFiles());
-      setTitle(p);
-      setLastFile(p);
-      await api.watchFile(p);
+      if (useTabsStore.getState().activeId === tab.id) {
+        setTitle(p);
+        setLastFile(p);
+      }
       showSuccess(t(locale, "toast.saved"));
     } catch (e) {
       if (!documentWritten) {
@@ -601,57 +594,70 @@ export default function App() {
   }, [getActive, locale, markdownTheme, showError, showSuccess]);
 
   const handleNewFile = useCallback(async () => {
-    if (!(await confirmDiscardIfNeeded())) return;
     fileLoadRequestRef.current++;
-    clearPendingImages();
-    setExternalDocument(false);
-    setDocumentEditable(true);
-    setSampleDocument(false);
-    setWelcomeDismissed(true);
     clearLastFile();
     newTab(createNewDocumentContent());
     setTitle(null);
     show(t(locale, "toast.newDocument"));
-  }, [newTab, createNewDocumentContent, setTitle, confirmDiscardIfNeeded, show, locale]);
+  }, [newTab, createNewDocumentContent, setTitle, show, locale]);
 
-  const handleCloseFile = useCallback(async () => {
-    const tab = getActive();
-    if (!tab) return;
-    let savedBeforeClose = false;
-    if (tab.dirty && tab.path) {
-      savedBeforeClose = await saveExistingTab(tab);
-      if (!savedBeforeClose) return;
+  const askSaveChanges = useCallback((tab: TabDoc) => new Promise<"save" | "discard" | "cancel">((resolve) => {
+    saveChoiceRef.current = resolve;
+    setSaveChoiceName(tab.path ? basename(tab.path) : t(locale, "title.untitled"));
+  }), [locale]);
+
+  const resolveSaveChoice = (choice: "save" | "discard" | "cancel") => {
+    saveChoiceRef.current?.(choice);
+    saveChoiceRef.current = null;
+    setSaveChoiceName(null);
+  };
+
+  const saveAllTabs = useCallback(async () => {
+    for (const tab of useTabsStore.getState().tabs) {
+      if (tab.dirty && !(await saveTab(tab.id))) return false;
     }
-    if (tab.dirty && !tab.path && confirmDiscard) {
-      const ok = await askConfirm(t(locale, "confirm.close"));
-      if (!ok) return;
+    return !useTabsStore.getState().tabs.some((tab) => tab.dirty);
+  }, [saveTab]);
+
+  const handleCloseFile = useCallback(async (id?: string) => {
+    if (tabCloseRunningRef.current || closingRef.current) return;
+    tabCloseRunningRef.current = true;
+    try {
+      let tab = useTabsStore.getState().tabs.find((item) => item.id === (id ?? useTabsStore.getState().activeId));
+      if (!tab) return;
+      if (tab.dirty) {
+        const choice = await askSaveChanges(tab);
+        if (choice === "cancel") return;
+        if (choice === "save") {
+          if (!(await saveTab(tab.id))) return;
+          const current = useTabsStore.getState().tabs.find((item) => item.id === tab!.id);
+          if (!current || current.dirty) return;
+          tab = current;
+        }
+      }
+      const closedSnapshot = {
+        path: tab.path,
+        content: tab.content,
+        diskContent: tab.diskContent,
+        dirty: tab.dirty,
+        mode: tab.mode,
+        encoding: tab.encoding,
+        externalDocument: tab.externalDocument,
+        documentEditable: tab.documentEditable,
+        sampleDocument: tab.sampleDocument,
+        pendingImages: snapshotPendingImages(tab.id),
+      };
+      fileLoadRequestRef.current++;
+      clearPendingImages(tab.id);
+      if (tab.path || tab.content.trim()) {
+        closedDocRef.current = closedSnapshot;
+        setCanReopenClosed(true);
+      }
+      closeTab(tab.id);
+    } finally {
+      tabCloseRunningRef.current = false;
     }
-    const closedSnapshot = {
-      path: tab.path,
-      content: tab.content,
-      diskContent: savedBeforeClose ? tab.content : tab.diskContent,
-      dirty: savedBeforeClose ? false : tab.dirty,
-      mode: tab.mode,
-      encoding: tab.encoding,
-      externalDocument,
-      documentEditable,
-      sampleDocument,
-      pendingImages: snapshotPendingImages(),
-    };
-    fileLoadRequestRef.current++;
-    clearPendingImages();
-    setExternalDocument(false);
-    setDocumentEditable(true);
-    setSampleDocument(false);
-    setWelcomeDismissed(false);
-    if (tab.path || tab.content.trim()) {
-      closedDocRef.current = closedSnapshot;
-      setCanReopenClosed(true);
-    }
-    closeTab(tab.id);
-    if (!externalDocument && !sampleDocument) clearLastFile();
-    setTitle(null);
-  }, [getActive, closeTab, setTitle, saveExistingTab, confirmDiscard, locale, askConfirm, externalDocument, documentEditable, sampleDocument]);
+  }, [closeTab, saveTab, askSaveChanges]);
 
   const handleReopenClosed = useCallback(async () => {
     const snap = closedDocRef.current;
@@ -659,29 +665,19 @@ export default function App() {
       show(t(locale, "toast.nothingToReopen"));
       return;
     }
-    if (!(await confirmDiscardIfNeeded())) return;
     fileLoadRequestRef.current++;
-    restorePendingImages(snap.pendingImages);
-    restoreTab(snap);
-    setExternalDocument(snap.externalDocument);
-    setDocumentEditable(snap.documentEditable);
-    setSampleDocument(snap.sampleDocument);
-    setWelcomeDismissed(true);
+    const existing = snap.path && useTabsStore.getState().tabs.find((tab) => tab.path && sameDocumentPath(tab.path, snap.path!));
+    const restoredId = restoreTab(snap);
+    if (!existing) {
+      restorePendingImages(snap.pendingImages, restoredId);
+      setDocumentOptions(restoredId, { externalDocument: snap.externalDocument, documentEditable: snap.documentEditable, sampleDocument: snap.sampleDocument });
+    }
     closedDocRef.current = null;
     setCanReopenClosed(false);
     setTitle(snap.path);
-    if (snap.path) {
-      try {
-        if (!snap.externalDocument) setLastFile(snap.path);
-        await api.watchFile(snap.path);
-      } catch (e) {
-        showError(e);
-      }
-    } else {
-      api.unwatchFile();
-    }
+    if (snap.path && !snap.externalDocument) setLastFile(snap.path);
     show(t(locale, "toast.reopened"));
-  }, [confirmDiscardIfNeeded, restoreTab, setTitle, show, showError, locale]);
+  }, [restoreTab, setDocumentOptions, setTitle, show, locale]);
 
   const handleRenamePath = useCallback(
     async (path: string, newName: string, _isDir: boolean) => {
@@ -698,12 +694,8 @@ export default function App() {
         remapRecentFiles(path, newPath);
         remapLastFile(path, newPath);
         // 只换路径：重命名不该把「未保存」状态抹掉
-        if (active?.path === path) {
-          setPath(active.id, newPath);
-        } else if (active?.path?.startsWith(path + (path.includes("\\") ? "\\" : "/"))) {
-          const sep = path.includes("\\") ? "\\" : "/";
-          const rel = active.path.slice(path.length + 1);
-          setPath(active.id, `${newPath}${sep}${rel}`);
+        for (const tab of useTabsStore.getState().tabs) {
+          if (tab.path && isPathUnder(tab.path, path)) setPath(tab.id, remapPath(tab.path, path, newPath));
         }
         setDirTick((t) => t + 1);
         setRecentFiles(getRecentFiles());
@@ -713,15 +705,17 @@ export default function App() {
         return false;
       }
     },
-    [active, setPath, showError, locale],
+    [setPath, showError, locale],
   );
 
   const handleMovePath = useCallback((oldPath: string, newPath: string) => {
     remapRecentFiles(oldPath, newPath);
     remapLastFile(oldPath, newPath);
-    if (active?.path === oldPath) setPath(active.id, newPath);
+    for (const tab of useTabsStore.getState().tabs) {
+      if (tab.path && isPathUnder(tab.path, oldPath)) setPath(tab.id, remapPath(tab.path, oldPath, newPath));
+    }
     setRecentFiles(getRecentFiles());
-  }, [active, setPath]);
+  }, [setPath]);
 
   const handleDeletePath = useCallback(
     async (path: string, isDir: boolean) => {
@@ -733,26 +727,20 @@ export default function App() {
         const ok = await askConfirm(msg);
         if (!ok) return false;
       }
-      const sep = path.includes("\\") ? "\\" : "/";
-      const affectsActive = active?.path === path || (isDir && active?.path?.startsWith(path + sep));
-      if (affectsActive && active?.dirty && confirmDiscard) {
+      const affected = useTabsStore.getState().tabs.filter((tab) => tab.path === path || (isDir && tab.path && isPathUnder(tab.path, path)));
+      if (affected.some((tab) => tab.dirty) && confirmDiscard) {
         const ok = await askConfirm(t(locale, "confirm.discard"));
         if (!ok) return false;
       }
-      if (affectsActive) fileLoadRequestRef.current++;
+      if (affected.length) fileLoadRequestRef.current++;
       try {
         if (!isDir && /\.(md|markdown|txt)$/i.test(path)) await removeDocumentWithManagedImages(path);
         else await api.removePath(path);
         removeRecentFilesUnder(path);
         clearLastFileUnder(path);
-        if (affectsActive) {
-          clearPendingImages();
-          newTab();
-          setExternalDocument(false);
-          setDocumentEditable(true);
-          setSampleDocument(false);
-          setWelcomeDismissed(false);
-          setTitle(null);
+        for (const tab of affected) {
+          clearPendingImages(tab.id);
+          closeTab(tab.id);
         }
         setDirTick((t) => t + 1);
         setRecentFiles(getRecentFiles());
@@ -762,7 +750,7 @@ export default function App() {
         return false;
       }
     },
-    [active, confirmDelete, confirmDiscard, locale, showError, askConfirm, newTab, setTitle],
+    [confirmDelete, confirmDiscard, locale, showError, askConfirm, closeTab],
   );
 
   const handleCreateFileInFolder = useCallback(
@@ -797,14 +785,6 @@ export default function App() {
       }
     },
     [showError, locale],
-  );
-
-  const handleChange = useCallback(
-    (doc: string) => {
-      if (!activeTabId || !documentEditable) return;
-      updateContent(activeTabId, doc);
-    },
-    [activeTabId, documentEditable, updateContent],
   );
 
   const handleModeChange = useCallback(
@@ -879,10 +859,13 @@ export default function App() {
     if (!tab?.path) return;
     try {
       const disk = await api.readTextFile(tab.path);
-      if (disk.content === tab.content || disk.content === tab.diskContent) return;
+      if (useTabsStore.getState().activeId !== tab.id) return;
+      const current = getActive();
+      if (!current || current.path !== tab.path) return;
+      if (disk.content === current.content || disk.content === current.diskContent) return;
       // 磁盘上就是当前基线或仍在进行的应用写入：不是外部修改
       if (api.isSelfWritePending(tab.path, disk.content)) return;
-      if (tab.dirty) {
+      if (current.dirty) {
         setReloadPrompt(true);
       } else {
         loadFromDisk(tab.id, tab.path, disk.content, disk.encoding);
@@ -907,25 +890,21 @@ export default function App() {
   }, [getActive, loadFromDisk, show, showError, locale]);
 
   const handleOpenSample = useCallback(async () => {
-    if (!(await confirmDiscardIfNeeded())) return;
     const request = ++fileLoadRequestRef.current;
     try {
       const res = await fetch("/sample.md");
       if (!res.ok) throw new Error(`Could not load sample document (${res.status})`);
       const text = await res.text();
       if (request !== fileLoadRequestRef.current) return;
-      clearPendingImages();
-      setExternalDocument(false);
-      setDocumentEditable(false);
-      setSampleDocument(true);
       const tabId = newTab(text);
+      setDocumentOptions(tabId, { documentEditable: false, sampleDocument: true });
       markSaved(tabId, undefined, text);
       setMode(tabId, "preview");
       setTitle(null);
     } catch (e) {
       if (request === fileLoadRequestRef.current) showError(e);
     }
-  }, [confirmDiscardIfNeeded, newTab, markSaved, setMode, setTitle, showError]);
+  }, [newTab, setDocumentOptions, markSaved, setMode, setTitle, showError]);
 
   const handleDroppedMarkdown = useCallback(
     async (content: string, path?: string) => {
@@ -933,19 +912,14 @@ export default function App() {
         await loadFile(path, { external: true });
         return;
       }
-      if (!(await confirmDiscardIfNeeded())) return;
       fileLoadRequestRef.current++;
-      clearPendingImages();
-      setExternalDocument(false);
-      setDocumentEditable(true);
-      setSampleDocument(false);
       clearLastFile();
       newTab();
       const tab = getActive();
       if (tab) updateContent(tab.id, content);
       setTitle(null);
     },
-    [loadFile, confirmDiscardIfNeeded, newTab, getActive, updateContent, setTitle],
+    [loadFile, newTab, getActive, updateContent, setTitle],
   );
 
   const handleToggleFocus = useCallback(() => {
@@ -1024,17 +998,7 @@ export default function App() {
     updateRunningRef.current = true;
     let installed = false;
     try {
-      const activeTab = getActive();
-      if (activeTab?.dirty && !(await saveTab(activeTab.id))) {
-        return;
-      }
-      const latestTab = useTabsStore.getState().getActive();
-      if (latestTab?.dirty) {
-        const savedAgain = latestTab.path
-          ? await saveExistingTab(latestTab)
-          : Boolean(await saveTab(latestTab.id));
-        if (!savedAgain || useTabsStore.getState().getActive()?.dirty) return;
-      }
+      if (!(await saveAllTabs())) return;
 
       let downloaded = 0;
       let total = 0;
@@ -1088,6 +1052,10 @@ export default function App() {
         total,
       });
       showSuccess(t(locale, "update.installed"));
+      if (!(await saveAllTabs())) {
+        setUpdateProgress(null);
+        return;
+      }
       await relaunch();
     } catch (error) {
       setUpdateProgress(installed
@@ -1103,7 +1071,7 @@ export default function App() {
     } finally {
       updateRunningRef.current = false;
     }
-  }, [checkForUpdates, getActive, locale, saveExistingTab, saveTab, show, showError, showSuccess]);
+  }, [checkForUpdates, locale, saveAllTabs, show, showError, showSuccess]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -1431,30 +1399,26 @@ export default function App() {
   const closeRequestRef = useRef<() => Promise<void>>(async () => undefined);
   closeRequestRef.current = async () => {
     const win = getCurrentWindow();
-    if (closingRef.current) return;
+    if (closingRef.current || tabCloseRunningRef.current) return;
     closingRef.current = true;
-    await flushSettingsStore();
-
-    const tab = getActive();
-    if (!tab?.dirty) {
-      await win.destroy();
-      return;
-    }
-
-    if (!tab.path) {
-      const shouldSave = await askConfirm(t(locale, "confirm.saveBeforeClose"));
-      if (!shouldSave) {
-        closingRef.current = false;
-        return;
+    try {
+      await flushSettingsStore();
+      const discarded = new Map<string, string>();
+      for (const tab of useTabsStore.getState().tabs) {
+        if (!tab.dirty) continue;
+        activateTab(tab.id);
+        const choice = await askSaveChanges(tab);
+        if (choice === "cancel") return;
+        if (choice === "discard") discarded.set(tab.id, tab.content);
+        else if (!(await saveTab(tab.id))) return;
       }
-      const path = await saveTab(tab.id);
-      if (path) await win.destroy();
-      else closingRef.current = false;
-      return;
+      if (useTabsStore.getState().tabs.some((tab) => tab.dirty && discarded.get(tab.id) !== tab.content)) return;
+      await win.destroy();
+    } catch (error) {
+      showError(error);
+    } finally {
+      closingRef.current = false;
     }
-
-    if (await saveExistingTab(tab)) await win.destroy();
-    else closingRef.current = false;
   };
 
   useEffect(() => {
@@ -1480,6 +1444,7 @@ export default function App() {
       reloadPrompt ||
       tablePickerOpen ||
       confirmMessage ||
+      saveChoiceName !== null ||
       linkDialogText !== null ||
       imageDialog !== null ||
       promptDialog ||
@@ -1567,6 +1532,7 @@ export default function App() {
     reloadPrompt,
     tablePickerOpen,
     confirmMessage,
+    saveChoiceName,
     linkDialogText,
     imageDialog,
     promptDialog,
@@ -1598,8 +1564,6 @@ export default function App() {
       if (disposed) fn();
       else unlisten = fn;
     });
-    setExternalDocument(false);
-    setDocumentEditable(true);
 
     return () => {
       disposed = true;
@@ -1700,9 +1664,20 @@ export default function App() {
 
   useEffect(() => {
     setTitle(active?.path ?? null);
-    if (active?.path) api.watchFile(active.path).catch(showError);
-    else api.unwatchFile();
-  }, [active?.path, setTitle, showError]);
+    setReloadPrompt(false);
+    const watchedId = active?.id;
+    const watchedPath = active?.path;
+    if (active?.path) {
+      if (!active.externalDocument && !active.sampleDocument) setLastFile(active.path);
+    } else {
+      clearLastFile();
+    }
+    fileWatchChainRef.current = fileWatchChainRef.current.catch(() => undefined)
+      .then(() => watchedPath ? api.watchFile(watchedPath) : api.unwatchFile())
+      .then(() => {
+        if (watchedId === useTabsStore.getState().activeId && watchedPath) return handleExternalChange();
+      }).catch(showError);
+  }, [active?.id, active?.path, setTitle, showError, handleExternalChange]);
 
   const stats = useMemo(() => {
     const text = active?.content ?? "";
@@ -1812,7 +1787,7 @@ export default function App() {
         onOpen={openFile}
         onOpenFolder={openFolder}
         onNewFile={handleNewFile}
-        onCloseFile={handleCloseFile}
+        onCloseFile={() => void handleCloseFile()}
         onSave={() => saveTab()}
         onSaveAs={saveAs}
         onExportHtml={exportHtml}
@@ -1875,6 +1850,11 @@ export default function App() {
           </SidebarPanel>
         )}
         <main className={`main${showDocumentAccessControl ? " has-document-access-control" : ""}`}>
+          {!focusMode && <DocumentTabs tabs={tabs} activeId={activeTabId} locale={locale}
+            onSelect={(id) => {
+              fileLoadRequestRef.current++;
+              activateTab(id);
+            }} onClose={(id) => void handleCloseFile(id)} onNew={() => void handleNewFile()} />}
           {showDocumentAccessControl && (
             <button
               type="button"
@@ -1900,29 +1880,39 @@ export default function App() {
               onOpenSettings={() => setSettingsOpen(true)}
             />
           )}
-          {active && !showWelcome && (
+          <div className="document-editors" style={showWelcome ? { display: "none" } : undefined}>
+          {tabs.filter((tab) => tab.welcomeDismissed || tab.path || tab.content).map((tab) => (
+            <div key={`${tab.id}:${tab.revision}`} role="tabpanel" id={`panel-${tab.id}`} aria-labelledby={`tab-${tab.id}`}
+              aria-hidden={tab.id !== activeTabId} className={`document-editor-panel${tab.id !== activeTabId ? " is-inactive" : ""}`}>
             <Suspense fallback={<div className="editor-loading" aria-hidden="true" />}>
               <Editor
-                ref={editorRef}
+                ref={(value) => {
+                  if (value) editorRefs.current.set(tab.id, value);
+                  else editorRefs.current.delete(tab.id);
+                  if (useTabsStore.getState().activeId === tab.id) editorRef.current = value;
+                }}
+                documentId={tab.id}
+                active={tab.id === activeTabId}
                 locale={locale}
-                key={active.id}
-                value={active.content}
-                mode={active.mode}
-                filePath={active.path}
+                value={tab.content}
+                mode={tab.mode}
+                filePath={tab.path}
                 typewriter={typewriterMode}
                 lineNumbers={lineNumbers}
                 wordWrap={wordWrap}
                 tabSize={tabSize}
                 spellCheck={spellCheck}
-                readOnly={!documentEditable}
-                onChange={handleChange}
-                onModeChange={handleModeChange}
-                onCursorLine={setCursorLine}
-                onViewportRange={(from, to) => setViewportRange({ from, to })}
+                readOnly={!tab.documentEditable}
+                onChange={(content) => { if (tab.documentEditable) updateContent(tab.id, content); }}
+                onModeChange={(mode) => setMode(tab.id, mode)}
+                onCursorLine={(line) => { if (useTabsStore.getState().activeId === tab.id) setCursorLine(line); }}
+                onViewportRange={(from, to) => { if (useTabsStore.getState().activeId === tab.id) setViewportRange({ from, to }); }}
                 onOpenMarkdown={(content, path) => void handleDroppedMarkdown(content, path)}
               />
             </Suspense>
-          )}
+            </div>
+          ))}
+          </div>
         </main>
       </div>
       {showStatusBar && (
@@ -1940,6 +1930,13 @@ export default function App() {
       )}
       <Toast message={toastMessage} kind={toastKind} />
       <Suspense fallback={null}>
+        {saveChoiceName !== null && <ConfirmDialog locale={locale}
+          message={t(locale, "tabs.saveChanges", { name: saveChoiceName })}
+          confirmLabel={t(locale, "menu.save")}
+          alternativeLabel={t(locale, "tabs.discard")}
+          onConfirm={() => resolveSaveChoice("save")}
+          onAlternative={() => resolveSaveChoice("discard")}
+          onCancel={() => resolveSaveChoice("cancel")} />}
         {settingsOpen && (
           <Settings
             onClose={() => setSettingsOpen(false)}

@@ -11,6 +11,8 @@ interface Props {
   cancelLabel?: string;
   onConfirm: () => void;
   onCancel: () => void;
+  alternativeLabel?: string;
+  onAlternative?: () => void;
 }
 
 export default function ConfirmDialog({
@@ -21,6 +23,8 @@ export default function ConfirmDialog({
   cancelLabel,
   onConfirm,
   onCancel,
+  alternativeLabel,
+  onAlternative,
 }: Props) {
   useModalEscape(true, onCancel);
 
@@ -33,6 +37,7 @@ export default function ConfirmDialog({
         <div className="modal-body">
           <p className="modal-text">{message}</p>
           <div className="modal-actions">
+            {onAlternative && <button type="button" className="btn-secondary" onClick={onAlternative}>{alternativeLabel}</button>}
             <button type="button" className="btn-secondary" onClick={onCancel}>
               {cancelLabel ?? t(locale, "dialog.cancel")}
             </button>

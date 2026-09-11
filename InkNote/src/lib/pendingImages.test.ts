@@ -85,4 +85,18 @@ describe("pending images", () => {
     expect(mocks.removePath).toHaveBeenCalledWith("D:/notes/.inknote-assets/retry.png");
     expect(pendingImageUrl(".inknote-assets/retry.png")).toBe("blob:retry");
   });
+
+  it("does not clear or save another tab's pending images", async () => {
+    addPendingImage(".inknote-assets/a.png", new Uint8Array([1]), "image/png", "tab-a");
+    addPendingImage(".inknote-assets/b.png", new Uint8Array([2]), "image/png", "tab-b");
+    const snapshot = snapshotPendingImages("tab-b");
+    const prepared = await preparePendingImages("/notes/A.md", "![](.inknote-assets/a.png)", "tab-a");
+    expect(mocks.writeBinary).toHaveBeenCalledTimes(1);
+    expect(mocks.writeBinary).toHaveBeenCalledWith("/notes/.inknote-assets/a.png", [1]);
+    commitPendingImages(prepared);
+    clearPendingImages("tab-a");
+    expect(pendingImageUrl(".inknote-assets/b.png")).not.toBeNull();
+    expect(snapshot).toHaveLength(1);
+    expect(snapshot[0].relPath).toBe(".inknote-assets/b.png");
+  });
 });
