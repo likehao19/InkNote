@@ -821,6 +821,24 @@ function applySelection(statics: DecorationSet, state: EditorState): DecorationS
 
 const rebuildPreviewEffect = StateEffect.define<void>();
 
+const searchPreviewEffect = StateEffect.define<{ from: number; to: number } | null>();
+const searchPreview = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(value, tr) {
+    if (tr.docChanged) value = Decoration.none;
+    for (const effect of tr.effects) {
+      if (!effect.is(searchPreviewEffect)) continue;
+      const match = effect.value;
+      value = match ? Decoration.set([
+        Decoration.line({ class: "cm-document-search-line" }).range(tr.state.doc.lineAt(match.from).from),
+        ...(match.to > match.from ? [Decoration.mark({ class: "cm-document-search-match" }).range(match.from, match.to)] : []),
+      ], true) : Decoration.none;
+    }
+    return value;
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
+
 /** 光标以整块为单位跳过这些区域（块内部有自己的编辑器） */
 const ATOMIC_MARK = Decoration.mark({});
 
@@ -833,6 +851,10 @@ function atomicBlockRanges(sets: PreviewSets): DecorationSet {
 }
 
 function visiblePreview(statics: DecorationSet, state: EditorState, readOnly: boolean): DecorationSet {
+  if (state.field(searchPreview).size) {
+    const { from, to } = state.selection.main;
+    return statics.update({ filter: (start, end) => end < from || start > to });
+  }
   return readOnly ? statics : applySelection(statics, state);
 }
 
@@ -846,6 +868,9 @@ function livePreview(ctx: { filePath: string | null; readOnly: boolean }): Exten
       if (tr.docChanged || tr.effects.some((e) => e.is(rebuildPreviewEffect) || e.is(setDraftFences))) {
         const built = buildPreviewSets(tr.state, ctx.filePath);
         return { ...built, visible: visiblePreview(built.statics, tr.state, ctx.readOnly) };
+      }
+      if (tr.effects.some((e) => e.is(searchPreviewEffect))) {
+        return { ...value, visible: visiblePreview(value.statics, tr.state, ctx.readOnly) };
       }
       if (!tr.startState.selection.eq(tr.state.selection)) {
         return ctx.readOnly
@@ -1289,6 +1314,7 @@ function mediaHandlers(onOpenMarkdown?: (content: string, path?: string) => void
 export type { EditorAction };
 
 export interface EditorHandle {
+  previewSearchMatch: (match: { from: number; to: number } | null) => void;
   view: EditorView;
   setMode: (m: EditorMode) => void;
   setFilePath: (path: string | null) => void;
@@ -1344,6 +1370,7 @@ export function createEditor(
   const state = EditorState.create({
     doc: initialDoc,
     extensions: [
+      searchPreview,
       history(),
       drawSelection(),
       dropCursor(),
@@ -1501,6 +1528,17 @@ export function createEditor(
         selection: { anchor: pos },
       });
       view.focus();
+    },
+    previewSearchMatch: (match) => {
+      const range = match && {
+        from: Math.max(0, Math.min(match.from, view.state.doc.length)),
+        to: Math.max(0, Math.min(match.to, view.state.doc.length)),
+      };
+      view.dispatch({
+        effects: [searchPreviewEffect.of(range),
+          ...(range ? [EditorView.scrollIntoView(range.from, { y: "center" })] : [])],
+        ...(range ? { selection: { anchor: range.from, head: range.to } } : {}),
+      });
     },
     runAction: (action: EditorAction) => runEditorAction(view, action),
     insertTable: (rows: number, cols: number) => insertTableAtCursor(view, rows, cols),

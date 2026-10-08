@@ -412,8 +412,10 @@ export const messages = {
 
     "toast.copiedHtml": "已复制 HTML",
 
-    "settings.restoreLastFile": "恢复上次文档",
-    "settings.restoreLastFileDesc": "启动时自动打开上次编辑的文件",
+    "settings.restoreLastFile": "恢复上次标签页和草稿",
+    "settings.restoreLastFileDesc": "退出时自动备份所有标签页，包括未保存内容；启动时恢复。关闭此项后，退出时仍会询问保存。",
+    "toast.sessionDraftRecovered": "原文件已修改或无法读取，已恢复为独立草稿：{path}",
+    "error.sessionBackupUnavailable": "会话备份尚未就绪，暂时无法退出，请稍后重试或先保存文档。",
     "settings.fontFamily": "正文字体",
     "settings.fontFamily.system": "系统默认",
     "settings.fontFamily.serif": "衬线体",
@@ -934,8 +936,10 @@ export const messages = {
 
     "toast.copiedHtml": "HTML copied",
 
-    "settings.restoreLastFile": "Restore Last Document",
-    "settings.restoreLastFileDesc": "Reopen the last edited file at startup",
+    "settings.restoreLastFile": "Restore Tabs and Drafts",
+    "settings.restoreLastFileDesc": "Back up all tabs, including unsaved content, on exit and restore them at startup. When disabled, exit still asks to save changes.",
+    "toast.sessionDraftRecovered": "The original changed or could not be read. Recovered as a separate draft: {path}",
+    "error.sessionBackupUnavailable": "Session backup is not ready. Try exiting again later or save your documents first.",
     "settings.fontFamily": "Body Font",
     "settings.fontFamily.system": "System",
     "settings.fontFamily.serif": "Serif",

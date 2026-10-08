@@ -3413,7 +3413,10 @@ html[data-theme="dark"] .toast-error {
   flex-direction: column;
   padding: 0;
 }
-.document-search-modal { width: min(700px, 94vw); }
+.document-search-backdrop { align-items: flex-start; justify-content: flex-end; padding: 60px 16px 0; background: transparent; }
+.document-search-modal { width: min(560px, 94vw); max-height: 36vh; }
+.editor-host .cm-document-search-line { background: color-mix(in srgb, #e9b949 15%, transparent); }
+.editor-host .cm-document-search-match { background: #ffe082; color: #292015; outline: 1px solid #c99419; border-radius: 2px; }
 .document-search-toggle,
 .document-search-close {
   flex: none;

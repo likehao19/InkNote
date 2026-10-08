@@ -809,6 +809,23 @@ fn save_app_settings(app: tauri::AppHandle, settings: serde_json::Value) -> Resu
 }
 
 #[tauri::command]
+fn load_session_backup(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let path = settings_file(&app)?.with_file_name("session-v1.json");
+    if !path.exists() {
+        return Ok(serde_json::Value::Null);
+    }
+    let content = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    serde_json::from_str(&content).map_err(|e| format!("会话备份格式错误: {e}"))
+}
+
+#[tauri::command]
+fn save_session_backup(app: tauri::AppHandle, snapshot: serde_json::Value) -> Result<(), String> {
+    let path = settings_file(&app)?.with_file_name("session-v1.json");
+    let content = serde_json::to_vec(&snapshot).map_err(|e| e.to_string())?;
+    write_file_safely(&path, &content)
+}
+
+#[tauri::command]
 fn watch_file(
     app: tauri::AppHandle,
     state: tauri::State<AppState>,
@@ -1605,6 +1622,8 @@ pub fn run() {
             get_startup_file,
             load_app_settings,
             save_app_settings,
+            load_session_backup,
+            save_session_backup,
             watch_file,
             unwatch_file,
             watch_dirs,

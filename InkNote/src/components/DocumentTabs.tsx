@@ -6,7 +6,7 @@ import { basename } from "../lib/paths";
 import { t, type Locale } from "../lib/i18n";
 import ContextMenu from "./ContextMenu";
 
-export default function DocumentTabs({ tabs, activeId, locale, onSelect, onClose, onCloseMany, onNew }: {
+export default function DocumentTabs({ tabs, activeId, locale, onSelect, onClose, onCloseMany, onNew, onCopyPath }: {
   tabs: TabDoc[];
   activeId: string;
   locale: Locale;
@@ -14,6 +14,7 @@ export default function DocumentTabs({ tabs, activeId, locale, onSelect, onClose
   onClose: (id: string) => void;
   onCloseMany: (ids: string[]) => void;
   onNew: () => void;
+  onCopyPath: (path: string) => void;
 }) {
   const strip = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
@@ -57,6 +58,9 @@ export default function DocumentTabs({ tabs, activeId, locale, onSelect, onClose
     </div>
     <button type="button" className="document-tab-new" aria-label={t(locale, "tabs.new")} title={t(locale, "tabs.new")} onClick={onNew}><Plus size={16} /></button>
     {menu && menuIndex >= 0 && createPortal(<ContextMenu x={menu.x} y={menu.y} onClose={closeMenu} items={[
+      { label: t(locale, "tree.copyAbsolutePath"), disabled: !tabs[menuIndex].path,
+        onClick: () => { const path = tabs[menuIndex].path; if (path) onCopyPath(path); } },
+      { label: "", separator: true },
       { label: t(locale, "tabs.closeCurrent"), onClick: () => onClose(menu.id) },
       { label: t(locale, "tabs.closeOthers"), disabled: tabs.length <= 1,
         onClick: () => onCloseMany(tabs.filter((tab) => tab.id !== menu.id).map((tab) => tab.id)) },

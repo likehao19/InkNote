@@ -10,7 +10,7 @@ interface Props {
   editable: boolean;
   initialReplace: boolean;
   initialQuery: string;
-  onSelectLine: (line: number) => void;
+  onPreviewMatch: (match: DocumentSearchMatch | null) => void;
   onReplaceContent: (content: string, line: number) => void;
   onClose: () => void;
 }
@@ -88,7 +88,7 @@ export default function DocumentSearchDialog({
   editable,
   initialReplace,
   initialQuery,
-  onSelectLine,
+  onPreviewMatch,
   onReplaceContent,
   onClose,
 }: Props) {
@@ -121,12 +121,16 @@ export default function DocumentSearchDialog({
     const active = listRef.current?.querySelector(".global-search-item.active");
     if (active instanceof HTMLElement) active.scrollIntoView({ block: "nearest" });
   }, [activeIndex, matches]);
+  useEffect(() => {
+    onPreviewMatch(matches[activeIndex] ?? null);
+  }, [activeIndex, matches, onPreviewMatch]);
+  useEffect(() => () => onPreviewMatch(null), [onPreviewMatch]);
 
   const select = (index: number) => {
     const match = matches[index];
     if (!match) return;
     setActiveIndex(index);
-    onSelectLine(match.line);
+    onPreviewMatch(match);
   };
 
   const openMatch = (index: number) => {
@@ -163,7 +167,7 @@ export default function DocumentSearchDialog({
       inputRef.current?.focus();
     } else if (event.key === "ArrowDown") {
       event.preventDefault();
-      setActiveIndex((index) => Math.min(index + 1, matches.length - 1));
+      setActiveIndex((index) => Math.max(0, Math.min(index + 1, matches.length - 1)));
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       setActiveIndex((index) => Math.max(index - 1, 0));
@@ -174,7 +178,7 @@ export default function DocumentSearchDialog({
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop document-search-backdrop" onClick={onClose}>
       <div className="modal global-search-modal document-search-modal" onClick={(e) => e.stopPropagation()} onKeyDown={onKeyDown}>
         <div className="global-search-header">
           <button
@@ -191,7 +195,7 @@ export default function DocumentSearchDialog({
             className="global-search-input"
             placeholder={tr("documentSearch.placeholder")}
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => { setActiveIndex(0); setQuery(event.target.value); }}
           />
           <span className="global-search-status">{tr("documentSearch.count", { n: matches.length })}</span>
           <button type="button" className="document-search-close" onClick={onClose} aria-label={tr("dialog.close")}>×</button>

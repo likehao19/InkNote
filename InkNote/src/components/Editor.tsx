@@ -11,6 +11,7 @@ import { selectedTableText } from "../editor/widgets/table";
 import "katex/dist/katex.min.css";
 
 export interface EditorRef {
+  previewSearchMatch: (match: { from: number; to: number } | null) => void;
   scrollToLine: (line: number) => void;
   runAction: (action: EditorAction) => void;
   insertTable: (rows: number, cols: number) => void;
@@ -165,6 +166,7 @@ const Editor = forwardRef<EditorRef, Props>(function Editor(
   ];
 
   useImperativeHandle(ref, () => ({
+    previewSearchMatch: (match) => handleRef.current?.previewSearchMatch(match),
     scrollToLine: (line) => handleRef.current?.scrollToLine(line),
     runAction: (action) => {
       handleRef.current?.runAction(action);

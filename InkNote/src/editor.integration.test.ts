@@ -45,6 +45,22 @@ afterEach(() => {
 });
 
 describe("Markdown 所见即所得预览", () => {
+  it.each([false, true])("highlights search inside rendered math without editing (readOnly=%s)", (readOnly) => {
+    const markdown = "Formula $x^2$ here";
+    const { parent, handle, onChange } = mount(markdown, readOnly);
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    input.focus();
+    handle.previewSearchMatch({ from: 9, to: 12 });
+    expect(parent.querySelector(".cm-document-search-match")?.textContent).toBe("x^2");
+    expect(document.activeElement).toBe(input);
+    expect(handle.view.state.doc.toString()).toBe(markdown);
+    expect(onChange).not.toHaveBeenCalled();
+    handle.previewSearchMatch(null);
+    expect(parent.querySelector(".cm-document-search-match")).toBeNull();
+    if (readOnly) expect(parent.querySelector(".md-math-inline")).not.toBeNull();
+  });
+
   it.each([
     ["$$\nx^2 + y^2\n$$", ".md-math-block", ".md-math-render"],
     ["```mermaid\ngraph TD\n A --> B\n```", ".md-mermaid-widget", ".md-mermaid-inner"],

@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { writeText as writeClipboardText } from "@tauri-apps/plugin-clipboard-manager";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { disable as disableAutostart, enable as enableAutostart, isEnabled as isAutostartEnabled } from "@tauri-apps/plugin-autostart";
@@ -7,6 +8,7 @@ import { Eye, Pencil } from "lucide-react";
 import type { AiSelectionSnapshot, EditorRef } from "./components/Editor";
 import Titlebar from "./components/Titlebar";
 import DocumentTabs from "./components/DocumentTabs";
+import { loadSession, restoreSession, startSessionBackup } from "./lib/sessionRecovery";
 import Sidebar, { type SidebarTab } from "./components/Sidebar";
 import { SidebarPanel } from "./components/SidebarPanel";
 import StatusBar from "./components/StatusBar";
@@ -173,6 +175,8 @@ function formatLocalDate(timestamp: number): string {
 }
 
 export default function App() {
+  const sessionBackupRef = useRef<ReturnType<typeof startSessionBackup> | null>(null);
+  const sessionReadyRef = useRef<Promise<void>>(Promise.resolve());
   const editorRef = useRef<EditorRef>(null);
   const editorRefs = useRef(new Map<string, EditorRef>());
   const tabCloseRunningRef = useRef(false);
@@ -1197,6 +1201,10 @@ export default function App() {
     applyEditorLayoutPrefs();
     let disposed = false;
     let cancelWorkspaceValidation: (() => void) | undefined;
+    let ready = false;
+    const pendingOpens: string[] = [];
+    let finishSessionReady!: () => void;
+    sessionReadyRef.current = new Promise<void>((resolve) => { finishSessionReady = resolve; });
     const un: Array<() => void> = [];
     const track = (p: Promise<() => void>) => {
       void p.then((f) => {
@@ -1208,6 +1216,7 @@ export default function App() {
 
     const handleOpenFile = (p: string) => {
       if (!disposed) {
+        if (!ready) { pendingOpens.push(p); return; }
         void bootRef.current.loadFile(p, { external: true });
       }
     };
@@ -1269,12 +1278,26 @@ export default function App() {
         return;
       }
       un.push(f);
-      void api.getStartupFile().then((p) => {
+      void api.getStartupFile().then(async (p) => {
         if (disposed) return;
-        if (p) {
-          handleOpenFile(p);
-          return;
+        let restored = false;
+        try {
+          if (getRestoreLastFile()) {
+            const snapshot = await loadSession();
+            if (disposed) return;
+            if (snapshot) {
+              const recovered = await restoreSession(snapshot, p, () => disposed);
+              restored = true;
+              for (const path of recovered) show(t(getLocale(), "toast.sessionDraftRecovered", { path }));
+            }
+          }
+        } catch (error) {
+          if (!disposed) showError(error);
         }
+        if (disposed) return;
+        sessionBackupRef.current = startSessionBackup(getRestoreLastFile);
+        ready = true;
+        finishSessionReady();
         if (getRestoreLastFolder()) {
           const savedFolders = getWorkspaceFolders();
           cancelWorkspaceValidation = scheduleIdleTask(() => {
@@ -1296,15 +1319,20 @@ export default function App() {
             });
           });
         }
-        if (getRestoreLastFile()) {
+        if (!p && !pendingOpens.length && !restored && getRestoreLastFile()) {
           const last = getLastFile();
           if (last) void bootRef.current.loadFile(last);
         }
-      });
+        if (p) handleOpenFile(p);
+        pendingOpens.forEach(handleOpenFile);
+      }).catch((error) => { if (!disposed) showError(error); finishSessionReady(); });
     });
 
     return () => {
       disposed = true;
+      finishSessionReady();
+      sessionBackupRef.current?.stop();
+      sessionBackupRef.current = null;
       cancelWorkspaceValidation?.();
       un.forEach((f) => f());
       window.removeEventListener(NATIVE_MENU_EVENT, onNativeMenu);
@@ -1413,6 +1441,13 @@ export default function App() {
     closingRef.current = true;
     try {
       await flushSettingsStore();
+      await sessionReadyRef.current;
+      if (getRestoreLastFile()) {
+        if (!sessionBackupRef.current) throw new Error(t(locale, "error.sessionBackupUnavailable"));
+        await sessionBackupRef.current.flush();
+        await win.destroy();
+        return;
+      }
       const discarded = new Map<string, string>();
       for (const tab of useTabsStore.getState().tabs) {
         if (!tab.dirty) continue;
@@ -1423,6 +1458,7 @@ export default function App() {
         else if (!(await saveTab(tab.id))) return;
       }
       if (useTabsStore.getState().tabs.some((tab) => tab.dirty && discarded.get(tab.id) !== tab.content)) return;
+      await sessionBackupRef.current?.flush();
       await win.destroy();
     } catch (error) {
       showError(error);
@@ -1760,11 +1796,10 @@ export default function App() {
     return best;
   }, [outline, cursorLine, viewportRange]);
 
-  const handleCopyPath = useCallback(async () => {
-    const tab = getActive();
-    if (!tab?.path) return;
+  const handleCopyPath = useCallback(async (path = getActive()?.path) => {
+    if (!path) return;
     try {
-      await navigator.clipboard.writeText(tab.path);
+      await writeClipboardText(path);
       show(t(locale, "toast.pathCopied"));
     } catch (e) {
       showError(e);
@@ -1773,6 +1808,10 @@ export default function App() {
 
   const scrollToHeading = useCallback((line: number) => {
     editorRef.current?.scrollToLine(line);
+  }, []);
+
+  const previewSearchMatch = useCallback((match: { from: number; to: number } | null) => {
+    editorRef.current?.previewSearchMatch(match);
   }, []);
 
   const appClass = [
@@ -1861,6 +1900,7 @@ export default function App() {
         )}
         <main className={`main${showDocumentAccessControl ? " has-document-access-control" : ""}`}>
           {!focusMode && <DocumentTabs tabs={tabs} activeId={activeTabId} locale={locale}
+            onCopyPath={(path) => void handleCopyPath(path)}
             onSelect={(id) => {
               fileLoadRequestRef.current++;
               activateTab(id);
@@ -2181,7 +2221,7 @@ export default function App() {
             editable={documentEditable}
             initialReplace={documentSearch.replace}
             initialQuery={documentSearch.query}
-            onSelectLine={scrollToHeading}
+            onPreviewMatch={previewSearchMatch}
             onReplaceContent={(content, line) => {
               if (active) updateContent(active.id, content);
               requestAnimationFrame(() => scrollToHeading(line));
