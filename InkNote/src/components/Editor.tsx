@@ -1,5 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Text } from "@codemirror/state";
+import { EditorView } from "@codemirror/view";
+import { registerEditorViewState, type EditorViewState } from "../lib/editorViewState";
 import { createEditor, type EditorAction, type EditorMode } from "../editor";
 import { applyCustomCssToHost, removeCustomCssFromHost } from "../lib/customTheme";
 import ContextMenu, { type ContextMenuItem } from "./ContextMenu";
@@ -30,6 +32,7 @@ export interface AiSelectionSnapshot {
 }
 
 interface Props {
+  initialViewState?: EditorViewState;
   documentId?: string;
   active?: boolean;
   locale: Locale;
@@ -54,6 +57,7 @@ interface Props {
 const Editor = forwardRef<EditorRef, Props>(function Editor(
   {
     documentId,
+    initialViewState,
     active = true,
     locale,
     value,
@@ -77,6 +81,10 @@ const Editor = forwardRef<EditorRef, Props>(function Editor(
 ) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const handleRef = useRef<ReturnType<typeof createEditor> | null>(null);
+  const pendingViewState = useRef(initialViewState);
+  const lastViewState = useRef(initialViewState);
+  const activeRef = useRef(active);
+  activeRef.current = active;
   const onChangeRef = useRef(onChange);
   const onModeRef = useRef(onModeChange);
   const onCursorLineRef = useRef(onCursorLine);
@@ -280,7 +288,29 @@ const Editor = forwardRef<EditorRef, Props>(function Editor(
       onViewportRange: (from, to) => onViewportRangeRef.current?.(from, to),
     });
     handleRef.current = handle;
+    const readPosition = (): EditorViewState => {
+      // Hidden tabs have no layout. Keep their last visible reading position.
+      const view = handle.view;
+      if (pendingViewState.current) return pendingViewState.current;
+      if (!activeRef.current && lastViewState.current) {
+        const { anchor, head } = view.state.selection.main;
+        return { ...lastViewState.current, anchor, head };
+      }
+      const block = view.lineBlockAtHeight(view.scrollDOM.scrollTop);
+      const { anchor, head } = view.state.selection.main;
+      return lastViewState.current = {
+        anchor, head, scrollAnchor: block.from,
+        scrollOffset: Math.max(0, view.scrollDOM.scrollTop - block.top),
+        scrollLeft: view.scrollDOM.scrollLeft,
+      };
+    };
+    const captureScroll = () => { if (activeRef.current && !pendingViewState.current) readPosition(); };
+    handle.view.scrollDOM.addEventListener("scroll", captureScroll);
+    const unregister = documentId ? registerEditorViewState(documentId, readPosition) : undefined;
+    readPosition();
     return () => {
+      unregister?.();
+      handle.view.scrollDOM.removeEventListener("scroll", captureScroll);
       handle.destroy();
       handleRef.current = null;
     };
@@ -293,6 +323,22 @@ const Editor = forwardRef<EditorRef, Props>(function Editor(
     if (!view) return;
     view.requestMeasure();
     view.focus();
+    const saved = pendingViewState.current;
+    if (saved) {
+      pendingViewState.current = undefined;
+      const clamp = (position: number) => Math.min(position, view.state.doc.length);
+      view.dispatch({
+        selection: { anchor: clamp(saved.anchor), head: clamp(saved.head) },
+        effects: EditorView.scrollIntoView(clamp(saved.scrollAnchor), { y: "start" }),
+      });
+      view.requestMeasure({
+        read: () => view.lineBlockAt(clamp(saved.scrollAnchor)).top + saved.scrollOffset,
+        write: (top) => {
+          view.scrollDOM.scrollTop = top;
+          view.scrollDOM.scrollLeft = saved.scrollLeft;
+        },
+      });
+    }
     onCursorLineRef.current?.(view.state.doc.lineAt(view.state.selection.main.head).number);
     onViewportRangeRef.current?.(view.state.doc.lineAt(view.viewport.from).number, view.state.doc.lineAt(view.viewport.to).number);
   }, [active]);

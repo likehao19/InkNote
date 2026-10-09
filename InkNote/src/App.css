@@ -3417,6 +3417,7 @@ html[data-theme="dark"] .toast-error {
 .document-search-modal { width: min(560px, 94vw); max-height: 36vh; }
 .editor-host .cm-document-search-line { background: color-mix(in srgb, #e9b949 15%, transparent); }
 .editor-host .cm-document-search-match { background: #ffe082; color: #292015; outline: 1px solid #c99419; border-radius: 2px; }
+.editor-host .cm-document-search-component { outline: 2px solid #c99419; outline-offset: 2px; background-color: color-mix(in srgb, #e9b949 15%, var(--bg)); }
 .document-search-toggle,
 .document-search-close {
   flex: none;

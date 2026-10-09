@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useTabsStore, sameDocumentPath, type TabDoc } from "../store/useTabsStore";
 import { snapshotPendingImages, restorePendingImages } from "./pendingImages";
 import { readTextFile } from "./tauri";
+import { readEditorViewState, validEditorViewState } from "./editorViewState";
 
 type SessionTab = Omit<TabDoc, "id" | "revision"> & {
   pendingImages: { relPath: string; mime: string; bytes: number[] }[];
@@ -21,6 +22,7 @@ export function captureSession(): SessionSnapshot {
     activeIndex: Math.max(0, tabs.findIndex((tab) => tab.id === state.activeId)),
     tabs: tabs.map(({ id, revision: _revision, ...tab }) => ({
       ...tab,
+      viewState: readEditorViewState(id) ?? tab.viewState,
       pendingImages: snapshotPendingImages(id).map((image) => ({ ...image, bytes: Array.from(image.bytes) })),
     })),
   };
@@ -47,6 +49,9 @@ export function parseSession(value: unknown): SessionSnapshot | null {
         throw new Error("Invalid session image");
       }
     }
+    // Older backups have no reading position. A bad optional position must not
+    // prevent recovery of the document itself.
+    if (!validEditorViewState(tab.viewState)) delete tab.viewState;
   }
   return session;
 }

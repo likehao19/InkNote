@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { EditorViewState } from "../lib/editorViewState";
 import type { EditorMode } from "../editor";
 import { getDefaultEditorMode } from "../lib/preferences";
 import {
@@ -8,6 +9,7 @@ import {
 } from "../lib/textEncoding";
 
 export interface TabDoc {
+  viewState?: EditorViewState;
   id: string;
   path: string | null;
   content: string;
@@ -43,6 +45,7 @@ interface DocState {
   activateTab: (id: string) => void;
   setDocumentOptions: (id: string, options: Partial<DocumentOptions>) => void;
   restoreTab: (snap: {
+    viewState?: EditorViewState;
     path: string | null;
     content: string;
     diskContent: string;
@@ -149,6 +152,7 @@ export const useTabsStore = create<DocState>((set, get) => ({
   restoreTab: (snap) => {
     const tab: TabDoc = {
       ...emptyTab(),
+      viewState: snap.viewState,
       path: snap.path,
       content: snap.content,
       diskContent: snap.diskContent,

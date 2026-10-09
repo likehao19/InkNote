@@ -1942,6 +1942,7 @@ export default function App() {
                   if (useTabsStore.getState().activeId === tab.id) editorRef.current = value;
                 }}
                 documentId={tab.id}
+                initialViewState={tab.viewState}
                 active={tab.id === activeTabId}
                 locale={locale}
                 value={tab.content}

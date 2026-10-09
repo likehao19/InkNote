@@ -3,6 +3,7 @@ import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
 import { captureSession, parseSession, restoreSession, startSessionBackup } from "./sessionRecovery";
 import { useTabsStore } from "../store/useTabsStore";
 import { addPendingImage, clearPendingImages, pendingImageUrl, snapshotPendingImages } from "./pendingImages";
+import { registerEditorViewState } from "./editorViewState";
 
 const read = vi.fn();
 const save = vi.fn();
@@ -31,6 +32,20 @@ afterEach(() => {
 });
 
 describe("session recovery", () => {
+  it("captures and restores reading positions without requiring them in older backups", async () => {
+    const id = useTabsStore.getState().newTab("draft");
+    const viewState = { anchor: 2, head: 4, scrollAnchor: 0, scrollOffset: 12, scrollLeft: 5 };
+    const unregister = registerEditorViewState(id, () => viewState);
+    const snapshot = captureSession();
+    unregister();
+    resetTabs();
+    await restoreSession(parseSession(JSON.parse(JSON.stringify(snapshot)))!, null, () => false);
+    expect(useTabsStore.getState().getActive()?.viewState).toEqual(viewState);
+    delete snapshot.tabs[0].viewState;
+    expect(parseSession(snapshot)?.tabs[0].viewState).toBeUndefined();
+    snapshot.tabs[0].viewState = { ...viewState, anchor: -1 };
+    expect(parseSession(snapshot)?.tabs[0].viewState).toBeUndefined();
+  });
   it("uses latest disk content for clean tabs and detaches drafts when the original changed", async () => {
     const state = useTabsStore.getState();
     const id = state.openTab("/A.md", "original");

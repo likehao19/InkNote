@@ -822,6 +822,14 @@ function applySelection(statics: DecorationSet, state: EditorState): DecorationS
 const rebuildPreviewEffect = StateEffect.define<void>();
 
 const searchPreviewEffect = StateEffect.define<{ from: number; to: number } | null>();
+const searchPreviewRange = StateField.define<{ from: number; to: number } | null>({
+  create: () => null,
+  update(value, tr) {
+    if (tr.docChanged) value = null;
+    for (const effect of tr.effects) if (effect.is(searchPreviewEffect)) value = effect.value;
+    return value;
+  },
+});
 const searchPreview = StateField.define<DecorationSet>({
   create: () => Decoration.none,
   update(value, tr) {
@@ -852,8 +860,7 @@ function atomicBlockRanges(sets: PreviewSets): DecorationSet {
 
 function visiblePreview(statics: DecorationSet, state: EditorState, readOnly: boolean): DecorationSet {
   if (state.field(searchPreview).size) {
-    const { from, to } = state.selection.main;
-    return statics.update({ filter: (start, end) => end < from || start > to });
+    return statics;
   }
   return readOnly ? statics : applySelection(statics, state);
 }
@@ -875,7 +882,7 @@ function livePreview(ctx: { filePath: string | null; readOnly: boolean }): Exten
       if (!tr.startState.selection.eq(tr.state.selection)) {
         return ctx.readOnly
           ? value
-          : { ...value, visible: applySelection(value.statics, tr.state) };
+          : { ...value, visible: visiblePreview(value.statics, tr.state, false) };
       }
       return value;
     },
@@ -1370,6 +1377,7 @@ export function createEditor(
   const state = EditorState.create({
     doc: initialDoc,
     extensions: [
+      searchPreviewRange,
       searchPreview,
       history(),
       drawSelection(),
@@ -1432,6 +1440,15 @@ export function createEditor(
       typewriterCompartment.of(typewriterExt(typewriter)),
       mediaHandlers(opts.onOpenMarkdown, opts.documentId),
       EditorView.updateListener.of((u) => {
+        // Widget contents are rendered separately from CodeMirror text. Highlight
+        // the component instead of removing its replacement and revealing source.
+        if (u.viewportChanged || u.docChanged || u.selectionSet || u.transactions.some((tr) => tr.effects.length)) {
+          const match = u.state.field(searchPreviewRange);
+          u.view.contentDOM.querySelectorAll<HTMLElement>("[data-block-len]").forEach((element) => {
+            const range = match ? currentBlockRange(u.view, element) : null;
+            element.classList.toggle("cm-document-search-component", Boolean(match && range && range.from < match.to && range.to > match.from));
+          });
+        }
         if (u.docChanged) opts.onChange(documentText(u.state.doc));
         if (u.selectionSet) {
           const line = u.state.doc.lineAt(u.state.selection.main.head).number;

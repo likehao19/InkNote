@@ -2,6 +2,8 @@ import { act, createRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import Editor, { type EditorRef } from "./Editor";
+import { EditorView } from "@codemirror/view";
+import { readEditorViewState } from "../lib/editorViewState";
 import { writeText as writeClipboardText } from "@tauri-apps/plugin-clipboard-manager";
 
 vi.mock("@tauri-apps/plugin-clipboard-manager", () => ({
@@ -18,6 +20,51 @@ afterEach(() => {
 });
 
 describe("Editor document replacement", () => {
+  it("retains scroll and selection for a tab after it becomes hidden", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    root = createRoot(host);
+    const render = (active: boolean) => <Editor documentId="reading" active={active}
+      locale="en" value="first\nsecond\nthird" mode="source" filePath={null}
+      typewriter={false} lineNumbers={false} wordWrap tabSize={2} spellCheck={false}
+      readOnly={false} onChange={() => {}} onModeChange={() => {}} />;
+    act(() => root?.render(render(true)));
+    const view = EditorView.findFromDOM(host.querySelector(".cm-editor")!)!;
+    // Happy DOM dispatches selectionchange synchronously (unlike a WebView).
+    view.contentDOM.blur();
+    act(() => {
+      view.dispatch({ selection: { anchor: 7, head: 10 } });
+      view.scrollDOM.scrollTop = 30;
+      view.scrollDOM.scrollLeft = 8;
+      view.scrollDOM.dispatchEvent(new Event("scroll"));
+    });
+    const saved = readEditorViewState("reading");
+    act(() => root?.render(render(false)));
+    view.scrollDOM.scrollTop = 0;
+    view.scrollDOM.dispatchEvent(new Event("scroll"));
+    expect(readEditorViewState("reading")).toEqual(saved);
+    expect(saved).toMatchObject({ anchor: 7, head: 10, scrollLeft: 8 });
+  });
+  it("restores a background tab position when activated and clamps shortened documents", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    root = createRoot(host);
+    const position = { anchor: 200, head: 300, scrollAnchor: 250, scrollOffset: 0, scrollLeft: 0 };
+    const render = (active: boolean) => <Editor documentId="restored" initialViewState={position}
+      active={active} locale="en" value="short" mode="source" filePath={null}
+      typewriter={false} lineNumbers={false} wordWrap tabSize={2} spellCheck={false}
+      readOnly={false} onChange={() => {}} onModeChange={() => {}} />;
+    act(() => root?.render(render(false)));
+    expect(readEditorViewState("restored")).toEqual(position);
+    act(() => root?.render(render(true)));
+    const view = EditorView.findFromDOM(host.querySelector(".cm-editor")!)!;
+    expect(view.state.selection.main.anchor).toBe(5);
+    expect(view.state.selection.main.head).toBe(5);
+    expect(readEditorViewState("restored")?.head).toBe(5);
+    act(() => root?.unmount());
+    root = null;
+    expect(readEditorViewState("restored")).toBeUndefined();
+  });
   it("applies an AI result only while the captured text is unchanged", () => {
     const host = document.createElement("div");
     document.body.appendChild(host);

@@ -45,6 +45,22 @@ afterEach(() => {
 });
 
 describe("Markdown 所见即所得预览", () => {
+  it.each([
+    ["$$\nx^2\n$$", "x^2", ".md-math-block"],
+    ["```mermaid\ngraph TD\n A --> B\n```", "graph", ".md-mermaid-widget"],
+    ["| Name |\n| --- |\n| needle |", "needle", ".md-table-widget"],
+  ])("keeps a searched component rendered: %s", (markdown, query, selector) => {
+    const { parent, handle, onChange } = mount(markdown, true);
+    const component = parent.querySelector(selector);
+    expect(component).not.toBeNull();
+    const from = markdown.indexOf(query);
+    handle.previewSearchMatch({ from, to: from + query.length });
+    expect(parent.querySelector(selector)).toBe(component);
+    expect(component?.classList.contains("cm-document-search-component")).toBe(true);
+    handle.previewSearchMatch(null);
+    expect(component?.classList.contains("cm-document-search-component")).toBe(false);
+    expect(onChange).not.toHaveBeenCalled();
+  });
   it.each([false, true])("highlights search inside rendered math without editing (readOnly=%s)", (readOnly) => {
     const markdown = "Formula $x^2$ here";
     const { parent, handle, onChange } = mount(markdown, readOnly);
@@ -52,11 +68,13 @@ describe("Markdown 所见即所得预览", () => {
     document.body.appendChild(input);
     input.focus();
     handle.previewSearchMatch({ from: 9, to: 12 });
-    expect(parent.querySelector(".cm-document-search-match")?.textContent).toBe("x^2");
+    expect(parent.querySelector(".md-math-inline.cm-document-search-component")).not.toBeNull();
+    expect(parent.querySelector(".md-math-inline .katex")).not.toBeNull();
     expect(document.activeElement).toBe(input);
     expect(handle.view.state.doc.toString()).toBe(markdown);
     expect(onChange).not.toHaveBeenCalled();
     handle.previewSearchMatch(null);
+    expect(parent.querySelector(".cm-document-search-component")).toBeNull();
     expect(parent.querySelector(".cm-document-search-match")).toBeNull();
     if (readOnly) expect(parent.querySelector(".md-math-inline")).not.toBeNull();
   });
