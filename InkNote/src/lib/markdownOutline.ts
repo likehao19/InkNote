@@ -27,6 +27,9 @@ function baseAnchor(value: string): string {
 }
 
 export function extractMarkdownOutline(content: string): MarkdownOutlineItem[] {
+  // Normalize only the parsing copy so headings and front matter share the
+  // editor's line numbering, without changing the document's saved format.
+  if (content.includes("\r")) content = content.replace(/\r\n?/g, "\n");
   const items: Omit<MarkdownOutlineItem, "anchor">[] = [];
   const lines = content.split("\n");
   const start = frontMatterLineCount(content);
