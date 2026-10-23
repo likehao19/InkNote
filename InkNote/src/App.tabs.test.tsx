@@ -269,9 +269,11 @@ describe("multi-document workflows", () => {
     await settle();
     expect(useTabsStore.getState().getActive()?.externalStatus).toBeUndefined();
     await act(async () => { window.dispatchEvent(new Event("focus")); });
-    await settle();
-    expect(useTabsStore.getState().getActive()?.externalStatus).toBe("conflict");
-    expect(document.querySelector(".modal-actions")?.textContent).toContain("保留当前");
+    await vi.waitFor(async () => {
+      await settle();
+      expect(useTabsStore.getState().getActive()?.externalStatus).toBe("conflict");
+      expect(document.querySelector(".modal-actions")?.textContent).toContain("保留当前");
+    });
   });
 
   it("does not mistake a same-content copy for a rename", async () => {
