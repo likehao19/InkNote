@@ -9,7 +9,9 @@ import {
 } from "../lib/textEncoding";
 
 export interface TabDoc {
+  externalStatus?: "unavailable" | "conflict";
   viewState?: EditorViewState;
+  fileIdentity?: string;
   id: string;
   path: string | null;
   content: string;
@@ -40,25 +42,27 @@ interface DocState {
   focusMode: boolean;
   typewriterMode: boolean;
   newTab: (content?: string) => string;
-  openTab: (path: string, content: string, encoding?: TextEncoding) => string;
+  openTab: (path: string, content: string, encoding?: TextEncoding, fileIdentity?: string, activate?: boolean) => string;
   closeTab: (id: string) => void;
   activateTab: (id: string) => void;
+  setExternalStatus: (id: string, status: TabDoc["externalStatus"]) => void;
   setDocumentOptions: (id: string, options: Partial<DocumentOptions>) => void;
   restoreTab: (snap: {
     viewState?: EditorViewState;
+    fileIdentity?: string;
     path: string | null;
     content: string;
     diskContent: string;
     dirty: boolean;
     mode: EditorMode;
     encoding: TextEncoding;
-  }) => string;
+  }, activate?: boolean) => string;
   updateContent: (id: string, content: string) => void;
   setMode: (id: string, mode: EditorMode) => void;
   /** 保存完成：只更新磁盘基线，不动正在编辑的内容 */
-  markSaved: (id: string, path?: string, savedContent?: string, encoding?: TextEncoding) => void;
+  markSaved: (id: string, path?: string, savedContent?: string, encoding?: TextEncoding, fileIdentity?: string | null) => void;
   /** 用磁盘内容整体替换（外部修改 / 手动重新加载） */
-  loadFromDisk: (id: string, path: string, content: string, encoding?: TextEncoding) => void;
+  loadFromDisk: (id: string, path: string, content: string, encoding?: TextEncoding, fileIdentity?: string) => void;
   /** 仅改路径（重命名），不影响未保存状态 */
   setPath: (id: string, path: string) => void;
   getActive: () => TabDoc | undefined;
@@ -109,16 +113,18 @@ export const useTabsStore = create<DocState>((set, get) => ({
     return tab.id;
   },
 
-  openTab: (path, content, encoding = UTF8_TEXT_ENCODING) => {
+  openTab: (path, content, encoding = UTF8_TEXT_ENCODING, fileIdentity, activate = true) => {
     const existing = get().tabs.find((tab) => tab.path && sameDocumentPath(tab.path, path));
     if (existing) {
-      set({ activeId: existing.id });
+      if (activate) set({ activeId: existing.id });
       return existing.id;
     }
+    let openedId = "";
     set((state) => {
       const tab: TabDoc = {
         ...emptyTab(),
         path,
+        fileIdentity,
         content,
         diskContent: content,
         dirty: false,
@@ -126,9 +132,10 @@ export const useTabsStore = create<DocState>((set, get) => ({
         encoding: copyTextEncoding(encoding),
         welcomeDismissed: true,
       };
-      return { tabs: appendTab(state.tabs, tab), activeId: tab.id };
+      openedId = tab.id;
+      return { tabs: activate ? appendTab(state.tabs, tab) : [...state.tabs, tab], activeId: activate ? tab.id : state.activeId };
     });
-    return get().activeId;
+    return openedId;
   },
 
   closeTab: (id) => {
@@ -145,14 +152,19 @@ export const useTabsStore = create<DocState>((set, get) => ({
     if (get().tabs.some((tab) => tab.id === id)) set({ activeId: id });
   },
 
+  setExternalStatus: (id, externalStatus) => set((state) => ({
+    tabs: state.tabs.map((tab) => tab.id === id && tab.externalStatus !== externalStatus ? { ...tab, externalStatus } : tab),
+  })),
+
   setDocumentOptions: (id, options) => set((state) => ({
     tabs: state.tabs.map((tab) => tab.id === id ? { ...tab, ...options } : tab),
   })),
 
-  restoreTab: (snap) => {
+  restoreTab: (snap, activate = true) => {
     const tab: TabDoc = {
       ...emptyTab(),
       viewState: snap.viewState,
+      fileIdentity: snap.fileIdentity,
       path: snap.path,
       content: snap.content,
       diskContent: snap.diskContent,
@@ -163,10 +175,10 @@ export const useTabsStore = create<DocState>((set, get) => ({
     };
     const existing = tab.path && get().tabs.find((item) => item.path && sameDocumentPath(item.path, tab.path!));
     if (existing) {
-      set({ activeId: existing.id });
+      if (activate) set({ activeId: existing.id });
       return existing.id;
     }
-    set((state) => ({ tabs: appendTab(state.tabs, tab), activeId: tab.id }));
+    set((state) => ({ tabs: activate ? appendTab(state.tabs, tab) : [...state.tabs, tab], activeId: activate ? tab.id : state.activeId }));
     return tab.id;
   },
 
@@ -191,7 +203,7 @@ export const useTabsStore = create<DocState>((set, get) => ({
    * 否则在 IPC 往返期间敲进去的字会被抹掉。dirty 由当前内容与基线比较得出，
    * 保存期间新输入的内容会继续保持 dirty，等待用户再次保存或退出时写回。
    */
-  markSaved: (id, path, savedContent, encoding) => {
+  markSaved: (id, path, savedContent, encoding, fileIdentity) => {
     set((s) => ({
       tabs: s.tabs.map((t) => {
         if (t.id !== id) return t;
@@ -199,7 +211,9 @@ export const useTabsStore = create<DocState>((set, get) => ({
         return {
           ...t,
           path: path ?? t.path,
+          fileIdentity: fileIdentity === undefined ? t.fileIdentity : fileIdentity ?? undefined,
           diskContent: disk,
+          externalStatus: undefined,
           dirty: t.content !== disk,
           encoding: encoding ? copyTextEncoding(encoding) : t.encoding,
         };
@@ -208,7 +222,7 @@ export const useTabsStore = create<DocState>((set, get) => ({
   },
 
   /** 用磁盘内容整体替换当前文档 */
-  loadFromDisk: (id, path, content, encoding) => {
+  loadFromDisk: (id, path, content, encoding, fileIdentity) => {
     set((s) => {
       let activeId = s.activeId;
       const tabs = s.tabs.map((t) => {
@@ -216,10 +230,12 @@ export const useTabsStore = create<DocState>((set, get) => ({
         const next = {
           ...t,
           revision: t.revision + 1,
+          fileIdentity,
           path,
           content,
           diskContent: content,
           dirty: false,
+          externalStatus: undefined,
           encoding: encoding ? copyTextEncoding(encoding) : t.encoding,
         };
         if (activeId === id) activeId = next.id;
@@ -231,7 +247,7 @@ export const useTabsStore = create<DocState>((set, get) => ({
 
   setPath: (id, path) => {
     set((s) => ({
-      tabs: s.tabs.map((t) => (t.id === id ? { ...t, path } : t)),
+      tabs: s.tabs.map((t) => (t.id === id ? { ...t, path, externalStatus: t.externalStatus === "unavailable" ? undefined : t.externalStatus } : t)),
     }));
   },
 

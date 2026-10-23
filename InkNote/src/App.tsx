@@ -8,7 +8,7 @@ import { Eye, Pencil } from "lucide-react";
 import type { AiSelectionSnapshot, EditorRef } from "./components/Editor";
 import Titlebar from "./components/Titlebar";
 import DocumentTabs from "./components/DocumentTabs";
-import { loadSession, restoreSession, startSessionBackup } from "./lib/sessionRecovery";
+import { loadSession, restoreSession, saveSessionDraft, startSessionBackup, type SessionTab } from "./lib/sessionRecovery";
 import Sidebar, { type SidebarTab } from "./components/Sidebar";
 import { SidebarPanel } from "./components/SidebarPanel";
 import StatusBar from "./components/StatusBar";
@@ -177,6 +177,9 @@ function formatLocalDate(timestamp: number): string {
 export default function App() {
   const sessionBackupRef = useRef<ReturnType<typeof startSessionBackup> | null>(null);
   const sessionReadyRef = useRef<Promise<void>>(Promise.resolve());
+  const deferredSessionTabs = useRef<SessionTab[]>([]);
+  const sessionDraftChoice = useRef<((choice: "save" | "discard" | "cancel") => void) | null>(null);
+  const [sessionDraftPrompt, setSessionDraftPrompt] = useState<SessionTab | null>(null);
   const editorRef = useRef<EditorRef>(null);
   const editorRefs = useRef(new Map<string, EditorRef>());
   const tabCloseRunningRef = useRef(false);
@@ -184,6 +187,7 @@ export default function App() {
   const [saveChoiceName, setSaveChoiceName] = useState<string | null>(null);
   const scrollAfterLoadRef = useRef<number | null>(null);
   const closedDocRef = useRef<{
+    fileIdentity?: string;
     path: string | null;
     content: string;
     diskContent: string;
@@ -250,11 +254,23 @@ export default function App() {
   const skipSidebarPreferenceWriteRef = useRef(false);
   const dirWatchChainRef = useRef<Promise<void>>(Promise.resolve());
   const fileWatchChainRef = useRef<Promise<void>>(Promise.resolve());
+  const externalChecksRef = useRef(new Map<string, number>());
+  const externalSyncRef = useRef({ active: true, epoch: 0 });
+  useLayoutEffect(() => {
+    externalSyncRef.current.active = true;
+    return () => {
+      externalSyncRef.current.active = false;
+      externalSyncRef.current.epoch++;
+    };
+  }, []);
   const [sidebarWidth, setSidebarWidth] = useState(getSidebarWidth);
   const [folderPaths, setFolderPaths] = useState<string[]>([]);
   const [dirTick, setDirTick] = useState(0);
   const [recentFiles, setRecentFiles] = useState(getRecentFiles);
   const [reloadPrompt, setReloadPrompt] = useState(false);
+  useLayoutEffect(() => {
+    setReloadPrompt(false);
+  }, [activeTabId]);
   const [tablePickerOpen, setTablePickerOpen] = useState(false);
   const [confirmMessage, setConfirmMessage] = useState<string | null>(null);
   const [linkDialogText, setLinkDialogText] = useState<string | null>(null);
@@ -404,22 +420,40 @@ export default function App() {
     setConfirmMessage(null);
   }, []);
 
+  const followRenamedTab = useCallback((id: string, oldPath: string, newPath: string) => {
+    const state = useTabsStore.getState();
+    if (!state.tabs.some((tab) => tab.id === id && tab.path === oldPath)
+      || state.tabs.some((tab) => tab.id !== id && tab.path && sameDocumentPath(tab.path, newPath))) return false;
+    setPath(id, newPath);
+    remapRecentFiles(oldPath, newPath);
+    remapLastFile(oldPath, newPath);
+    setRecentFiles(getRecentFiles());
+    setDirTick((value) => value + 1);
+    return true;
+  }, [setPath]);
+
   const loadFile = useCallback(
     async (path: string, options: { external?: boolean } = {}) => {
       const request = ++fileLoadRequestRef.current;
       const existing = useTabsStore.getState().tabs.find((tab) => tab.path && sameDocumentPath(tab.path, path));
       if (existing) {
         activateTab(existing.id);
+        addRecentFile(path);
+        setRecentFiles(getRecentFiles());
         return true;
       }
       const external = options.external === true;
       try {
         const file = await api.readTextFile(path);
-        const previousId = useTabsStore.getState().activeId;
-        const openedId = openTab(path, file.content, file.encoding);
+        const renamed = file.fileIdentity ? useTabsStore.getState().tabs.find((tab) =>
+          tab.path && !sameDocumentPath(tab.path, path) && tab.fileIdentity === file.fileIdentity) : undefined;
+        if (renamed?.path) {
+          const found = await api.findRenamedFile(renamed.path, file.fileIdentity!);
+          if (found && sameDocumentPath(found, path)) followRenamedTab(renamed.id, renamed.path, path);
+        }
+        const openedId = openTab(path, file.content, file.encoding, file.fileIdentity, request === fileLoadRequestRef.current);
         if (external && externalOpenReadOnly) setMode(openedId, "preview");
         setDocumentOptions(openedId, { externalDocument: external, documentEditable: !(external && externalOpenReadOnly) });
-        if (request !== fileLoadRequestRef.current) activateTab(previousId);
         addRecentFile(path);
         setRecentFiles(getRecentFiles());
         if (useTabsStore.getState().activeId === openedId) {
@@ -436,7 +470,7 @@ export default function App() {
         return false;
       }
     },
-    [openTab, activateTab, setDocumentOptions, setMode, setTitle, showError, externalOpenReadOnly],
+    [openTab, activateTab, setDocumentOptions, setMode, setTitle, showError, externalOpenReadOnly, followRenamedTab],
   );
 
   const openFileAtLine = useCallback(
@@ -497,12 +531,20 @@ export default function App() {
       let preparedImages: Awaited<ReturnType<typeof preparePendingImages>> = [];
       let documentWritten = false;
       try {
+        if (tab.path) {
+          const disk = await api.readTextFile(tab.path);
+          if (disk.content !== tab.diskContent) {
+            useTabsStore.getState().setExternalStatus(tab.id, "conflict");
+            throw new Error(t(locale, "error.externalConflict"));
+          }
+        }
         // 先把未落盘的粘贴图片写出去，再写文档 —— 顺序反了会先触发一次
         // 「图片文件不存在」的重建
         preparedImages = await preparePendingImages(path, tab.content, tab.id);
-        await api.writeTextFile(path, tab.content, tab.encoding);
+        const fileIdentity = await api.writeTextFile(path, tab.content, tab.encoding, tab.path ? tab.diskContent : undefined);
         documentWritten = true;
         commitPendingImages(preparedImages);
+        markSaved(tab.id, path, tab.content, tab.encoding, fileIdentity);
         editorRefs.current.get(tab.id)?.refreshPreview();
         if (tab.path && tab.path === path) {
           try {
@@ -511,7 +553,6 @@ export default function App() {
             showError(error);
           }
         }
-        markSaved(tab.id, path, tab.content);
         addRecentFile(path);
         setRecentFiles(getRecentFiles());
         if (useTabsStore.getState().activeId === tab.id) {
@@ -521,6 +562,7 @@ export default function App() {
         showSuccess(t(locale, "toast.saved"));
         return path;
       } catch (e) {
+        if (e instanceof api.MissingFileError) useTabsStore.getState().setExternalStatus(tab.id, "unavailable");
         if (!documentWritten) await rollbackPendingImages(preparedImages);
         showError(e);
         return null;
@@ -544,7 +586,7 @@ export default function App() {
     try {
       managedImages = await prepareManagedImagesForSaveAs(tab.path, p, tab.content);
       preparedImages = await preparePendingImages(p, managedImages.content, tab.id);
-      await api.writeTextFile(p, managedImages.content, UTF8_TEXT_ENCODING);
+      const fileIdentity = await api.writeTextFile(p, managedImages.content, UTF8_TEXT_ENCODING);
       documentWritten = true;
       commitPendingImages(preparedImages);
       editorRefs.current.get(tab.id)?.refreshPreview();
@@ -553,7 +595,7 @@ export default function App() {
         const currentContent = rewriteManagedImageReferences(currentTab.content, managedImages.replacements);
         if (currentContent !== currentTab.content) updateContent(tab.id, currentContent);
       }
-      markSaved(tab.id, p, managedImages.content, UTF8_TEXT_ENCODING);
+      markSaved(tab.id, p, managedImages.content, UTF8_TEXT_ENCODING, fileIdentity);
       addRecentFile(p);
       setRecentFiles(getRecentFiles());
       if (useTabsStore.getState().activeId === tab.id) {
@@ -623,6 +665,33 @@ export default function App() {
     setSaveChoiceName(null);
   };
 
+  const resolveSessionDraft = async (tab: SessionTab): Promise<SessionTab | "discard" | null> => {
+    if (closingRef.current) return null;
+    const choice = await new Promise<"save" | "discard" | "cancel">((resolve) => {
+      sessionDraftChoice.current = resolve;
+      setSessionDraftPrompt(tab);
+    });
+    if (choice === "discard") return "discard";
+    if (choice === "cancel") return null;
+    try {
+      const path = await api.saveFileDialog(tab.path ? basename(tab.path) : undefined);
+      if (!path) return null;
+      if (useTabsStore.getState().tabs.some((item) => item.path && sameDocumentPath(item.path, path))) {
+        throw new Error(t(getLocale(), "tabs.pathOpen"));
+      }
+      return await saveSessionDraft(tab, path);
+    } catch (error) {
+      showError(error);
+      return null;
+    }
+  };
+
+  const resolveSessionDraftChoice = (choice: "save" | "discard" | "cancel") => {
+    sessionDraftChoice.current?.(choice);
+    sessionDraftChoice.current = null;
+    setSessionDraftPrompt(null);
+  };
+
   const saveAllTabs = useCallback(async () => {
     for (const tab of useTabsStore.getState().tabs) {
       if (tab.dirty && !(await saveTab(tab.id))) return false;
@@ -649,6 +718,7 @@ export default function App() {
           }
         }
         const closedSnapshot = {
+          fileIdentity: tab.fileIdentity,
           path: tab.path,
           content: tab.content,
           diskContent: tab.diskContent,
@@ -869,33 +939,61 @@ export default function App() {
   }, []);
 
   const handleExternalChange = useCallback(async () => {
-    const tab = getActive();
-    if (!tab?.path) return;
-    try {
-      const disk = await api.readTextFile(tab.path);
-      if (useTabsStore.getState().activeId !== tab.id) return;
-      const current = getActive();
-      if (!current || current.path !== tab.path) return;
-      if (disk.content === current.content || disk.content === current.diskContent) return;
-      // 磁盘上就是当前基线或仍在进行的应用写入：不是外部修改
-      if (api.isSelfWritePending(tab.path, disk.content)) return;
-      if (current.dirty) {
-        setReloadPrompt(true);
-      } else {
-        loadFromDisk(tab.id, tab.path, disk.content, disk.encoding);
-        show(t(locale, "toast.externalReload"));
+    if (!externalSyncRef.current.active) return;
+    const epoch = externalSyncRef.current.epoch;
+    await Promise.all(useTabsStore.getState().tabs.map(async (tab) => {
+      if (!tab.path) return;
+      let path = tab.path;
+      const check = (externalChecksRef.current.get(tab.id) ?? 0) + 1;
+      externalChecksRef.current.set(tab.id, check);
+      const currentTab = () => externalSyncRef.current.active && externalSyncRef.current.epoch === epoch
+        && externalChecksRef.current.get(tab.id) === check
+        ? useTabsStore.getState().tabs.find((item) => item.id === tab.id && item.path === path) : undefined;
+      try {
+        let disk: api.TextFileContent;
+        try {
+          disk = await api.readTextFile(path);
+        } catch (error) {
+          if (!(error instanceof api.MissingFileError) || !tab.fileIdentity) throw error;
+          const renamedPath = await api.findRenamedFile(path, tab.fileIdentity);
+          if (!renamedPath || !currentTab()) throw error;
+          disk = await api.readTextFile(renamedPath);
+          if (disk.fileIdentity !== tab.fileIdentity || !currentTab()
+            || !followRenamedTab(tab.id, path, renamedPath)) throw error;
+          path = renamedPath;
+        }
+        const current = currentTab();
+        if (!current || api.isSelfWritePending(path, disk.content)) return;
+        const store = useTabsStore.getState();
+        if (disk.content === current.content) {
+          store.markSaved(tab.id, path, disk.content, disk.encoding, disk.fileIdentity);
+        } else if (disk.content === current.diskContent) {
+          store.setExternalStatus(tab.id, undefined);
+        } else if (current.dirty) {
+          store.setExternalStatus(tab.id, "conflict");
+          if (store.activeId === tab.id && current.externalStatus !== "conflict") setReloadPrompt(true);
+        } else {
+          loadFromDisk(tab.id, path, disk.content, disk.encoding, disk.fileIdentity);
+          if (store.activeId === tab.id) show(t(locale, "toast.externalReload"));
+        }
+      } catch {
+        const current = currentTab();
+        if (!current) return;
+        useTabsStore.getState().setExternalStatus(tab.id, "unavailable");
+        if (useTabsStore.getState().activeId === tab.id && current.externalStatus !== "unavailable") {
+          showError(new Error(t(locale, "error.externalFileMissing")));
+        }
       }
-    } catch {
-      showError(new Error(t(locale, "error.externalFileMissing")));
-    }
-  }, [getActive, loadFromDisk, show, showError, locale]);
+    }));
+  }, [loadFromDisk, show, showError, locale, followRenamedTab]);
 
   const reloadFromDisk = useCallback(async () => {
     const tab = getActive();
     if (!tab?.path) return;
     try {
       const disk = await api.readTextFile(tab.path);
-      loadFromDisk(tab.id, tab.path, disk.content, disk.encoding);
+      if (!useTabsStore.getState().tabs.some((item) => item.id === tab.id && item.path === tab.path)) return;
+      loadFromDisk(tab.id, tab.path, disk.content, disk.encoding, disk.fileIdentity);
       setReloadPrompt(false);
       show(t(locale, "toast.reloaded"));
     } catch (error) {
@@ -1220,7 +1318,13 @@ export default function App() {
         void bootRef.current.loadFile(p, { external: true });
       }
     };
-    track(api.onFileChanged(() => { if (!disposed) void bootRef.current.handleExternalChange(); }));
+    let externalChangeTimer: ReturnType<typeof setTimeout> | undefined;
+    track(api.onFileChanged(() => {
+      clearTimeout(externalChangeTimer);
+      externalChangeTimer = setTimeout(() => {
+        if (!disposed) void bootRef.current.handleExternalChange();
+      }, 120);
+    }));
     track(api.onMenu((action) => {
       if (disposed) return;
       const b = bootRef.current;
@@ -1280,22 +1384,31 @@ export default function App() {
       un.push(f);
       void api.getStartupFile().then(async (p) => {
         if (disposed) return;
+        const startupOpens = [...(p ? [p] : []), ...pendingOpens.splice(0)];
+        ready = true;
+        await Promise.all(startupOpens.map((path) => bootRef.current.loadFile(path, { external: true })));
+        if (disposed) return;
+        const restoreRequest = fileLoadRequestRef.current;
         let restored = false;
         try {
           if (getRestoreLastFile()) {
             const snapshot = await loadSession();
             if (disposed) return;
             if (snapshot) {
-              const recovered = await restoreSession(snapshot, p, () => disposed);
+              const recovered = await restoreSession(snapshot, startupOpens[startupOpens.length - 1] ?? null, () => disposed, resolveSessionDraft,
+                () => restoreRequest === fileLoadRequestRef.current);
+              if (disposed) return;
+              deferredSessionTabs.current = recovered.deferredTabs;
               restored = true;
-              for (const path of recovered) show(t(getLocale(), "toast.sessionDraftRecovered", { path }));
+              for (const path of recovered.recoveredPaths) show(t(getLocale(), "toast.sessionDraftSaved", { path }));
+              for (const path of recovered.unavailablePaths) show(t(getLocale(), "toast.sessionFileUnavailable", { path }));
             }
           }
         } catch (error) {
           if (!disposed) showError(error);
         }
         if (disposed) return;
-        sessionBackupRef.current = startSessionBackup(getRestoreLastFile);
+        sessionBackupRef.current = startSessionBackup(getRestoreLastFile, () => deferredSessionTabs.current);
         ready = true;
         finishSessionReady();
         if (getRestoreLastFolder()) {
@@ -1319,17 +1432,19 @@ export default function App() {
             });
           });
         }
-        if (!p && !pendingOpens.length && !restored && getRestoreLastFile()) {
+        if (!startupOpens.length && !restored && restoreRequest === fileLoadRequestRef.current
+          && !useTabsStore.getState().getActive()?.path && getRestoreLastFile()) {
           const last = getLastFile();
           if (last) void bootRef.current.loadFile(last);
         }
-        if (p) handleOpenFile(p);
-        pendingOpens.forEach(handleOpenFile);
       }).catch((error) => { if (!disposed) showError(error); finishSessionReady(); });
     });
 
     return () => {
       disposed = true;
+      sessionDraftChoice.current?.("cancel");
+      clearTimeout(externalChangeTimer);
+      sessionDraftChoice.current = null;
       finishSessionReady();
       sessionBackupRef.current?.stop();
       sessionBackupRef.current = null;
@@ -1441,16 +1556,15 @@ export default function App() {
     closingRef.current = true;
     try {
       await flushSettingsStore();
+      resolveSessionDraftChoice("cancel");
       await sessionReadyRef.current;
-      if (getRestoreLastFile()) {
-        if (!sessionBackupRef.current) throw new Error(t(locale, "error.sessionBackupUnavailable"));
-        await sessionBackupRef.current.flush();
-        await win.destroy();
-        return;
-      }
       const discarded = new Map<string, string>();
       for (const tab of useTabsStore.getState().tabs) {
         if (!tab.dirty) continue;
+        if (tab.path) {
+          if (!(await saveTab(tab.id))) { activateTab(tab.id); return; }
+          continue;
+        }
         activateTab(tab.id);
         const choice = await askSaveChanges(tab);
         if (choice === "cancel") return;
@@ -1458,6 +1572,8 @@ export default function App() {
         else if (!(await saveTab(tab.id))) return;
       }
       if (useTabsStore.getState().tabs.some((tab) => tab.dirty && discarded.get(tab.id) !== tab.content)) return;
+      for (const id of discarded.keys()) useTabsStore.getState().closeTab(id);
+      if (getRestoreLastFile() && !sessionBackupRef.current) throw new Error(t(locale, "error.sessionBackupUnavailable"));
       await sessionBackupRef.current?.flush();
       await win.destroy();
     } catch (error) {
@@ -1491,6 +1607,7 @@ export default function App() {
       tablePickerOpen ||
       confirmMessage ||
       saveChoiceName !== null ||
+      sessionDraftPrompt !== null ||
       linkDialogText !== null ||
       imageDialog !== null ||
       promptDialog ||
@@ -1579,6 +1696,7 @@ export default function App() {
     tablePickerOpen,
     confirmMessage,
     saveChoiceName,
+    sessionDraftPrompt,
     linkDialogText,
     imageDialog,
     promptDialog,
@@ -1710,20 +1828,35 @@ export default function App() {
 
   useEffect(() => {
     setTitle(active?.path ?? null);
-    setReloadPrompt(false);
-    const watchedId = active?.id;
-    const watchedPath = active?.path;
     if (active?.path) {
       if (!active.externalDocument && !active.sampleDocument) setLastFile(active.path);
     } else {
       clearLastFile();
     }
-    fileWatchChainRef.current = fileWatchChainRef.current.catch(() => undefined)
-      .then(() => watchedPath ? api.watchFile(watchedPath) : api.unwatchFile())
-      .then(() => {
-        if (watchedId === useTabsStore.getState().activeId && watchedPath) return handleExternalChange();
-      }).catch(showError);
+    if (active?.externalStatus) {
+      showError(new Error(t(locale, active.externalStatus === "conflict" ? "error.externalConflict" : "error.externalFileMissing")));
+      if (active.externalStatus === "conflict") setReloadPrompt(true);
+    }
+    void handleExternalChange();
   }, [active?.id, active?.path, setTitle, showError, handleExternalChange]);
+
+  const watchedPathsKey = JSON.stringify(tabs.flatMap((tab) => tab.path ? [tab.path] : []).sort());
+  useEffect(() => {
+    const paths = JSON.parse(watchedPathsKey) as string[];
+    fileWatchChainRef.current = fileWatchChainRef.current.catch(() => undefined)
+      .then(() => paths.length ? api.watchFiles(paths) : api.unwatchFile())
+      .then(handleExternalChange).catch(showError);
+  }, [watchedPathsKey, handleExternalChange, showError]);
+
+  useEffect(() => {
+    const checkFiles = () => { if (!document.hidden) void handleExternalChange(); };
+    window.addEventListener("focus", checkFiles);
+    document.addEventListener("visibilitychange", checkFiles);
+    return () => {
+      window.removeEventListener("focus", checkFiles);
+      document.removeEventListener("visibilitychange", checkFiles);
+    };
+  }, [handleExternalChange]);
 
   const stats = useMemo(() => {
     const text = active?.content ?? "";
@@ -1904,6 +2037,8 @@ export default function App() {
             onSelect={(id) => {
               fileLoadRequestRef.current++;
               activateTab(id);
+              const tab = useTabsStore.getState().tabs.find((item) => item.id === id);
+              if (tab?.externalStatus) showError(new Error(t(locale, tab.externalStatus === "conflict" ? "error.externalConflict" : "error.externalFileMissing")));
             }} onClose={(id) => void handleCloseFile(id)} onCloseMany={(ids) => void handleCloseFile(ids)} onNew={() => void handleNewFile()} />}
           {showDocumentAccessControl && (
             <button
@@ -1983,6 +2118,13 @@ export default function App() {
       )}
       <Toast message={toastMessage} kind={toastKind} />
       <Suspense fallback={null}>
+        {sessionDraftPrompt && <ConfirmDialog locale={locale}
+          message={t(locale, "session.unavailableDraft", { path: sessionDraftPrompt.path ?? "" })}
+          confirmLabel={t(locale, "menu.saveAs")}
+          alternativeLabel={t(locale, "tabs.discard")}
+          onConfirm={() => resolveSessionDraftChoice("save")}
+          onAlternative={() => resolveSessionDraftChoice("discard")}
+          onCancel={() => resolveSessionDraftChoice("cancel")} />}
         {saveChoiceName !== null && <ConfirmDialog locale={locale}
           message={t(locale, "tabs.saveChanges", { name: saveChoiceName })}
           confirmLabel={t(locale, "menu.save")}

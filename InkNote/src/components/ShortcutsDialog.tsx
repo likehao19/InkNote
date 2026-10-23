@@ -105,6 +105,7 @@ const shortcutGroups = (app: ShortcutMap): { titleKey: MessageKey; items: [Messa
       ["shortcuts.componentSelectAll", modShortcut("A")],
       ["shortcuts.tableNextCell", "Tab"],
       ["shortcuts.tablePrevCell", "Shift+Tab"],
+      ["shortcuts.tableLineBreak", "Enter / Shift+Enter"],
       ["shortcuts.exitComponent", "Esc"],
     ],
   },

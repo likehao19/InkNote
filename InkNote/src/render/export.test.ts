@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import { markdownToBodyHtml, markdownToHtml } from "./export";
 
 describe("markdownToBodyHtml", () => {
+  it("preserves table cell line breaks in exported HTML", async () => {
+    const html = await markdownToBodyHtml("| A |\n| --- |\n| one<br>two<br>three |");
+    expect(html).toMatch(/<td>one<br>two<br>three<\/td>/);
+  });
   it("保留允许的排版标签并移除可执行 HTML", async () => {
     const html = await markdownToBodyHtml(
       '<u onclick="alert(1)">下划线</u> ==高亮== <script>alert(2)</script> [危险](javascript:alert(3))',

@@ -24,6 +24,8 @@ const BACKEND_ERROR_KEYS: Record<string, MessageKey> = {
   pdf_export_unsupported: "error.pdfExportUnsupported",
   text_encoding_invalid: "error.textEncodingInvalid",
   text_encoding_unrepresentable: "error.textEncodingUnrepresentable",
+  file_not_found: "error.externalFileMissing",
+  file_changed: "error.externalConflict",
 };
 
 function invokeLocalized<T>(command: string, args: Record<string, unknown>): Promise<T> {
@@ -37,14 +39,28 @@ function invokeLocalized<T>(command: string, args: Record<string, unknown>): Pro
 export interface TextFileContent {
   content: string;
   encoding: TextEncoding;
+  fileIdentity?: string;
+}
+
+export class MissingFileError extends Error {
+  constructor() { super(t(getLocale(), "error.externalFileMissing")); }
 }
 
 export function readTextFile(path: string): Promise<TextFileContent> {
-  return invokeLocalized("read_text_file", { path });
+  return invoke<TextFileContent>("read_text_file", { path }).catch((error) => {
+    if (String(error) === "file_not_found") throw new MissingFileError();
+    const key = BACKEND_ERROR_KEYS[String(error)];
+    if (key) throw new Error(t(getLocale(), key));
+    throw error;
+  });
 }
 
 export async function readFile(path: string): Promise<string> {
   return (await readTextFile(path)).content;
+}
+
+export function findRenamedFile(path: string, identity: string): Promise<string | null> {
+  return invoke("find_renamed_file", { path, identity });
 }
 /**
  * 记录自己刚写出去的内容。
@@ -78,9 +94,10 @@ export function writeTextFile(
   path: string,
   content: string,
   encoding: TextEncoding = UTF8_TEXT_ENCODING,
-): Promise<void> {
+  expectedContent?: string,
+): Promise<string | null> {
   trackSelfWrite(path, content, 1);
-  return invokeLocalized<void>("write_text_file", { path, content, encoding }).finally(() => {
+  return invokeLocalized<string | null>("write_text_file", { path, content, encoding, expectedContent }).finally(() => {
     trackSelfWrite(path, content, -1);
   });
 }
@@ -124,8 +141,8 @@ export function getStartupFile(): Promise<string | null> {
   if (!startupFileOnce) startupFileOnce = invoke<string | null>("get_startup_file");
   return startupFileOnce;
 }
-export function watchFile(path: string): Promise<void> {
-  return invoke("watch_file", { path });
+export function watchFiles(paths: string[]): Promise<void> {
+  return invoke("watch_file", { paths });
 }
 export function unwatchFile(): Promise<void> {
   return invoke("unwatch_file");

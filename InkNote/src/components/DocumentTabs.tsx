@@ -20,9 +20,10 @@ export default function DocumentTabs({ tabs, activeId, locale, onSelect, onClose
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const menuIndex = menu ? tabs.findIndex((tab) => tab.id === menu.id) : -1;
   const closeMenu = () => setMenu(null);
+  const tabOrder = tabs.map((tab) => tab.id).join(",");
   useEffect(() => {
     strip.current?.querySelector('[aria-selected="true"]')?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
-  }, [activeId]);
+  }, [activeId, tabOrder]);
   return <div className="document-tabs">
     <div ref={strip} role="tablist" aria-label={t(locale, "tabs.documents")} className="document-tab-list" onScroll={closeMenu}>
       {tabs.map((tab, index) => {
@@ -49,6 +50,7 @@ export default function DocumentTabs({ tabs, activeId, locale, onSelect, onClose
               requestAnimationFrame(() => (strip.current?.querySelectorAll('[role="tab"]')[next] as HTMLElement)?.focus());
             }}>
             <span className="document-tab-name">{name}</span>
+            {tab.externalStatus && <span className="document-tab-error" aria-label={t(locale, tab.externalStatus === "conflict" ? "error.externalConflict" : "error.externalFileMissing")}>●</span>}
             {tab.dirty && <span className="document-tab-dirty" aria-label={t(locale, "tabs.unsaved")}>●</span>}
           </button>
           <button type="button" className="document-tab-close" aria-label={t(locale, "tabs.close", { name })}

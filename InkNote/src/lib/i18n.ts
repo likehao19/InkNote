@@ -414,7 +414,9 @@ export const messages = {
 
     "settings.restoreLastFile": "恢复上次标签页和草稿",
     "settings.restoreLastFileDesc": "退出时自动备份所有标签页，包括未保存内容；启动时恢复。关闭此项后，退出时仍会询问保存。",
-    "toast.sessionDraftRecovered": "原文件已修改或无法读取，已恢复为独立草稿：{path}",
+    "session.unavailableDraft": "文件已移动、删除、无法读取或内容已改变：{path}。仍有未保存内容，可另存为或放弃；取消后保留备份，不打开额外标签。",
+    "toast.sessionDraftSaved": "未保存内容已另存为：{path}",
+    "toast.sessionFileUnavailable": "暂时无法读取文件，已保留会话记录：{path}",
     "error.sessionBackupUnavailable": "会话备份尚未就绪，暂时无法退出，请稍后重试或先保存文档。",
     "settings.fontFamily": "正文字体",
     "settings.fontFamily.system": "系统默认",
@@ -472,6 +474,7 @@ export const messages = {
     "shortcuts.componentSelectAll": "全选当前组件内容",
     "shortcuts.tableNextCell": "表格下一个单元格",
     "shortcuts.tablePrevCell": "表格上一个单元格",
+    "shortcuts.tableLineBreak": "表格单元格内换行",
     "shortcuts.exitComponent": "退出当前组件",
 
     "editor.code.plainText": "纯文本",
@@ -502,6 +505,7 @@ export const messages = {
     "error.parentDirectoryMissing": "父目录不存在",
     "error.fileExists": "文件已存在",
     "error.externalFileMissing": "当前文件已被移动、删除或暂时无法读取，请另存或重新打开文件。",
+    "error.externalConflict": "磁盘文件和编辑器内容均有修改。请重新加载磁盘内容，或另存为以保留当前修改。",
     "error.pdfExportUnsupported": "当前系统暂不支持直接导出 PDF，请先导出 HTML 后使用系统的 PDF 功能转换。",
     "error.textEncodingInvalid": "无法识别或解码该文本文件的字符编码。",
     "error.textEncodingUnrepresentable": "文档包含原字符编码无法保存的内容，请使用“另存为”转换为 UTF-8。",
@@ -938,7 +942,9 @@ export const messages = {
 
     "settings.restoreLastFile": "Restore Tabs and Drafts",
     "settings.restoreLastFileDesc": "Back up all tabs, including unsaved content, on exit and restore them at startup. When disabled, exit still asks to save changes.",
-    "toast.sessionDraftRecovered": "The original changed or could not be read. Recovered as a separate draft: {path}",
+    "session.unavailableDraft": "The file was moved, deleted, is unreadable, or has changed: {path}. Unsaved content remains. Save it elsewhere or discard it. Cancel keeps the backup without opening an extra tab.",
+    "toast.sessionDraftSaved": "Unsaved content saved to: {path}",
+    "toast.sessionFileUnavailable": "The file is temporarily unreadable. Its session record was kept: {path}",
     "error.sessionBackupUnavailable": "Session backup is not ready. Try exiting again later or save your documents first.",
     "settings.fontFamily": "Body Font",
     "settings.fontFamily.system": "System",
@@ -996,6 +1002,7 @@ export const messages = {
     "shortcuts.componentSelectAll": "Select Current Component",
     "shortcuts.tableNextCell": "Next Table Cell",
     "shortcuts.tablePrevCell": "Previous Table Cell",
+    "shortcuts.tableLineBreak": "Line Break in Table Cell",
     "shortcuts.exitComponent": "Exit Current Component",
 
     "editor.code.plainText": "Plain Text",
@@ -1026,6 +1033,7 @@ export const messages = {
     "error.parentDirectoryMissing": "The parent folder does not exist",
     "error.fileExists": "The file already exists",
     "error.externalFileMissing": "The current file was moved, deleted, or cannot be read. Save it elsewhere or reopen it.",
+    "error.externalConflict": "Both the disk file and editor have changed. Reload from disk or use Save As to keep your edits.",
     "error.pdfExportUnsupported": "Direct PDF export is not supported on this system. Export HTML first, then convert it using the system PDF tools.",
     "error.textEncodingInvalid": "The text encoding could not be detected or decoded.",
     "error.textEncodingUnrepresentable": "This document contains characters that its original encoding cannot save. Use Save As to convert it to UTF-8.",

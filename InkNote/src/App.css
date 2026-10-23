@@ -1101,6 +1101,7 @@ html[data-theme="dark"] .file-tree .tree-filter-highlight {
 .document-tab.is-active { color: var(--fg); background: var(--bg-editor); border-bottom-color: var(--accent); }
 .document-tab > [role="tab"] { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; height: 100%; padding: 0 10px 0 14px; border: 0; background: transparent; color: inherit; font-size: 12px; cursor: pointer; }
 .document-tab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.document-tab-error { color: #d13438; font-size: 10px; }
 .document-tab-dirty { color: var(--accent); font-size: 8px; }
 .document-tab-close, .document-tab-new { display: grid; place-items: center; flex-shrink: 0; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--fg-muted); cursor: pointer; }
 .document-tab-close { margin-right: 5px; }
@@ -2314,6 +2315,7 @@ html.platform-mac .modal { border-radius: 10px; }
   user-select: text;
   cursor: text;
 }
+.md-table-widget [contenteditable="true"]:focus { white-space: pre-wrap; }
 .md-table-widget th:last-child,
 .md-table-widget td:last-child { border-right: none; }
 .md-table-widget tr:last-child td { border-bottom: none; }

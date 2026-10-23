@@ -48,7 +48,7 @@ impl OpenFileState {
 struct AppState {
     open_file: Mutex<OpenFileState>,
     watcher: Mutex<Option<RecommendedWatcher>>,
-    watched_path: Mutex<Option<String>>,
+    watched_paths: Mutex<Vec<String>>,
     dir_watcher: Mutex<Option<RecommendedWatcher>>,
     watched_dirs: Mutex<Vec<String>>,
 }
@@ -134,6 +134,83 @@ fn write_file_safely(path: &Path, content: &[u8]) -> Result<(), String> {
         let _ = std::fs::remove_file(&temp);
     }
     result
+}
+
+#[cfg(windows)]
+fn write_document_checked(path: &Path, content: &[u8], expected_content: Option<&str>) -> Result<(), String> {
+    use std::io::{Read, Seek, SeekFrom};
+    use std::os::windows::fs::OpenOptionsExt;
+
+    // Keep the existing file ID and creation time. Replacing a desktop file
+    // causes Explorer to treat it as a new icon and lose its manual position.
+    // Allow readers, but exclude other writers/deletion during backup and save.
+    let mut original = match OpenOptions::new().read(true).write(true).share_mode(1).open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return if expected_content.is_some() {
+            Err("file_not_found".to_string())
+        } else {
+            write_file_safely(path, content)
+        },
+        Err(error) => return Err(error.to_string()),
+    };
+    if let Some(expected) = expected_content {
+        let mut bytes = Vec::new();
+        original.read_to_end(&mut bytes).map_err(|error| error.to_string())?;
+        if decode_text_bytes(&bytes)?.content != expected {
+            return Err("file_changed".to_string());
+        }
+        original.seek(SeekFrom::Start(0)).map_err(|error| error.to_string())?;
+    }
+    // The backup stays off the desktop so it cannot disturb icon arrangement.
+    let (backup_path, mut backup) = create_temporary_sibling(&std::env::temp_dir().join("inknote-save-backup"))?;
+    let prepared = io::copy(&mut original, &mut backup).and_then(|_| backup.sync_all());
+    if let Err(error) = prepared {
+        drop(backup);
+        let _ = std::fs::remove_file(&backup_path);
+        return Err(error.to_string());
+    }
+    let result = (|| -> io::Result<()> {
+        original.seek(SeekFrom::Start(0))?;
+        original.write_all(content)?;
+        original.set_len(content.len() as u64)?;
+        original.sync_all()
+    })();
+    if let Err(error) = result {
+        let restored = (|| -> io::Result<()> {
+            backup.seek(SeekFrom::Start(0))?;
+            original.seek(SeekFrom::Start(0))?;
+            let length = io::copy(&mut backup, &mut original)?;
+            original.set_len(length)?;
+            original.sync_all()
+        })();
+        if let Err(restore_error) = restored {
+            return Err(format!("{error}; rollback failed: {restore_error}; original backup: {}", backup_path.display()));
+        }
+        drop(backup);
+        let _ = std::fs::remove_file(&backup_path);
+        return Err(error.to_string());
+    }
+    drop(backup);
+    let _ = std::fs::remove_file(&backup_path);
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn write_document_checked(path: &Path, content: &[u8], expected_content: Option<&str>) -> Result<(), String> {
+    if let Some(expected) = expected_content {
+        let bytes = std::fs::read(path).map_err(|error| {
+            if error.kind() == io::ErrorKind::NotFound { "file_not_found".to_string() } else { error.to_string() }
+        })?;
+        if decode_text_bytes(&bytes)?.content != expected {
+            return Err("file_changed".to_string());
+        }
+    }
+    write_file_safely(path, content)
+}
+
+#[cfg(test)]
+fn write_document_safely(path: &Path, content: &[u8]) -> Result<(), String> {
+    write_document_checked(path, content, None)
 }
 
 fn copy_file_without_overwrite(source: &Path, destination: &Path) -> Result<(), String> {
@@ -306,6 +383,43 @@ struct TextEncoding {
 struct TextFileContent {
     content: String,
     encoding: TextEncoding,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    file_identity: Option<String>,
+}
+
+#[cfg(windows)]
+fn file_identity(file: &File) -> Option<String> {
+    use std::os::windows::io::AsRawHandle;
+    #[repr(C)]
+    #[derive(Default)]
+    struct FileInformation {
+        attributes: u32,
+        created: [u32; 2],
+        accessed: [u32; 2],
+        modified: [u32; 2],
+        volume: u32,
+        size_high: u32,
+        size_low: u32,
+        links: u32,
+        index_high: u32,
+        index_low: u32,
+    }
+    #[link(name = "Kernel32")]
+    extern "system" {
+        fn GetFileInformationByHandle(handle: *mut std::ffi::c_void, info: *mut FileInformation) -> i32;
+    }
+    let mut info = FileInformation::default();
+    if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) } == 0 {
+        return None;
+    }
+    Some(format!("windows:{:x}:{:x}:{:x}", info.volume, info.index_high, info.index_low))
+}
+
+#[cfg(unix)]
+fn file_identity(file: &File) -> Option<String> {
+    use std::os::unix::fs::MetadataExt;
+    let metadata = file.metadata().ok()?;
+    Some(format!("unix:{:x}:{:x}", metadata.dev(), metadata.ino()))
 }
 
 fn decode_utf16(bytes: &[u8], little_endian: bool) -> Result<String, String> {
@@ -373,7 +487,7 @@ fn decode_text_bytes(bytes: &[u8]) -> Result<TextFileContent, String> {
             },
         )
     };
-    Ok(TextFileContent { content, encoding })
+    Ok(TextFileContent { content, encoding, file_identity: None })
 }
 
 fn encode_text_content(content: &str, encoding: &TextEncoding) -> Result<Vec<u8>, String> {
@@ -412,8 +526,15 @@ fn encode_text_content(content: &str, encoding: &TextEncoding) -> Result<Vec<u8>
 
 #[tauri::command]
 fn read_text_file(path: String) -> Result<TextFileContent, String> {
-    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
-    decode_text_bytes(&bytes)
+    use std::io::Read;
+    let mut file = File::open(path).map_err(|error| {
+        if error.kind() == io::ErrorKind::NotFound { "file_not_found".to_string() } else { error.to_string() }
+    })?;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes).map_err(|error| error.to_string())?;
+    let mut result = decode_text_bytes(&bytes)?;
+    result.file_identity = file_identity(&file);
+    Ok(result)
 }
 
 #[tauri::command]
@@ -427,9 +548,35 @@ fn write_file(path: String, content: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn write_text_file(path: String, content: String, encoding: TextEncoding) -> Result<(), String> {
+fn find_renamed_file(path: String, identity: String) -> Result<Option<String>, String> {
+    let original = Path::new(&path);
+    if original.try_exists().map_err(|error| error.to_string())? {
+        return Ok(None);
+    }
+    let Some(parent) = original.parent() else { return Ok(None) };
+    let entries = match std::fs::read_dir(parent) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.to_string()),
+    };
+    let mut found = None;
+    for entry in entries.flatten() {
+        if !entry.file_type().is_ok_and(|kind| kind.is_file()) { continue; }
+        let candidate = entry.path();
+        if File::open(&candidate).ok().and_then(|file| file_identity(&file)).as_deref() == Some(&identity) {
+            // Multiple hard links are ambiguous; never guess from name or contents.
+            if found.is_some() { return Ok(None); }
+            found = Some(candidate.to_string_lossy().into_owned());
+        }
+    }
+    Ok(found)
+}
+
+#[tauri::command]
+fn write_text_file(path: String, content: String, encoding: TextEncoding, expected_content: Option<String>) -> Result<Option<String>, String> {
     let bytes = encode_text_content(&content, &encoding)?;
-    write_file_safely(Path::new(&path), &bytes)
+    write_document_checked(Path::new(&path), &bytes, expected_content.as_deref())?;
+    Ok(File::open(&path).ok().and_then(|file| file_identity(&file)))
 }
 
 #[tauri::command]
@@ -829,20 +976,18 @@ fn save_session_backup(app: tauri::AppHandle, snapshot: serde_json::Value) -> Re
 fn watch_file(
     app: tauri::AppHandle,
     state: tauri::State<AppState>,
-    path: String,
+    paths: Vec<String>,
 ) -> Result<(), String> {
     {
-        let watched = state.watched_path.lock().unwrap();
-        if watched.as_deref() == Some(path.as_str()) {
+        let watched = state.watched_paths.lock().unwrap();
+        if *watched == paths {
             return Ok(());
         }
     }
 
     let mut watcher_guard = state.watcher.lock().unwrap();
-    *watcher_guard = None;
 
-    let emit_path = path.clone();
-    let target_path = PathBuf::from(&path);
+    let targets: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
     let app_handle = app.clone();
     let mut watcher = RecommendedWatcher::new(
         move |res: Result<notify::Event, notify::Error>| {
@@ -854,8 +999,12 @@ fn watch_file(
                         | EventKind::Remove(_)
                         | EventKind::Any
                 );
-                if relevant && event.paths.iter().any(|changed| changed == &target_path) {
-                    let _ = app_handle.emit("file-changed", emit_path.clone());
+                if relevant {
+                    for target in &targets {
+                        if event.paths.iter().any(|changed| changed == target) {
+                            let _ = app_handle.emit("file-changed", target.to_string_lossy().to_string());
+                        }
+                    }
                 }
             }
         },
@@ -863,22 +1012,24 @@ fn watch_file(
     )
     .map_err(|e| e.to_string())?;
 
-    let watch_target = Path::new(&path)
-        .parent()
-        .ok_or_else(|| "parent_directory_missing".to_string())?;
-    watcher
-        .watch(watch_target, RecursiveMode::NonRecursive)
-        .map_err(|e| e.to_string())?;
+    let parents: std::collections::HashSet<PathBuf> = paths.iter()
+        .filter_map(|path| Path::new(path).parent().map(Path::to_path_buf)).collect();
+    for parent in parents {
+        // Missing directories are rechecked on focus; do not disable other tabs' watchers.
+        if parent.is_dir() {
+            watcher.watch(&parent, RecursiveMode::NonRecursive).map_err(|e| e.to_string())?;
+        }
+    }
 
     *watcher_guard = Some(watcher);
-    *state.watched_path.lock().unwrap() = Some(path);
+    *state.watched_paths.lock().unwrap() = paths;
     Ok(())
 }
 
 #[tauri::command]
 fn unwatch_file(state: tauri::State<AppState>) {
     *state.watcher.lock().unwrap() = None;
-    *state.watched_path.lock().unwrap() = None;
+    state.watched_paths.lock().unwrap().clear();
 }
 
 #[tauri::command]
@@ -1606,12 +1757,13 @@ pub fn run() {
                 frontend_ready: false,
             }),
             watcher: Mutex::new(None),
-            watched_path: Mutex::new(None),
+            watched_paths: Mutex::new(Vec::new()),
             dir_watcher: Mutex::new(None),
             watched_dirs: Mutex::new(Vec::new()),
         })
         .invoke_handler(tauri::generate_handler![
             read_text_file,
+            find_renamed_file,
             read_file,
             write_text_file,
             write_file,
@@ -1868,6 +2020,94 @@ mod tests {
 
         drop(first_file);
         drop(second_file);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn file_identity_follows_a_rename_but_not_an_unrelated_file() {
+        let dir = test_directory("rename-identity");
+        std::fs::create_dir_all(&dir).unwrap();
+        let original = dir.join("1.md");
+        let renamed = dir.join("2.md");
+        std::fs::write(&original, "same content").unwrap();
+        let before = super::read_text_file(original.to_string_lossy().into_owned()).unwrap();
+        assert!(before.file_identity.is_some());
+        std::fs::rename(&original, &renamed).unwrap();
+        let after = super::read_text_file(renamed.to_string_lossy().into_owned()).unwrap();
+        assert_eq!(before.file_identity, after.file_identity);
+        assert_eq!(super::read_text_file(original.to_string_lossy().into_owned()).err().unwrap(), "file_not_found");
+        let find_renamed = || super::find_renamed_file(original.to_string_lossy().into_owned(), before.file_identity.clone().unwrap()).unwrap();
+        assert_eq!(find_renamed(), Some(renamed.to_string_lossy().into_owned()));
+        let alias = dir.join("alias.md");
+        std::fs::hard_link(&renamed, &alias).unwrap();
+        assert_eq!(find_renamed(), None);
+        std::fs::remove_file(alias).unwrap();
+        std::fs::write(&original, "same content").unwrap();
+        let unrelated = super::read_text_file(original.to_string_lossy().into_owned()).unwrap();
+        assert_ne!(after.file_identity, unrelated.file_identity);
+        assert_eq!(find_renamed(), None);
+        std::fs::remove_file(&original).unwrap();
+        std::fs::remove_file(&renamed).unwrap();
+        assert_eq!(find_renamed(), None);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn saving_existing_documents_preserves_file_identity_and_creation_time() {
+        let dir = test_directory("document-save");
+        std::fs::create_dir_all(&dir).unwrap();
+        let target = dir.join("note.md");
+        let link = dir.join("same-file.md");
+        std::fs::write(&target, "original").unwrap();
+        std::fs::hard_link(&target, &link).unwrap();
+        let created = target.metadata().unwrap().created().unwrap();
+        for content in ["a longer saved document", "短", ""] {
+            super::write_document_safely(&target, content.as_bytes()).unwrap();
+            assert_eq!(std::fs::read_to_string(&target).unwrap(), content);
+            assert_eq!(std::fs::read_to_string(&link).unwrap(), content);
+            assert_eq!(target.metadata().unwrap().created().unwrap(), created);
+        }
+        super::write_document_safely(&dir.join("new.md"), b"new").unwrap();
+        assert_eq!(std::fs::read_to_string(dir.join("new.md")).unwrap(), "new");
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 3);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn saving_a_readonly_document_keeps_its_contents() {
+        let dir = test_directory("readonly-document");
+        std::fs::create_dir_all(&dir).unwrap();
+        let target = dir.join("note.md");
+        std::fs::write(&target, "original").unwrap();
+        let mut permissions = target.metadata().unwrap().permissions();
+        permissions.set_readonly(true);
+        std::fs::set_permissions(&target, permissions.clone()).unwrap();
+        let result = super::write_document_safely(&target, b"changed");
+        permissions.set_readonly(false);
+        std::fs::set_permissions(&target, permissions).unwrap();
+        assert!(result.is_err());
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "original");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn guarded_document_save_rejects_changed_or_missing_files() {
+        let dir = test_directory("guarded-document");
+        std::fs::create_dir_all(&dir).unwrap();
+        let target = dir.join("note.md");
+        assert_eq!(super::write_document_checked(&target, b"local", Some("original")).unwrap_err(), "file_not_found");
+        assert!(!target.exists());
+        std::fs::write(&target, "external").unwrap();
+        assert_eq!(super::write_document_checked(&target, b"local", Some("original")).unwrap_err(), "file_changed");
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "external");
+        super::write_document_checked(&target, b"saved", Some("external")).unwrap();
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "saved");
+        // Compare decoded text, not encoded bytes, for non-UTF-8 documents.
+        std::fs::write(&target, [0xff, 0xfe, b'A', 0]).unwrap();
+        super::write_document_checked(&target, b"UTF8", Some("A")).unwrap();
+        assert_eq!(std::fs::read_to_string(&target).unwrap(), "UTF8");
         std::fs::remove_dir_all(dir).unwrap();
     }
 

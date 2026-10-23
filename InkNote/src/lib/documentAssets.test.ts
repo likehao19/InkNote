@@ -25,7 +25,7 @@ describe("managed document assets", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockedApi.writeFile.mockResolvedValue(undefined);
-    mockedApi.writeTextFile.mockResolvedValue(undefined);
+    mockedApi.writeTextFile.mockResolvedValue(null);
     mockedApi.createDir.mockResolvedValue(undefined);
     mockedApi.removePath.mockResolvedValue(undefined);
   });

@@ -33,6 +33,17 @@ describe("document restoration", () => {
 });
 
 describe("document identity", () => {
+  it("opens background documents without changing the active tab and returns their own ID", () => {
+    const state = useTabsStore.getState();
+    const active = state.openTab("/active.md", "active");
+    const background = state.openTab("/background.md", "background", undefined, undefined, false);
+    expect(background).not.toBe(active);
+    expect(state.getActive()?.id).toBe(active);
+    expect(state.openTab("/background.md", "old text", undefined, undefined, false)).toBe(background);
+    expect(state.getActive()?.id).toBe(active);
+    expect(useTabsStore.getState().tabs.find((tab) => tab.id === background)?.content).toBe("background");
+  });
+
   it("preserves modified documents and per-tab access modes when switching", () => {
     const state = useTabsStore.getState();
     const a = state.openTab("/notes/A.md", "A");

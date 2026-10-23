@@ -102,7 +102,7 @@ export function parseTable(
 }
 
 function escapeCell(text: string): string {
-  return text.replace(/\|/g, "\\|").replace(/\n/g, " ").trim();
+  return text.replace(/\|/g, "\\|").replace(/\r\n?|\n/g, "<br>").trim();
 }
 
 function delimCell(align: TableAlign): string {
@@ -504,6 +504,8 @@ export function renderInlineMarkdown(src: string): string {
     .map((part, i) => {
       if (i % 2 === 1) return `<code>${part.slice(1, -1)}</code>`;
       return part
+        .replace(/&lt;br\s*\/?&gt;/gi, "<br>")
+        .replace(/\r\n?|\n/g, "<br>")
         .replace(/\[([^\]]*)\]\(([^)\s]+)\)/g, (_match, label: string, target: string) => {
           if (/^(?:javascript|data|vbscript):/i.test(target)) return label;
           return `<a class="md-table-link" data-href="${target}">${label}</a>`;
@@ -518,6 +520,31 @@ export function renderInlineMarkdown(src: string): string {
     .join("");
 }
 
+/** Use real line breaks while editing, leaving inline code literals intact. */
+function editableCellText(raw: string): string {
+  return raw.split(/(`[^`]+`)/g)
+    .map((part, index) => index % 2 ? part : part.replace(/<br\s*\/?>/gi, "\n"))
+    .join("");
+}
+
+function insertCellText(cell: HTMLElement, text: string) {
+  const selection = window.getSelection();
+  const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+  if (range && cell.contains(range.startContainer) && cell.contains(range.endContainer)) {
+    range.deleteContents();
+    const node = document.createTextNode(text);
+    range.insertNode(node);
+    range.setStartAfter(node);
+    range.collapse(true);
+    selection!.removeAllRanges();
+    selection!.addRange(range);
+  } else {
+    cell.appendChild(document.createTextNode(text));
+    placeCaret(cell, true);
+  }
+  cell.dataset.raw = cell.textContent ?? "";
+}
+
 /** 写入单元格：聚焦中的单元格保持源码，其余显示渲染结果 */
 function setCellRaw(cell: HTMLElement, raw: string, columnAlign: TableAlign = "left") {
   const parsed = parseCellValue(raw);
@@ -526,7 +553,8 @@ function setCellRaw(cell: HTMLElement, raw: string, columnAlign: TableAlign = "l
   else delete cell.dataset.cellAlign;
   cell.style.textAlign = cellAlignStyle(parsed.align ?? columnAlign);
   if (document.activeElement === cell) {
-    if (cell.textContent !== parsed.content) cell.textContent = parsed.content;
+    const editable = editableCellText(parsed.content);
+    if (cell.textContent !== editable) cell.textContent = editable;
   } else {
     cell.innerHTML = renderInlineMarkdown(parsed.content);
   }
@@ -541,7 +569,8 @@ function cellRawText(cell: HTMLElement): string {
 function showCellSource(cell: HTMLElement) {
   const raw = cell.dataset.raw ?? cell.textContent ?? "";
   cell.dataset.raw = raw;
-  if (cell.textContent !== raw) cell.textContent = raw;
+  const editable = editableCellText(raw);
+  if (cell.textContent !== editable) cell.textContent = editable;
 }
 
 /**
@@ -737,6 +766,7 @@ function selectedCells(wrap: HTMLElement): HTMLElement[] {
 function cellPlainText(cell: HTMLElement): string {
   const template = document.createElement("template");
   template.innerHTML = renderInlineMarkdown(cellRawText(cell));
+  template.content.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
   return (template.content.textContent ?? "").replace(/\u00a0/g, " ");
 }
 
@@ -1274,19 +1304,21 @@ function attachCellEvents(wrap: HTMLElement) {
     }
 
     event.preventDefault();
-    const text = (event.clipboardData?.getData("text/plain") ?? "").replace(/\r?\n/g, " ");
-    const sel = window.getSelection();
-    if (sel && sel.rangeCount > 0 && cell.contains(sel.getRangeAt(0).startContainer)) {
-      const range = sel.getRangeAt(0);
-      range.deleteContents();
-      range.insertNode(document.createTextNode(text));
-      range.collapse(false);
-      sel.removeAllRanges();
-      sel.addRange(range);
-    } else {
-      cell.textContent = (cell.textContent ?? "") + text;
-    }
-    cell.dataset.raw = cell.textContent ?? "";
+    const text = (event.clipboardData?.getData("text/plain") ?? "").replace(/\r\n?/g, "\n");
+    insertCellText(cell, text);
+    scheduleSync(wrap, view);
+  });
+
+  // Mobile keyboards can send beforeinput without a keydown event.
+  wrap.addEventListener("beforeinput", (event) => {
+    if (event.inputType !== "insertParagraph" && event.inputType !== "insertLineBreak") return;
+    if (composing || event.isComposing) return;
+    const cell = cellOf(event);
+    const view = viewOf();
+    if (!cell || !view) return;
+    event.preventDefault();
+    if (view.state.readOnly) return;
+    insertCellText(cell, "\n");
     scheduleSync(wrap, view);
   });
 
@@ -1363,15 +1395,12 @@ function attachCellEvents(wrap: HTMLElement) {
     }
 
     if (event.key === "Enter") {
+      if (composing || event.isComposing) return;
       event.preventDefault();
-      const info = getFocusedCellInfo(wrap);
-      if (!info) return;
-      const rows = rowCount(wrap);
-      if (info.row >= rows - 1) {
-        applyTableEdit(wrap, view, "row-below");
-      } else {
-        focusCellOnWrap(wrap, info.row + 1, info.col);
-      }
+      event.stopPropagation();
+      clearCellSelection(wrap);
+      insertCellText(cell, "\n");
+      scheduleSync(wrap, view);
       return;
     }
 

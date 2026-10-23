@@ -6,6 +6,7 @@ import { codeLanguageCompletion } from "./editor/codeFence";
 import { createEditor, type EditorHandle } from "./editor";
 import sampleMarkdown from "../sample.md?raw";
 import { writeText as writeClipboardText } from "@tauri-apps/plugin-clipboard-manager";
+import { renderInlineMarkdown, selectedTableText } from "./editor/widgets/table";
 
 vi.mock("@tauri-apps/plugin-clipboard-manager", () => ({
   readText: vi.fn(),
@@ -45,6 +46,70 @@ afterEach(() => {
 });
 
 describe("Markdown 所见即所得预览", () => {
+  it.each([false, true])("inserts a line break inside a table cell (shift=%s) and retains it after reopening", async (shiftKey) => {
+    const { parent, handle } = mount("| A | B |\n| --- | --- |\n| first | other |");
+    const cell = parent.querySelector<HTMLElement>("tbody td")!;
+    cell.focus();
+    const caret = document.createRange();
+    caret.selectNodeContents(cell);
+    caret.collapse(false);
+    window.getSelection()!.removeAllRanges();
+    window.getSelection()!.addRange(caret);
+    cell.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", shiftKey, bubbles: true, cancelable: true }));
+    expect(document.activeElement).toBe(cell);
+    expect(cell.textContent).toBe("first\n");
+    expect(parent.querySelectorAll("tbody tr")).toHaveLength(1);
+    await nextFrame();
+    expect(handle.view.state.doc.toString()).toContain("| first<br> | other |");
+    cell.blur();
+    expect(cell.querySelectorAll("br")).toHaveLength(1);
+    const reopened = mount(handle.view.state.doc.toString(), true);
+    expect(reopened.parent.querySelector("tbody td br")).not.toBeNull();
+    const next = parent.querySelectorAll<HTMLElement>("tbody td")[1];
+    cell.focus();
+    expect(cell.textContent).toBe("first\n");
+    cell.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }));
+    expect(document.activeElement).toBe(next);
+  });
+
+  it("preserves pasted multiline cell text in Markdown, preview and copied text", async () => {
+    const { parent, handle } = mount("| A |\n| --- |\n| old |");
+    const cell = parent.querySelector<HTMLElement>("tbody td")!;
+    cell.focus();
+    const range = document.createRange();
+    range.selectNodeContents(cell);
+    window.getSelection()!.removeAllRanges();
+    window.getSelection()!.addRange(range);
+    const paste = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, "clipboardData", { value: { getData: () => "one\r\ntwo\rthree" } });
+    cell.dispatchEvent(paste);
+    await nextFrame();
+    expect(handle.view.state.doc.toString()).toContain("| one<br>two<br>three |");
+    cell.blur();
+    expect(cell.querySelectorAll("br")).toHaveLength(2);
+    cell.classList.add("md-table-cell-selected");
+    expect(selectedTableText(cell)).toBe("one\ntwo\nthree");
+  });
+
+  it("leaves IME confirmation alone and handles input-only table line breaks", async () => {
+    const { parent, handle } = mount("| A |\n| --- |\n| first |");
+    const cell = parent.querySelector<HTMLElement>("tbody td")!;
+    cell.focus();
+    const enter = new KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true, cancelable: true });
+    cell.dispatchEvent(enter);
+    expect(enter.defaultPrevented).toBe(false);
+    expect(cell.textContent).toBe("first");
+    cell.dispatchEvent(new InputEvent("beforeinput", { inputType: "insertLineBreak", bubbles: true, cancelable: true }));
+    await nextFrame();
+    expect(handle.view.state.doc.toString()).toContain("<br>");
+  });
+
+  it("renders only safe table break tags and keeps code literals escaped", () => {
+    expect(renderInlineMarkdown("a<br>b<BR />c\nd")).toBe("a<br>b<br>c<br>d");
+    expect(renderInlineMarkdown("`<br>` <br onclick=alert(1)>"))
+      .toBe("<code>&lt;br&gt;</code> &lt;br onclick=alert(1)&gt;");
+  });
+
   it.each([
     ["$$\nx^2\n$$", "x^2", ".md-math-block"],
     ["```mermaid\ngraph TD\n A --> B\n```", "graph", ".md-mermaid-widget"],
