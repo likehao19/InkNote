@@ -21,7 +21,7 @@ const messages = {
     flow1Title: "打开", flow1Text: "文件、文件夹或最近文档", flow2Title: "写作", flow2Text: "实时预览或源码模式", flow3Title: "交付", flow3Text: "保存 Markdown，导出 HTML/PDF",
     downloadTitle: "下载 InkNote", downloadLead: "已覆盖 Windows、macOS 与主流 Linux 发行版。", checking: "正在检查最新版本…", releaseReady: "最新版本 {version}", releaseFallback: "暂时使用稳定版下载地址",
     detectedKicker: "智能推荐", recommended: "推荐", windowsMeta: "Windows 10/11 · x64 · 中文安装程序", macMeta: "支持 Apple 芯片与 Intel Mac · DMG", appleSilicon: "Apple 芯片", linuxMeta: "AppImage、DEB 与 RPM · x64 / ARM64",
-    downloadWindows: "下载 Windows 版", otherPackages: "校验签名或下载历史版本：", allReleases: "查看全部 Releases ↗",
+    download: "下载", otherPackages: "校验签名或下载历史版本：", allReleases: "查看全部 Releases ↗",
     detectedWindowsTitle: "已识别 Windows", detectedWindowsDescription: "推荐 Windows 10/11 x64 中文安装程序。", detectedWindowsLabel: "下载 Windows x64",
     detectedMacArmTitle: "已识别 Apple 芯片 Mac", detectedMacArmDescription: "推荐适用于 M 系列芯片的 ARM64 DMG 安装包。", detectedMacArmLabel: "下载 macOS ARM64",
     detectedMacIntelTitle: "已识别 Intel Mac", detectedMacIntelDescription: "推荐适用于 Intel 处理器的 x86_64 DMG 安装包。", detectedMacIntelLabel: "下载 macOS Intel",
@@ -52,7 +52,7 @@ const messages = {
     flow1Title: "Open", flow1Text: "A file, folder, or recent document", flow2Title: "Write", flow2Text: "Live preview or source mode", flow3Title: "Deliver", flow3Text: "Save Markdown or export HTML/PDF",
     downloadTitle: "Download InkNote", downloadLead: "Available for Windows, macOS, and major Linux distributions.", checking: "Checking the latest release…", releaseReady: "Latest release {version}", releaseFallback: "Using stable download links",
     detectedKicker: "Recommended for you", recommended: "Recommended", windowsMeta: "Windows 10/11 · x64 · Chinese installer", macMeta: "Apple silicon and Intel Mac · DMG", appleSilicon: "Apple silicon", linuxMeta: "AppImage, DEB, and RPM · x64 / ARM64",
-    downloadWindows: "Download for Windows", otherPackages: "Signatures or previous versions:", allReleases: "View all Releases ↗",
+    download: "Download", otherPackages: "Signatures or previous versions:", allReleases: "View all Releases ↗",
     detectedWindowsTitle: "Windows detected", detectedWindowsDescription: "The Windows 10/11 x64 installer is recommended for this device.", detectedWindowsLabel: "Download Windows x64",
     detectedMacArmTitle: "Apple silicon Mac detected", detectedMacArmDescription: "The ARM64 DMG is recommended for M-series Macs.", detectedMacArmLabel: "Download macOS ARM64",
     detectedMacIntelTitle: "Intel Mac detected", detectedMacIntelDescription: "The x86_64 DMG is recommended for Intel-based Macs.", detectedMacIntelLabel: "Download macOS Intel",
@@ -203,11 +203,15 @@ function renderRecommendation() {
   if (symbol) symbol.textContent = detectedSystem.symbol;
   if (title) title.textContent = dictionary[titleKey];
   if (description) description.textContent = dictionary[descriptionKey];
-  if (detectedLabel) detectedLabel.textContent = dictionary[labelKey];
-  if (heroLabel) heroLabel.textContent = dictionary[labelKey];
+  if (detectedLabel) detectedLabel.textContent = sourceLink ? dictionary.download : dictionary[labelKey];
+  if (heroLabel) heroLabel.textContent = sourceLink ? dictionary.download : dictionary[labelKey];
   if (heroMeta) heroMeta.textContent = dictionary[metaKey];
-  if (detectedLink) detectedLink.href = destination;
-  if (heroLink) heroLink.href = destination;
+  for (const link of [detectedLink, heroLink]) {
+    if (!link) continue;
+    link.href = destination;
+    link.setAttribute("aria-label", dictionary[labelKey]);
+  }
+  document.querySelector('[data-platform="windows"]')?.setAttribute("aria-label", dictionary.detectedWindowsLabel);
 
   document.querySelector("[data-detected-download]")?.setAttribute("data-system", detectedSystem.family);
   document.querySelectorAll("[data-download-card]").forEach((card) => {

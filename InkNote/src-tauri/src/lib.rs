@@ -659,6 +659,13 @@ fn search_regex(
 }
 
 #[tauri::command]
+fn is_directory(path: String) -> Result<bool, String> {
+    std::fs::metadata(path)
+        .map(|metadata| metadata.is_dir())
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn list_dir(path: String) -> Result<Vec<DirEntry>, String> {
     let mut entries: Vec<DirEntry> = Vec::new();
     for entry in std::fs::read_dir(&path).map_err(|e| e.to_string())? {
@@ -1771,6 +1778,7 @@ pub fn run() {
             search_regex,
             export_pdf,
             list_dir,
+            is_directory,
             get_startup_file,
             load_app_settings,
             save_app_settings,
@@ -1886,6 +1894,17 @@ mod tests {
             std::process::id(),
             super::NEXT_TEMP_FILE_ID.fetch_add(1, super::FileOrdering::Relaxed)
         ))
+    }
+
+    #[test]
+    fn distinguishes_dropped_folders_from_files_regardless_of_extension() {
+        let root = test_directory("dropped-paths");
+        std::fs::create_dir_all(root.join("folder.md")).unwrap();
+        std::fs::write(root.join("note.md"), "hello").unwrap();
+        assert!(super::is_directory(root.join("folder.md").to_string_lossy().into()).unwrap());
+        assert!(!super::is_directory(root.join("note.md").to_string_lossy().into()).unwrap());
+        assert!(super::is_directory(root.join("missing").to_string_lossy().into()).is_err());
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

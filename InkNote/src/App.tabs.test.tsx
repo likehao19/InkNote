@@ -12,6 +12,7 @@ import { NATIVE_MENU_EVENT } from "./lib/nativeMenu";
 import { setRestoreLastFile } from "./lib/preferences";
 import * as fileApi from "./lib/tauri";
 import { captureSession, type SessionSnapshot } from "./lib/sessionRecovery";
+import { getWorkspaceFolders } from "./lib/workspace";
 
 let root: Root;
 beforeAll(async () => { await import("./components/Editor"); });
@@ -21,6 +22,7 @@ let backupFails = false;
 let startupPath: string | null = null;
 let nextSave: string | null = null;
 const files = new Map<string, string>();
+const directories = new Set<string>();
 const identities = new Map<string, string>();
 const ipc = vi.fn((command: string, args?: Record<string, unknown>) => {
   if (command === "load_session_backup") return session;
@@ -53,6 +55,12 @@ const ipc = vi.fn((command: string, args?: Record<string, unknown>) => {
     files.set(path, String(args?.content));
   }
   if (command === "list_dir") return [];
+  if (command === "is_directory") {
+    const path = String(args?.path);
+    if (directories.has(path)) return true;
+    if (files.has(path)) return false;
+    throw new Error("Missing dropped path");
+  }
   if (command === "plugin:window|scale_factor") return 1;
   return null;
 });
@@ -121,6 +129,7 @@ beforeEach(async () => {
   vi.spyOn(fileApi, "getStartupFile").mockImplementation(async () => startupPath);
   for (const tab of useTabsStore.getState().tabs) useTabsStore.getState().closeTab(tab.id);
   files.clear();
+  directories.clear();
   identities.clear();
   files.set("/notes/A.md", "A original");
   files.set("/notes/B.md", "B original");
@@ -141,6 +150,55 @@ afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   document.body.replaceChildren();
+});
+
+describe("external folder drops", () => {
+  async function drop(paths: string[], target: Element | null = null) {
+    vi.spyOn(document, "elementFromPoint").mockReturnValue(target);
+    await act(async () => { await emit("tauri://drag-drop", { paths, position: { x: 100, y: 100 } }); });
+    await settle();
+  }
+
+  it("loads multiple folders into an empty sidebar and deduplicates repeated drops", async () => {
+    directories.add("/notes");
+    directories.add("/中文 notes");
+    await menu("sidebar-outline");
+    await drop(["/notes", "/中文 notes", "/notes"]);
+    expect(getWorkspaceFolders()).toEqual(["/notes", "/中文 notes"]);
+    expect(document.querySelectorAll(".tree-root-row")).toHaveLength(2);
+    expect(document.querySelector(".sidebar .tab.active")?.textContent).toBe("文件");
+    expect(ipc).toHaveBeenCalledWith("watch_dirs", { paths: ["/notes", "/中文 notes"] });
+    await drop(["/notes"]);
+    expect(getWorkspaceFolders()).toEqual(["/notes", "/中文 notes"]);
+  });
+
+  it("keeps click-to-open and adds dropped folders without copying them into an existing root", async () => {
+    nextOpen = "/notes";
+    await menu("open-folder");
+    directories.add("/archive.md");
+    const rootRow = document.querySelector(".tree-root-row");
+    expect(rootRow).not.toBeNull();
+    await drop(["/archive.md"], rootRow);
+    expect(getWorkspaceFolders()).toEqual(["/notes", "/archive.md"]);
+    expect(ipc.mock.calls.some(([command]) => command.startsWith("copy_file_to_dir"))).toBe(false);
+    expect(ipc).not.toHaveBeenCalledWith("read_text_file", { path: "/archive.md" });
+  });
+
+  it("still opens a dropped Markdown file and handles a mixed folder/file drop", async () => {
+    await drop(["/notes/A.md"]);
+    await waitForPath("/notes/A.md");
+    directories.add("/notes");
+    await drop(["/notes", "/notes/B.md"]);
+    await waitForPath("/notes/B.md");
+    expect(getWorkspaceFolders()).toEqual(["/notes"]);
+  });
+
+  it("reports unavailable paths without preventing other folders from loading", async () => {
+    directories.add("/notes");
+    await drop(["/missing", "/notes"]);
+    expect(getWorkspaceFolders()).toEqual(["/notes"]);
+    expect(document.body.textContent).toContain("Missing dropped path");
+  });
 });
 
 describe("multi-document workflows", () => {

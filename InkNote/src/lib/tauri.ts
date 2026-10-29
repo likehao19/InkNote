@@ -131,6 +131,9 @@ export async function openImageDialog(): Promise<string | null> {
 export function listDir(path: string): Promise<DirEntry[]> {
   return invoke("list_dir", { path });
 }
+export function isDirectory(path: string): Promise<boolean> {
+  return invoke("is_directory", { path });
+}
 let startupFileOnce: Promise<string | null> | null = null;
 
 /**

@@ -58,6 +58,8 @@ describe("Markdown 所见即所得预览", () => {
     cell.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", shiftKey, bubbles: true, cancelable: true }));
     expect(document.activeElement).toBe(cell);
     expect(cell.textContent).toBe("first\n");
+    expect(cell.lastChild).toBe(cell.querySelector("br[data-table-caret]"));
+    expect(window.getSelection()?.anchorNode?.nodeType).toBe(Node.TEXT_NODE);
     expect(parent.querySelectorAll("tbody tr")).toHaveLength(1);
     await nextFrame();
     expect(handle.view.state.doc.toString()).toContain("| first<br> | other |");
@@ -89,6 +91,31 @@ describe("Markdown 所见即所得预览", () => {
     expect(cell.querySelectorAll("br")).toHaveLength(2);
     cell.classList.add("md-table-cell-selected");
     expect(selectedTableText(cell)).toBe("one\ntwo\nthree");
+  });
+
+  it.each(["thead th", "tbody td"])("keeps consecutive newlines and a single caret marker in %s", async (selector) => {
+    const { parent, handle } = mount("| first | B |\n| --- | --- |\n| first | other |");
+    const cell = parent.querySelector<HTMLElement>(selector)!;
+    cell.focus();
+    const caret = document.createRange();
+    caret.selectNodeContents(cell);
+    caret.collapse(false);
+    window.getSelection()!.removeAllRanges();
+    window.getSelection()!.addRange(caret);
+    for (let i = 0; i < 2; i++) {
+      cell.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    }
+    expect(cell.textContent).toBe("first\n\n");
+    expect(cell.querySelectorAll("br[data-table-caret]")).toHaveLength(1);
+    expect(cell.lastChild?.nodeName).toBe("BR");
+    await nextFrame();
+    expect(handle.view.state.doc.toString()).toContain("first<br><br>");
+    cell.blur();
+    expect(cell.querySelector("[data-table-caret]")).toBeNull();
+    expect(cell.querySelectorAll("br")).toHaveLength(2);
+    cell.focus();
+    expect(cell.textContent).toBe("first\n\n");
+    expect(cell.querySelectorAll("br[data-table-caret]")).toHaveLength(1);
   });
 
   it("leaves IME confirmation alone and handles input-only table line breaks", async () => {

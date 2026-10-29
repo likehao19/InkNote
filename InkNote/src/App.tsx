@@ -493,11 +493,13 @@ export default function App() {
     if (p) await loadFile(p);
   }, [loadFile]);
 
-  const openFolder = useCallback(async () => {
-    const selected = await api.openFolderDialog();
+  const addWorkspaceFolders = useCallback((selected: string[]) => {
     if (!selected.length) return;
     setFolderPaths((current) => {
-      const next = [...new Set([...current, ...selected])];
+      const next = [...current];
+      for (const path of selected) {
+        if (!next.some((folder) => sameDocumentPath(folder, path))) next.push(path);
+      }
       setWorkspaceFolders(next);
       return next;
     });
@@ -505,6 +507,10 @@ export default function App() {
     setSidebarTab("files");
     persistSidebarTab("files");
   }, []);
+
+  const openFolder = useCallback(async () => {
+    addWorkspaceFolders(await api.openFolderDialog());
+  }, [addWorkspaceFolders]);
 
   const handleRemoveWorkspaceFolder = useCallback((path: string) => {
     removeTreeExpansion(path);
@@ -1523,10 +1529,19 @@ export default function App() {
       } else if (payload.type === "drop") {
         hoverRequest++;
         setTreeDropTarget(null);
-        const path = payload.paths.find((candidate) => /\.(md|markdown|txt)$/i.test(candidate));
-        if (!path) return;
         void directoryAt(payload.position).then(async (targetDir) => {
+          const entries = await Promise.all(payload.paths.map(async (path) => {
+            try {
+              return { path, isDirectory: await api.isDirectory(path) };
+            } catch (error) {
+              if (!disposed) showError(error);
+              return null;
+            }
+          }));
           if (disposed) return;
+          addWorkspaceFolders(entries.flatMap((entry) => entry?.isDirectory ? [entry.path] : []));
+          const path = entries.find((entry) => entry && !entry.isDirectory && /\.(md|markdown|txt)$/i.test(entry.path))?.path;
+          if (!path) return;
           if (targetDir) {
             try {
               const copiedPath = await handleTransferPath(path, targetDir, "copy");
@@ -1537,7 +1552,7 @@ export default function App() {
             return;
           }
           await loadFile(path, { external: true });
-        });
+        }).catch((error) => { if (!disposed) showError(error); });
       }
     }).then((fn) => {
       if (disposed) fn();
@@ -1547,7 +1562,7 @@ export default function App() {
       disposed = true;
       unlisten?.();
     };
-  }, [loadFile, finishImportedFile, handleTransferPath, showError]);
+  }, [loadFile, finishImportedFile, handleTransferPath, showError, addWorkspaceFolders]);
 
   const closeRequestRef = useRef<() => Promise<void>>(async () => undefined);
   closeRequestRef.current = async () => {

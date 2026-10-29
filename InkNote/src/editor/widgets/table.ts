@@ -527,6 +527,14 @@ function editableCellText(raw: string): string {
     .join("");
 }
 
+/** A trailing BR gives the browser a caret position after a final newline.
+ * It has no textContent, so it never becomes part of the saved Markdown. */
+function ensureCellCaret(cell: HTMLElement) {
+  const marker = cell.querySelector("br[data-table-caret]") ?? document.createElement("br");
+  marker.setAttribute("data-table-caret", "");
+  if (cell.lastChild !== marker) cell.appendChild(marker);
+}
+
 function insertCellText(cell: HTMLElement, text: string) {
   const selection = window.getSelection();
   const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
@@ -534,12 +542,14 @@ function insertCellText(cell: HTMLElement, text: string) {
     range.deleteContents();
     const node = document.createTextNode(text);
     range.insertNode(node);
-    range.setStartAfter(node);
+    ensureCellCaret(cell);
+    range.setStart(node, text.length);
     range.collapse(true);
     selection!.removeAllRanges();
     selection!.addRange(range);
   } else {
     cell.appendChild(document.createTextNode(text));
+    ensureCellCaret(cell);
     placeCaret(cell, true);
   }
   cell.dataset.raw = cell.textContent ?? "";
@@ -555,6 +565,7 @@ function setCellRaw(cell: HTMLElement, raw: string, columnAlign: TableAlign = "l
   if (document.activeElement === cell) {
     const editable = editableCellText(parsed.content);
     if (cell.textContent !== editable) cell.textContent = editable;
+    ensureCellCaret(cell);
   } else {
     cell.innerHTML = renderInlineMarkdown(parsed.content);
   }
@@ -571,6 +582,7 @@ function showCellSource(cell: HTMLElement) {
   cell.dataset.raw = raw;
   const editable = editableCellText(raw);
   if (cell.textContent !== editable) cell.textContent = editable;
+  ensureCellCaret(cell);
 }
 
 /**
@@ -692,6 +704,11 @@ function placeCaret(cell: HTMLElement, atEnd: boolean) {
   const range = document.createRange();
   range.selectNodeContents(cell);
   range.collapse(!atEnd);
+  const marker = cell.querySelector("br[data-table-caret]");
+  if (atEnd && marker) {
+    range.setStartBefore(marker);
+    range.collapse(true);
+  }
   const sel = window.getSelection();
   sel?.removeAllRanges();
   sel?.addRange(range);
