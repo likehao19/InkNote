@@ -25,7 +25,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/inknote-live-preview.png" alt="墨笺实时预览与文档大纲" width="1000" />
+  <img src="website/assets/inknote-live-preview.png" alt="墨笺实时预览与文档大纲" width="1000" />
 </p>
 
 ## 保留 Markdown 文件，减少 Markdown 的干扰
@@ -41,8 +41,8 @@ InkNote 始终以标准 Markdown 文件保存文档，同时提供接近普通�
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/assets/inknote-source-mode.png" alt="墨笺 Markdown 源码模式" /></td>
-    <td width="50%"><img src="docs/assets/inknote-settings.png" alt="墨笺外观设置" /></td>
+    <td width="50%"><img src="website/assets/inknote-source-mode.png" alt="墨笺 Markdown 源码模式" /></td>
+    <td width="50%"><img src="website/assets/inknote-settings.png" alt="墨笺外观设置" /></td>
   </tr>
   <tr>
     <td align="center"><strong>实时预览或完整源码</strong><br />在排版后的内容中写作，或直接检查和编辑完整 Markdown 源码。</td>
@@ -214,7 +214,7 @@ InkNote 使用 Tauri 2 与 Rust、React 19 与 TypeScript、CodeMirror 6、unifi
 ## Star 增长趋势
 
 <picture>
-  <img alt="InkNote Star 增长曲线" src="docs/assets/star-history.svg" />
+  <img alt="InkNote Star 增长曲线" src="website/assets/star-history.svg" />
 </picture>
 
 ## 开源协议

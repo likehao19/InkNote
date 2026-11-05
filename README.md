@@ -25,7 +25,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/inknote-live-preview.png" alt="InkNote live preview with document outline" width="1000" />
+  <img src="website/assets/inknote-live-preview.png" alt="InkNote live preview with document outline" width="1000" />
 </p>
 
 ## Markdown files, without the Markdown friction
@@ -41,8 +41,8 @@ InkNote keeps every document as a standard local Markdown file while giving you 
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/assets/inknote-source-mode.png" alt="InkNote Markdown source mode" /></td>
-    <td width="50%"><img src="docs/assets/inknote-settings.png" alt="InkNote appearance settings" /></td>
+    <td width="50%"><img src="website/assets/inknote-source-mode.png" alt="InkNote Markdown source mode" /></td>
+    <td width="50%"><img src="website/assets/inknote-settings.png" alt="InkNote appearance settings" /></td>
   </tr>
   <tr>
     <td align="center"><strong>Live preview or full source</strong><br />Write with rendered formatting, or inspect and edit the complete Markdown source.</td>
@@ -214,7 +214,7 @@ Community discussion: [LinuxDo](https://linux.do)
 ## Star history
 
 <picture>
-  <img alt="InkNote star history chart" src="docs/assets/star-history.svg" />
+  <img alt="InkNote star history chart" src="website/assets/star-history.svg" />
 </picture>
 
 ## License

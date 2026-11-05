@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const repositoryName = process.env.GITHUB_REPOSITORY || "likehao19/InkNote";
-const outputPath = process.argv[3] || "docs/assets/star-history.svg";
+const outputPath = process.argv[3] || "website/assets/star-history.svg";
 
 function escapeXml(value) {
   return String(value)

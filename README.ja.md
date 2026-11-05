@@ -25,7 +25,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/inknote-live-preview.png" alt="InkNote のライブプレビューと文書アウトライン" width="1000" />
+  <img src="website/assets/inknote-live-preview.png" alt="InkNote のライブプレビューと文書アウトライン" width="1000" />
 </p>
 
 ## Markdown ファイルはそのまま、記法のわずらわしさは少なく
@@ -41,8 +41,8 @@ InkNote は文書を標準のローカル Markdown ファイルとして保存�
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/assets/inknote-source-mode.png" alt="InkNote の Markdown ソースモード" /></td>
-    <td width="50%"><img src="docs/assets/inknote-settings.png" alt="InkNote の外観設定" /></td>
+    <td width="50%"><img src="website/assets/inknote-source-mode.png" alt="InkNote の Markdown ソースモード" /></td>
+    <td width="50%"><img src="website/assets/inknote-settings.png" alt="InkNote の外観設定" /></td>
   </tr>
   <tr>
     <td align="center"><strong>ライブプレビューと完全なソース</strong><br />整形済みの文書を直接編集することも、Markdown ソース全体を確認・編集することもできます。</td>
@@ -212,7 +212,7 @@ InkNote は Tauri 2 と Rust、React 19 と TypeScript、CodeMirror 6、unified/
 ## Star の推移
 
 <picture>
-  <img alt="InkNote Star 推移グラフ" src="docs/assets/star-history.svg" />
+  <img alt="InkNote Star 推移グラフ" src="website/assets/star-history.svg" />
 </picture>
 
 ## ライセンス

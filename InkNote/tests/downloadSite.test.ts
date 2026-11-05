@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const html = readFileSync(resolve(import.meta.dirname, "../../docs/index.html"), "utf8");
-const script = readFileSync(resolve(import.meta.dirname, "../../docs/app.js"), "utf8");
+const html = readFileSync(resolve(import.meta.dirname, "../../website/index.html"), "utf8");
+const script = readFileSync(resolve(import.meta.dirname, "../../website/app.js"), "utf8");
 
 beforeEach(() => {
   localStorage.clear();

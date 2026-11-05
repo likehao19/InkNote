@@ -25,7 +25,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/assets/inknote-live-preview.png" alt="InkNote 실시간 미리보기와 문서 개요" width="1000" />
+  <img src="website/assets/inknote-live-preview.png" alt="InkNote 실시간 미리보기와 문서 개요" width="1000" />
 </p>
 
 ## Markdown 파일은 그대로, 문법의 불편함은 줄이기
@@ -41,8 +41,8 @@ InkNote는 모든 문서를 표준 로컬 Markdown 파일로 보관하면서 일
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/assets/inknote-source-mode.png" alt="InkNote Markdown 소스 모드" /></td>
-    <td width="50%"><img src="docs/assets/inknote-settings.png" alt="InkNote 모양 설정" /></td>
+    <td width="50%"><img src="website/assets/inknote-source-mode.png" alt="InkNote Markdown 소스 모드" /></td>
+    <td width="50%"><img src="website/assets/inknote-settings.png" alt="InkNote 모양 설정" /></td>
   </tr>
   <tr>
     <td align="center"><strong>실시간 미리보기 또는 전체 소스</strong><br />렌더링된 문서를 직접 편집하거나 전체 Markdown 소스를 확인하고 수정할 수 있습니다.</td>
@@ -212,7 +212,7 @@ InkNote는 Tauri 2와 Rust, React 19와 TypeScript, CodeMirror 6, unified/remark
 ## Star 증가 추이
 
 <picture>
-  <img alt="InkNote Star 증가 그래프" src="docs/assets/star-history.svg" />
+  <img alt="InkNote Star 증가 그래프" src="website/assets/star-history.svg" />
 </picture>
 
 ## 라이선스
