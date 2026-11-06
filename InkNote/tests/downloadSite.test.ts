@@ -27,22 +27,22 @@ afterEach(() => {
 
 describe("download button copy", () => {
   it.each([
-    ["Windows", "x86", "windows"],
-    ["macOS", "arm64", "macos-arm64"],
-    ["macOS", "x86", "macos-x64"],
-    ["Linux", "x86", "linux-x64-appimage"],
-    ["Linux", "arm64", "linux-arm64-appimage"],
-  ])("uses concise labels without changing %s %s download targets", async (platform, architecture, key) => {
+    ["Windows", "x86", "windows", "Windows x64"],
+    ["macOS", "arm64", "macos-arm64", "macOS ARM64"],
+    ["macOS", "x86", "macos-x64", "macOS Intel"],
+    ["Linux", "x86", "linux-x64-appimage", "Linux AppImage"],
+    ["Linux", "arm64", "linux-arm64-appimage", "Linux ARM64"],
+  ])("identifies %s %s with matching labels and download targets", async (platform, architecture, key, label) => {
     vi.stubGlobal("navigator", { userAgentData: { platform, architecture, getHighEntropyValues: async () => ({ architecture, bitness: "64" }) } });
     new Function(script)();
-    await vi.waitFor(() => expect(document.querySelector("[data-detected-label]")?.textContent).toBe("下载"));
+    await vi.waitFor(() => expect(document.querySelector("[data-detected-label]")?.textContent).toBe(`下载 ${label}`));
     const link = document.querySelector<HTMLAnchorElement>("[data-detected-link]")!;
     expect(link.href).toBe(document.querySelector<HTMLAnchorElement>(`[data-platform="${key}"]`)!.href);
     expect(link.getAttribute("aria-label")).toContain("下载");
-    expect(document.querySelector("[data-recommended-label]")?.textContent).toBe("下载");
-    expect(document.querySelector('[data-platform="windows"] [data-i18n]')?.textContent).toBe("下载");
+    expect(document.querySelector("[data-recommended-label]")?.textContent).toBe(`下载 ${label}`);
+    expect(document.querySelector("[data-windows-download]")?.textContent).toBe("下载 Windows x64");
     document.querySelector<HTMLButtonElement>('[data-lang="en"]')!.click();
-    expect(document.querySelector("[data-detected-label]")?.textContent).toBe("Download");
+    expect(document.querySelector("[data-detected-label]")?.textContent).toBe(`Download ${label}`);
     expect(link.getAttribute("aria-label")).toContain("Download");
     expect(document.querySelector('[data-platform="windows"]')?.getAttribute("aria-label")).toBe("Download Windows x64");
   });

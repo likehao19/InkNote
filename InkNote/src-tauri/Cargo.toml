@@ -1,6 +1,6 @@
 [package]
 name = "inknote"
-version = "0.2.16"
+version = "0.2.17"
 description = "InkNote local Markdown editor"
 authors = ["likehao19"]
 license = "MIT"
