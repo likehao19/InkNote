@@ -9,7 +9,7 @@ import App from "./App";
 import { useTabsStore } from "./store/useTabsStore";
 import { resetSettingsStoreForTests } from "./lib/settingsStore";
 import { NATIVE_MENU_EVENT } from "./lib/nativeMenu";
-import { setRestoreLastFile } from "./lib/preferences";
+import { setRestoreLastFile, getSidebarVisiblePref, setSidebarVisiblePref } from "./lib/preferences";
 import * as fileApi from "./lib/tauri";
 import { captureSession, type SessionSnapshot } from "./lib/sessionRecovery";
 import { getWorkspaceFolders } from "./lib/workspace";
@@ -202,6 +202,28 @@ describe("external folder drops", () => {
 });
 
 describe("multi-document workflows", () => {
+  it("keeps the sidebar startup preference off after temporarily showing it and restarting", async () => {
+    await restart(() => setSidebarVisiblePref(false));
+    expect(document.querySelector(".sidebar")).toBeNull();
+    await menu("sidebar-outline");
+    expect(document.querySelector(".sidebar")).not.toBeNull();
+    expect(getSidebarVisiblePref()).toBe(false);
+    await restart();
+    expect(document.querySelector(".sidebar")).toBeNull();
+    expect(getSidebarVisiblePref()).toBe(false);
+  });
+
+  it("honors the hidden startup sidebar when opening and restoring external documents", async () => {
+    startupPath = "/notes/A.md";
+    await restart(() => setSidebarVisiblePref(false));
+    await waitForPath("/notes/A.md");
+    expect(document.querySelector(".sidebar")).toBeNull();
+    expect(getSidebarVisiblePref()).toBe(false);
+    startupPath = null;
+    await restart();
+    expect(getSidebarVisiblePref()).toBe(false);
+    expect(document.querySelector(".sidebar")).toBeNull();
+  });
   it("shows the external startup document before slow history restores without intermediate tab activation", async () => {
     await openFile("/notes/A.md");
     await openFile("/notes/B.md");

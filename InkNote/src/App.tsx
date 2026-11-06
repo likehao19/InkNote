@@ -250,8 +250,7 @@ export default function App() {
   const [shortcutMap, setShortcutMap] = useState<ShortcutMap>(getShortcutMap);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>(getSidebarTab);
   const [sidebarVisible, setSidebarVisible] = useState(getSidebarVisiblePref);
-  const sidebarVisibleRef = useRef(sidebarVisible);
-  const skipSidebarPreferenceWriteRef = useRef(false);
+  const [sidebarStartupVisible, setSidebarStartupVisible] = useState(getSidebarVisiblePref);
   const dirWatchChainRef = useRef<Promise<void>>(Promise.resolve());
   const fileWatchChainRef = useRef<Promise<void>>(Promise.resolve());
   const externalChecksRef = useRef(new Map<string, number>());
@@ -331,12 +330,10 @@ export default function App() {
   }, [setDocumentOptions]);
 
   const showOutlineForExternalOpen = useCallback(() => {
+    if (!getSidebarVisiblePref()) return;
     const editorState = useTabsStore.getState();
     if (editorState.focusMode) editorState.toggleFocusMode();
     setSidebarTab("outline");
-    if (sidebarVisibleRef.current) return;
-    // 文件关联打开只改变本次窗口状态，不能覆盖用户的常规启动偏好。
-    skipSidebarPreferenceWriteRef.current = true;
     setSidebarVisible(true);
   }, []);
   const [typewriterPadding, setTypewriterPadding] = useState(getTypewriterPadding);
@@ -1801,15 +1798,6 @@ export default function App() {
   }, [recentFilesLimit]);
 
   useEffect(() => {
-    sidebarVisibleRef.current = sidebarVisible;
-    if (skipSidebarPreferenceWriteRef.current) {
-      skipSidebarPreferenceWriteRef.current = false;
-      return;
-    }
-    setSidebarVisiblePref(sidebarVisible);
-  }, [sidebarVisible]);
-
-  useEffect(() => {
     persistSidebarWidth(sidebarWidth);
   }, [sidebarWidth]);
 
@@ -2159,7 +2147,7 @@ export default function App() {
               confirmDiscard,
               confirmDelete,
               recentFilesLimit,
-              sidebarVisible,
+              sidebarVisible: sidebarStartupVisible,
               defaultSidebarTab,
               defaultEditorMode,
               fontSize,
@@ -2206,7 +2194,11 @@ export default function App() {
                 clearRecentFiles();
                 setRecentFiles([]);
               },
-              onSidebarVisible: setSidebarVisible,
+              onSidebarVisible: (visible) => {
+                setSidebarStartupVisible(visible);
+                setSidebarVisiblePref(visible);
+                setSidebarVisible(visible);
+              },
               onDefaultSidebarTab: (tab) => {
                 setDefaultSidebarTabState(tab);
                 setDefaultSidebarTab(tab);
