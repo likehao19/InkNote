@@ -12,6 +12,8 @@
     <link rel="icon" href="./assets/inknote-icon.png" />
     <link rel="stylesheet" href="./styles.css" />
     <script src="./app.js" defer></script>
+    <script src="./motion.js" defer></script>
+    <script src="gallery.js" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main" data-i18n="skip">跳到主要内容</a>
@@ -23,18 +25,28 @@
         </a>
         <nav class="desktop-nav" aria-label="Main navigation">
           <a href="#features" data-i18n="navFeatures">功能</a>
-          <a href="#screens" data-i18n="navScreens">界面</a>
+          <a href="#screenshots" data-i18n="navScreens">界面</a>
           <a href="#download" data-i18n="navDownload">下载</a>
-          <a href="https://github.com/likehao19/InkNote" target="_blank" rel="noreferrer">GitHub</a>
         </nav>
         <div class="header-actions">
           <div class="language-switch" role="group" aria-label="Language">
             <button type="button" data-lang="zh" aria-pressed="true">中文</button>
             <button type="button" data-lang="en" aria-pressed="false">EN</button>
           </div>
-          <a class="github-icon" href="https://github.com/likehao19/InkNote" target="_blank" rel="noreferrer" aria-label="GitHub repository">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.87c-2.78.6-3.37-1.18-3.37-1.18-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.9 1.53 2.35 1.09 2.92.83.09-.65.35-1.09.64-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.55 9.55 0 0 1 12 6.82c.85 0 1.7.11 2.5.34 1.91-1.3 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.86v2.76c0 .27.18.58.69.48A10 10 0 0 0 12 2Z" /></svg>
+          <a
+            class="github-icon"
+            href="https://github.com/likehao19/InkNote"
+            target="_blank"
+            rel="noreferrer"
+            aria-label="GitHub repository"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.87c-2.78.6-3.37-1.18-3.37-1.18-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.9 1.53 2.35 1.09 2.92.83.09-.65.35-1.09.64-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.55 9.55 0 0 1 12 6.82c.85 0 1.7.11 2.5.34 1.91-1.3 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.86v2.76c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"
+              />
+            </svg>
           </a>
+          <a class="header-download" href="#download" data-i18n="downloadNow">立即下载</a>
         </div>
       </div>
     </header>
@@ -43,173 +55,431 @@
       <section class="hero" id="top">
         <div class="container hero-grid">
           <div class="hero-copy">
-            <div class="eyebrow"><span class="status-dot"></span><span data-i18n="eyebrow">本地优先 · Windows / macOS / Linux</span></div>
-            <h1 data-i18n="heroTitle">写 Markdown，<br />只看内容本身。</h1>
-            <p class="hero-lead" data-i18n="heroLead">墨笺是一款所见即所得的桌面 Markdown 编辑器。没有割裂的双栏预览，点击即可编辑，移开焦点即呈现最终排版。</p>
-            <div class="hero-actions">
-              <a class="button button-primary recommended-download" href="#download"><span data-recommended-label>为当前系统下载</span><span aria-hidden="true">↓</span></a>
-              <a class="button button-secondary" href="https://github.com/likehao19/InkNote" target="_blank" rel="noreferrer"><span data-i18n="viewGithub">查看 GitHub</span><span aria-hidden="true">↗</span></a>
+            <img
+              class="hero-emblem"
+              src="./assets/inknote-icon.png"
+              width="84"
+              height="84"
+              alt=""
+            />
+            <div class="eyebrow">
+              <span class="status-dot"></span
+              ><span data-i18n="eyebrow">本地优先 · Windows / macOS / Linux</span>
             </div>
-            <p class="release-note"><span data-i18n="latest">最新版本</span> <strong data-release-version>v0.2.9</strong><span class="dot-separator">·</span><span data-i18n="freeDownload">免费下载</span><span class="dot-separator">·</span><span data-recommended-meta>正在识别你的系统…</span></p>
+            <h1 data-i18n="heroTitle">
+              写 Markdown，<br /><span class="accent">只看内容本身。</span>
+            </h1>
+            <p class="hero-lead" data-i18n="heroLead">
+              墨笺是一款所见即所得的桌面 Markdown
+              编辑器。没有割裂的双栏预览，点击即可编辑，移开焦点即呈现最终排版。
+            </p>
+            <div class="hero-actions">
+              <a class="button button-primary recommended-download" href="#download"
+                ><span data-recommended-label>为当前系统下载</span
+                ><span aria-hidden="true">↓</span></a
+              >
+              <a
+                class="button button-secondary"
+                href="https://github.com/likehao19/InkNote"
+                target="_blank"
+                rel="noreferrer"
+                ><span data-i18n="viewGithub">查看 GitHub</span><span aria-hidden="true">↗</span></a
+              >
+            </div>
+            <p class="release-note">
+              <span data-i18n="latest">最新版本</span> <strong data-release-version>v0.2.9</strong
+              ><span class="dot-separator">·</span><span data-i18n="freeDownload">免费下载</span
+              ><span class="dot-separator">·</span
+              ><span data-recommended-meta>正在识别你的系统…</span>
+            </p>
           </div>
           <div class="hero-aside" aria-label="InkNote application icon">
-            <div class="icon-card"><img src="./assets/inknote-icon.png" alt="InkNote" /></div>
             <dl class="platform-list">
-              <div><dt>Windows</dt><dd>x64</dd></div>
-              <div><dt>macOS</dt><dd>Intel x86_64</dd></div>
-              <div><dt>macOS</dt><dd>Apple ARM64</dd></div>
-              <div><dt>Linux</dt><dd>x86_64</dd></div>
-              <div><dt>Linux</dt><dd>ARM64</dd></div>
+              <div>
+                <dt>Windows</dt>
+                <dd>x64</dd>
+              </div>
+              <div>
+                <dt>macOS</dt>
+                <dd>Intel x86_64</dd>
+              </div>
+              <div>
+                <dt>macOS</dt>
+                <dd>Apple ARM64</dd>
+              </div>
+              <div>
+                <dt>Linux</dt>
+                <dd>x86_64</dd>
+              </div>
+              <div>
+                <dt>Linux</dt>
+                <dd>ARM64</dd>
+              </div>
             </dl>
           </div>
         </div>
       </section>
-
-      <section class="product-shot" id="screens">
+      <section class="showcase" id="screenshots">
         <div class="container">
-          <div class="window-frame">
-            <div class="window-bar"><div class="window-brand"><img src="./assets/inknote-icon.png" alt="" /><span>InkNote</span></div><span>project-notes.md</span><div class="window-controls"><i></i><i></i><i></i></div></div>
-            <div class="app-layout">
-              <aside class="app-sidebar">
-                <div class="sidebar-tabs"><b data-i18n="files">文件</b><span data-i18n="outline">大纲</span><span data-i18n="recent">最近</span></div>
-                <div class="search-placeholder" data-i18n="filterFiles">筛选文件…</div>
-                <ul class="file-tree"><li class="folder">⌄ &nbsp;InkNote Docs</li><li>&nbsp;&nbsp;&nbsp;⌄ &nbsp;guide</li><li class="selected">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;quick-start.md</li><li>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;shortcuts.md</li><li>&nbsp;&nbsp;&nbsp;release-notes.md</li></ul>
-              </aside>
-              <article class="editor-preview">
-                <h2><span>##</span> InkNote</h2>
-                <p data-i18n="mockIntro">专注于内容的本地 Markdown 编辑器。</p>
-                <blockquote><strong data-i18n="mockQuoteTitle">所见即所得</strong><br /><span data-i18n="mockQuote">编辑时显示语法，完成后恢复清晰排版。</span></blockquote>
-                <h3 data-i18n="mockFeatures">核心能力</h3>
-                <div class="mock-columns"><ul><li data-i18n="mockItem1">表格与任务列表</li><li data-i18n="mockItem2">数学公式与图表</li></ul><pre><span class="code-lang">typescript</span><code><em>1</em> const note = "InkNote";
-<em>2</em> save(note);
-<em>3</em> // local first</code></pre></div>
-                <table><thead><tr><th data-i18n="mockTableFeature">功能</th><th data-i18n="mockTableSupport">支持</th></tr></thead><tbody><tr><td>Markdown / GFM</td><td>✓</td></tr><tr><td>KaTeX / Mermaid</td><td>✓</td></tr></tbody></table>
-              </article>
-            </div>
-            <div class="status-bar"><span data-i18n="preview">预览</span><span>Ln 18</span><span>128 words</span><span>UTF-8</span></div>
+          <div class="section-heading">
+            <span class="eyebrow">UI / <span data-i18n="screensEyebrow">真实软件截图</span></span>
+            <h2 data-i18n="screensTitle">写作的模样，清晰呈现。</h2>
+            <p data-i18n="screensLead">实时预览、源码编辑与偏好设置，看看墨笺的实际界面。</p>
           </div>
-          <div class="screen-gallery-heading">
-            <span class="section-index">UI</span>
-            <div>
-              <h2 data-i18n="galleryTitle">编辑细节，一目了然</h2>
-              <p data-i18n="galleryLead">常用组件保持接近最终排版，同时提供恰到好处的编辑控件。</p>
-            </div>
+          <div class="screenshot-tabs" role="tablist" aria-label="Screenshots">
+            <button
+              type="button"
+              role="tab"
+              id="shot-0"
+              aria-controls="screenshot-panel"
+              aria-selected="true"
+              tabindex="0"
+              data-shot="0"
+              data-file="inknote-live-preview.png"
+              data-i18n="shotLive"
+            >
+              实时预览</button
+            ><button
+              type="button"
+              role="tab"
+              id="shot-1"
+              aria-controls="screenshot-panel"
+              aria-selected="false"
+              tabindex="-1"
+              data-shot="1"
+              data-file="inknote-source-mode.png"
+              data-i18n="shotSource"
+            >
+              源码模式</button
+            ><button
+              type="button"
+              role="tab"
+              id="shot-2"
+              aria-controls="screenshot-panel"
+              aria-selected="false"
+              tabindex="-1"
+              data-shot="2"
+              data-file="inknote-settings.png"
+              data-i18n="shotSettings"
+            >
+              偏好设置
+            </button>
           </div>
-          <div class="screen-gallery">
-            <article class="screen-card screen-card-wide">
-              <div class="screen-card-copy"><span>01</span><h3 data-i18n="galleryTableTitle">表格直接编辑</h3><p data-i18n="galleryTableText">选择单元格后完成对齐、增删行列，未选中时可操作整张表格。</p></div>
-              <div class="mini-window table-shot" aria-hidden="true">
-                <div class="mini-titlebar"><i></i><i></i><i></i><span>project-plan.md</span></div>
-                <div class="table-toolbar"><button>↔</button><button>≡</button><button>＋</button><button>⌫</button></div>
-                <table><thead><tr><th>模块</th><th>状态</th><th>说明</th></tr></thead><tbody><tr><td>编辑器</td><td><b>已完成</b></td><td>实时预览</td></tr><tr><td>文件树</td><td>进行中</td><td>多根目录</td></tr><tr><td>导出</td><td>已完成</td><td>HTML / PDF</td></tr></tbody></table>
-              </div>
-            </article>
-            <article class="screen-card">
-              <div class="screen-card-copy"><span>02</span><h3 data-i18n="galleryCodeTitle">清晰的代码块</h3><p data-i18n="galleryCodeText">行号、语法高亮、语言选择与独立横向滚动互不干扰。</p></div>
-              <div class="mini-window code-shot" aria-hidden="true">
-                <div class="mini-titlebar"><i></i><i></i><i></i><span>example.md</span></div>
-                <div class="code-head"><span>typescript⌄</span><button>复制</button></div>
-                <pre><em>1</em><code><b>type</b> Note = { title: <i>string</i> };</code>
-<em>2</em><code><b>const</b> note: Note = {</code>
-<em>3</em><code>  title: <s>"InkNote"</s>,</code>
-<em>4</em><code>};</code></pre>
-              </div>
-            </article>
-            <article class="screen-card">
-              <div class="screen-card-copy"><span>03</span><h3 data-i18n="gallerySearchTitle">工作区全文检索</h3><p data-i18n="gallerySearchText">按文件名或正文查找，点击结果即可展开文件树并定位到对应行。</p></div>
-              <div class="mini-window search-shot" aria-hidden="true">
-                <div class="mini-titlebar"><i></i><i></i><i></i><span>Workspace search</span></div>
-                <div class="search-box"><span>所见即所得</span><kbd>⌘⇧F</kbd></div>
-                <div class="search-summary">3 results in 2 files</div>
-                <div class="result-group"><strong>guide/quick-start.md</strong><p><span>18</span> 开启所见即所得编辑模式</p><p><span>42</span> 所见即所得组件说明</p></div>
-                <div class="result-group"><strong>README.md</strong><p><span>6</span> 所见即所得 Markdown 编辑器</p></div>
-              </div>
-            </article>
-          </div>
+          <figure
+            class="screenshot-panel"
+            id="screenshot-panel"
+            role="tabpanel"
+            aria-labelledby="shot-0"
+          >
+            <a
+              class="screenshot-open"
+              href="assets/inknote-live-preview.png"
+              aria-label="放大当前软件截图"
+              ><img
+                id="preview-image"
+                src="assets/inknote-live-preview.png"
+                alt="实时预览"
+                width="1331"
+                height="768"
+                decoding="async"
+                loading="lazy"
+            /></a>
+            <figcaption id="preview-caption" aria-live="polite">实时预览</figcaption>
+          </figure>
         </div>
       </section>
 
       <section class="section" id="features">
         <div class="container">
-          <div class="section-heading"><span class="section-index">01</span><div><h2 data-i18n="featuresTitle">完整能力，安静呈现</h2><p data-i18n="featuresLead">围绕 Markdown 写作本身设计，每项功能都留在需要它的位置。</p></div></div>
+          <div class="section-heading">
+            <span class="section-index">01</span>
+            <div>
+              <h2 data-i18n="featuresTitle">完整能力，安静呈现</h2>
+              <p data-i18n="featuresLead">
+                围绕 Markdown 写作本身设计，每项功能都留在需要它的位置。
+              </p>
+            </div>
+          </div>
           <div class="feature-grid">
-            <article><span class="feature-icon">Aa</span><h3 data-i18n="feature1Title">无缝实时预览</h3><p data-i18n="feature1Text">标题、列表、引用、代码与表格在同一编辑面中完成输入和排版。</p></article>
-            <article><span class="feature-icon">⌘</span><h3 data-i18n="feature2Title">组件化编辑</h3><p data-i18n="feature2Text">代码块、表格、任务列表、公式与图表均可直接点击编辑。</p></article>
-            <article><span class="feature-icon">⌕</span><h3 data-i18n="feature3Title">文档与工作区检索</h3><p data-i18n="feature3Text">支持当前文档查找替换，以及跨工作区按文件名和内容搜索。</p></article>
-            <article><span class="feature-icon">∑</span><h3 data-i18n="feature4Title">专业 Markdown</h3><p data-i18n="feature4Text">支持 GFM、KaTeX 数学公式、Mermaid 图表与 YAML Front Matter。</p></article>
-            <article><span class="feature-icon">◫</span><h3 data-i18n="feature5Title">本地工作区</h3><p data-i18n="feature5Text">多根目录文件树、大纲、最近文档与本地设置，内容始终由你掌控。</p></article>
-            <article><span class="feature-icon">⇧</span><h3 data-i18n="feature6Title">导出与更新</h3><p data-i18n="feature6Text">直接导出 HTML（Windows/macOS 也支持 PDF），并可在应用内检查、下载和安装新版本。</p></article>
+            <article>
+              <span class="feature-icon">Aa</span>
+              <h3 data-i18n="feature1Title">无缝实时预览</h3>
+              <p data-i18n="feature1Text">
+                标题、列表、引用、代码与表格在同一编辑面中完成输入和排版。
+              </p>
+            </article>
+            <article>
+              <span class="feature-icon">⌘</span>
+              <h3 data-i18n="feature2Title">组件化编辑</h3>
+              <p data-i18n="feature2Text">代码块、表格、任务列表、公式与图表均可直接点击编辑。</p>
+            </article>
+            <article>
+              <span class="feature-icon">⌕</span>
+              <h3 data-i18n="feature3Title">文档与工作区检索</h3>
+              <p data-i18n="feature3Text">支持当前文档查找替换，以及跨工作区按文件名和内容搜索。</p>
+            </article>
+            <article>
+              <span class="feature-icon">∑</span>
+              <h3 data-i18n="feature4Title">专业 Markdown</h3>
+              <p data-i18n="feature4Text">
+                支持 GFM、KaTeX 数学公式、Mermaid 图表与 YAML Front Matter。
+              </p>
+            </article>
+            <article>
+              <span class="feature-icon">◫</span>
+              <h3 data-i18n="feature5Title">本地工作区</h3>
+              <p data-i18n="feature5Text">
+                多根目录文件树、大纲、最近文档与本地设置，内容始终由你掌控。
+              </p>
+            </article>
+            <article>
+              <span class="feature-icon">⇧</span>
+              <h3 data-i18n="feature6Title">导出与更新</h3>
+              <p data-i18n="feature6Text">
+                直接导出 HTML（Windows/macOS 也支持 PDF），并可在应用内检查、下载和安装新版本。
+              </p>
+            </article>
           </div>
         </div>
       </section>
 
       <section class="section workflow-section">
         <div class="container workflow-grid">
-          <div><span class="section-index">02</span><h2 data-i18n="workflowTitle">从打开到交付，保持一条写作流</h2><p data-i18n="workflowText">使用文件关联快速预览，切换到编辑模式继续修改；需要交付时直接导出 HTML，Windows/macOS 还可导出 PDF。源文件始终是标准 Markdown。</p></div>
-          <ol><li><span>1</span><div><strong data-i18n="flow1Title">打开</strong><p data-i18n="flow1Text">文件、文件夹或最近文档</p></div></li><li><span>2</span><div><strong data-i18n="flow2Title">写作</strong><p data-i18n="flow2Text">实时预览或源码模式</p></div></li><li><span>3</span><div><strong data-i18n="flow3Title">交付</strong><p data-i18n="flow3Text">保存 Markdown，导出 HTML/PDF</p></div></li></ol>
+          <div>
+            <span class="section-index">02</span>
+            <h2 data-i18n="workflowTitle">从打开到交付，保持一条写作流</h2>
+            <p data-i18n="workflowText">
+              使用文件关联快速预览，切换到编辑模式继续修改；需要交付时直接导出 HTML，Windows/macOS
+              还可导出 PDF。源文件始终是标准 Markdown。
+            </p>
+          </div>
+          <ol>
+            <li>
+              <span>1</span>
+              <div>
+                <strong data-i18n="flow1Title">打开</strong>
+                <p data-i18n="flow1Text">文件、文件夹或最近文档</p>
+              </div>
+            </li>
+            <li>
+              <span>2</span>
+              <div>
+                <strong data-i18n="flow2Title">写作</strong>
+                <p data-i18n="flow2Text">实时预览或源码模式</p>
+              </div>
+            </li>
+            <li>
+              <span>3</span>
+              <div>
+                <strong data-i18n="flow3Title">交付</strong>
+                <p data-i18n="flow3Text">保存 Markdown，导出 HTML/PDF</p>
+              </div>
+            </li>
+          </ol>
         </div>
       </section>
 
       <section class="section download-section" id="download">
         <div class="container">
-          <div class="section-heading"><span class="section-index">03</span><div><h2 data-i18n="downloadTitle">下载 InkNote</h2><p><span data-i18n="downloadLead">已覆盖 Windows、macOS 与主流 Linux 发行版。</span> <span class="release-state" data-release-state data-i18n="checking">正在检查最新版本…</span></p></div></div>
+          <div class="section-heading">
+            <span class="section-index">03</span>
+            <div>
+              <h2 data-i18n="downloadTitle">下载 InkNote</h2>
+              <p>
+                <span data-i18n="downloadLead">已覆盖 Windows、macOS 与主流 Linux 发行版。</span>
+                <span class="release-state" data-release-state data-i18n="checking"
+                  >正在检查最新版本…</span
+                >
+              </p>
+            </div>
+          </div>
 
           <div class="detected-download" data-detected-download aria-live="polite">
-            <div class="detected-symbol" data-detected-symbol aria-hidden="true">OS</div>
-            <div class="detected-copy">
-              <span data-i18n="detectedKicker">智能推荐</span>
-              <h3 data-detected-title>正在识别你的系统</h3>
-              <p data-detected-description>稍后将为你匹配合适的安装包，也可以在下方手动选择。</p>
-            </div>
-            <a class="button detected-button" data-detected-link href="#platform-downloads"><span data-detected-label>选择下载版本</span><span aria-hidden="true">↓</span></a>
+            <span class="detected-copy" data-detected-title>正在识别你的系统</span
+            ><a class="button detected-button" data-detected-link href="#platform-downloads"
+              ><span data-detected-label>选择下载版本</span><span aria-hidden="true">↓</span></a
+            >
           </div>
 
           <div class="download-grid" id="platform-downloads">
             <article class="download-card" data-download-card="windows">
               <div class="download-card-head">
-                <div class="platform-mark windows" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
-                <span class="recommended-badge" data-recommended-badge data-i18n="recommended">推荐</span>
+                <div class="platform-mark windows" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      fill="currentColor"
+                      d="M2 3h9v9H2zm11 0h9v9h-9zM2 14h9v9H2zm11 0h9v9h-9z"
+                    />
+                  </svg>
+                </div>
+                <span class="recommended-badge" data-recommended-badge data-i18n="recommended"
+                  >推荐</span
+                >
               </div>
-              <div><h3>Windows</h3><p data-i18n="windowsMeta">Windows 10/11 · x64 · 中文安装程序</p></div>
-              <a class="button button-primary download-link" data-platform="windows" aria-label="下载 Windows x64" href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Windows-x64-Setup.exe"><span data-i18n="download">下载</span><span aria-hidden="true">↓</span></a>
+              <div>
+                <h3>Windows</h3>
+                <p data-i18n="windowsMeta">Windows 10/11 · x64 · 中文安装程序</p>
+              </div>
+              <a
+                class="button button-primary download-link"
+                data-platform="windows"
+                aria-label="下载 Windows x64"
+                href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Windows-x64-Setup.exe"
+                ><span data-windows-download>下载 Windows x64</span
+                ><span aria-hidden="true">↓</span></a
+              >
             </article>
 
             <article class="download-card" data-download-card="macos">
               <div class="download-card-head">
-                <div class="platform-mark apple" aria-hidden="true">⌘</div>
-                <span class="recommended-badge" data-recommended-badge data-i18n="recommended">推荐</span>
+                <div class="platform-mark apple" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      fill="currentColor"
+                      d="M16.5 2c.1 1.3-.4 2.6-1.2 3.5-.8.9-2 1.5-3.2 1.4-.2-1.3.4-2.6 1.2-3.5.9-.9 2.1-1.4 3.2-1.4ZM20.7 17.5c-.5 1.1-.8 1.6-1.5 2.6-.9 1.3-2.1 2.9-3.6 2.9-1.4 0-1.8-.9-3.7-.9s-2.3.9-3.7.9c-1.5 0-2.6-1.4-3.5-2.7C2.2 16.6 1.5 12 3 9.6c1-1.6 2.5-2.5 4-2.5 1.6 0 2.6.9 3.9.9 1.2 0 2-.9 3.9-.9 1.4 0 2.9.8 3.9 2.1-3.4 1.9-2.9 6.8 1 8.3Z"
+                    />
+                  </svg>
+                </div>
+                <span class="recommended-badge" data-recommended-badge data-i18n="recommended"
+                  >推荐</span
+                >
               </div>
-              <div><h3>macOS</h3><p data-i18n="macMeta">支持 Apple 芯片与 Intel Mac · DMG</p></div>
+              <div>
+                <h3>macOS</h3>
+                <p data-i18n="macMeta">支持 Apple 芯片与 Intel Mac · DMG</p>
+              </div>
               <div class="download-options">
-                <a class="package-link download-link" data-platform="macos-arm64" href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-macOS-arm64.dmg"><span><strong data-i18n="appleSilicon">Apple 芯片</strong><small>ARM64 · DMG</small></span><span>↓</span></a>
-                <a class="package-link download-link" data-platform="macos-x64" href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-macOS-x86_64.dmg"><span><strong>Intel Mac</strong><small>x86_64 · DMG</small></span><span>↓</span></a>
+                <a
+                  class="package-link download-link"
+                  data-platform="macos-arm64"
+                  href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-macOS-arm64.dmg"
+                  ><span
+                    ><strong data-i18n="appleSilicon">Apple 芯片</strong
+                    ><small>ARM64 · DMG</small></span
+                  ><span>↓</span></a
+                >
+                <a
+                  class="package-link download-link"
+                  data-platform="macos-x64"
+                  href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-macOS-x86_64.dmg"
+                  ><span><strong>Intel Mac</strong><small>x86_64 · DMG</small></span
+                  ><span>↓</span></a
+                >
               </div>
             </article>
 
             <article class="download-card download-card-linux" data-download-card="linux">
               <div class="download-card-head">
-                <div class="platform-mark linux" aria-hidden="true">&gt;_</div>
-                <span class="recommended-badge" data-recommended-badge data-i18n="recommended">推荐</span>
+                <div class="platform-mark linux" aria-hidden="true">
+                  <svg
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <rect x="2" y="4" width="20" height="16" rx="4" />
+                    <path d="m6 9 3 3-3 3m7 0h5" />
+                  </svg>
+                </div>
+                <span class="recommended-badge" data-recommended-badge data-i18n="recommended"
+                  >推荐</span
+                >
               </div>
-              <div><h3>Linux</h3><p data-i18n="linuxMeta">AppImage、DEB 与 RPM · x64 / ARM64</p></div>
+              <div>
+                <h3>Linux</h3>
+                <p data-i18n="linuxMeta">AppImage、DEB 与 RPM · x64 / ARM64</p>
+              </div>
               <div class="linux-packages">
                 <div class="linux-architecture">
                   <strong>x86_64</strong>
-                  <div><a class="download-link" data-platform="linux-x64-appimage" href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-x86_64.AppImage">AppImage</a><a class="download-link" data-platform="linux-x64-deb" href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-x86_64.deb">DEB</a><a class="download-link" data-platform="linux-x64-rpm" href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-x86_64.rpm">RPM</a></div>
+                  <div>
+                    <a
+                      class="download-link"
+                      data-platform="linux-x64-appimage"
+                      href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-x86_64.AppImage"
+                      >AppImage</a
+                    ><a
+                      class="download-link"
+                      data-platform="linux-x64-deb"
+                      href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-x86_64.deb"
+                      >DEB</a
+                    ><a
+                      class="download-link"
+                      data-platform="linux-x64-rpm"
+                      href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-x86_64.rpm"
+                      >RPM</a
+                    >
+                  </div>
                 </div>
                 <div class="linux-architecture">
                   <strong>ARM64</strong>
-                  <div><a class="download-link" data-platform="linux-arm64-appimage" href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-arm64.AppImage">AppImage</a><a class="download-link" data-platform="linux-arm64-deb" href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-arm64.deb">DEB</a><a class="download-link" data-platform="linux-arm64-rpm" href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-arm64.rpm">RPM</a></div>
+                  <div>
+                    <a
+                      class="download-link"
+                      data-platform="linux-arm64-appimage"
+                      href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-arm64.AppImage"
+                      >AppImage</a
+                    ><a
+                      class="download-link"
+                      data-platform="linux-arm64-deb"
+                      href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-arm64.deb"
+                      >DEB</a
+                    ><a
+                      class="download-link"
+                      data-platform="linux-arm64-rpm"
+                      href="https://github.com/likehao19/InkNote/releases/latest/download/InkNote-Linux-arm64.rpm"
+                      >RPM</a
+                    >
+                  </div>
                 </div>
               </div>
             </article>
           </div>
-          <p class="download-footnote"><span data-i18n="otherPackages">校验签名或下载历史版本：</span> <a href="https://github.com/likehao19/InkNote/releases" target="_blank" rel="noreferrer" data-i18n="allReleases">查看全部 Releases ↗</a></p>
+          <p class="download-footnote">
+            <span data-i18n="otherPackages">校验签名或下载历史版本：</span>
+            <a
+              href="https://github.com/likehao19/InkNote/releases"
+              target="_blank"
+              rel="noreferrer"
+              data-i18n="allReleases"
+              >查看全部 Releases ↗</a
+            >
+          </p>
         </div>
       </section>
-
     </main>
 
-    <footer><div class="container footer-inner"><div class="brand"><img src="./assets/inknote-icon.png" alt="" width="28" height="28" /><span><strong data-i18n="brandZh">墨笺</strong> InkNote</span></div><p>© <span data-current-year></span> InkNote. <span data-i18n="footerText">为专注的 Markdown 写作而设计。</span></p><div><a href="https://github.com/likehao19/InkNote/issues" target="_blank" rel="noreferrer" data-i18n="issues">问题反馈</a><a href="https://github.com/likehao19/InkNote/releases" target="_blank" rel="noreferrer">Releases</a></div></div></footer>
+    <footer>
+      <div class="container footer-inner">
+        <div class="brand">
+          <img src="./assets/inknote-icon.png" alt="" width="28" height="28" /><span
+            ><strong data-i18n="brandZh">墨笺</strong> InkNote</span
+          >
+        </div>
+        <p>
+          © <span data-current-year></span> InkNote.
+          <span data-i18n="footerText">为专注的 Markdown 写作而设计。</span>
+        </p>
+        <div>
+          <a
+            href="https://github.com/likehao19/InkNote/issues"
+            target="_blank"
+            rel="noreferrer"
+            data-i18n="issues"
+            >问题反馈</a
+          ><a href="https://github.com/likehao19/InkNote/releases" target="_blank" rel="noreferrer"
+            >Releases</a
+          >
+        </div>
+      </div>
+    </footer>
+    <dialog id="image-dialog" aria-label="软件截图大图">
+      <button class="dialog-close" type="button" aria-label="关闭大图">×</button
+      ><img id="dialog-image" alt="" />
+      <p id="dialog-caption"></p>
+    </dialog>
   </body>
 </html>
