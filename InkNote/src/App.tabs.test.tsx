@@ -13,6 +13,11 @@ import { setRestoreLastFile, getSidebarVisiblePref, setSidebarVisiblePref } from
 import * as fileApi from "./lib/tauri";
 import { captureSession, type SessionSnapshot } from "./lib/sessionRecovery";
 import { getWorkspaceFolders } from "./lib/workspace";
+import { check, type Update } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
+
+vi.mock("@tauri-apps/plugin-updater", () => ({ check: vi.fn() }));
+vi.mock("@tauri-apps/plugin-process", () => ({ relaunch: vi.fn() }));
 
 let root: Root;
 beforeAll(async () => { await import("./components/Editor"); });
@@ -62,6 +67,7 @@ const ipc = vi.fn((command: string, args?: Record<string, unknown>) => {
     throw new Error("Missing dropped path");
   }
   if (command === "plugin:window|scale_factor") return 1;
+  if (command === "supports_in_app_update") return true;
   return null;
 });
 
@@ -124,6 +130,8 @@ beforeEach(async () => {
   backupFails = false;
   startupPath = null;
   nextSave = null;
+  vi.mocked(check).mockReset().mockResolvedValue(null);
+  vi.mocked(relaunch).mockReset().mockResolvedValue(undefined);
   // Each simulated restart gets a fresh process's startup path, rather than
   // reusing the production module's StrictMode-safe cached promise.
   vi.spyOn(fileApi, "getStartupFile").mockImplementation(async () => startupPath);
@@ -150,6 +158,68 @@ afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   document.body.replaceChildren();
+});
+
+describe("updates with unsaved drafts", () => {
+  async function install(downloadAndInstall = vi.fn().mockResolvedValue(undefined)) {
+    vi.mocked(check).mockResolvedValue({ version: "0.2.19", downloadAndInstall } as unknown as Update);
+    await menu("check-updates");
+    const button = document.querySelector<HTMLButtonElement>(".update-control.available");
+    expect(button).not.toBeNull();
+    await act(async () => button!.click());
+    await settle();
+    return downloadAndInstall;
+  }
+
+  it("backs up untitled drafts and saves named files without a save dialog, then restores the draft", async () => {
+    await openFile("/notes/A.md");
+    await act(async () => useTabsStore.getState().updateContent(useTabsStore.getState().activeId, "named edits"));
+    await menu("new");
+    await act(async () => useTabsStore.getState().updateContent(useTabsStore.getState().activeId, "untitled draft"));
+    const download = await install();
+    expect(ipc.mock.calls.some(([command]) => command === "plugin:dialog|save")).toBe(false);
+    expect(download).toHaveBeenCalledOnce();
+    expect(relaunch).toHaveBeenCalledOnce();
+    expect(files.get("/notes/A.md")).toBe("named edits");
+    expect(session?.tabs[session.tabs.length - 1]).toMatchObject({ path: null, content: "untitled draft", dirty: true });
+    await restart();
+    await vi.waitFor(() => expect(useTabsStore.getState().getActive()).toMatchObject({ path: null, content: "untitled draft", dirty: true }));
+  });
+
+  it("does not install or restart if the draft backup fails", async () => {
+    await menu("new");
+    await act(async () => useTabsStore.getState().updateContent(useTabsStore.getState().activeId, "keep this draft"));
+    backupFails = true;
+    const download = await install();
+    expect(download).not.toHaveBeenCalled();
+    expect(relaunch).not.toHaveBeenCalled();
+    expect(useTabsStore.getState().getActive()?.content).toBe("keep this draft");
+    expect(document.body.textContent).toContain("disk full");
+  });
+
+  it("backs up edits made while the update is downloading before relaunch", async () => {
+    await menu("new");
+    await act(async () => useTabsStore.getState().updateContent(useTabsStore.getState().activeId, "before download"));
+    let finish!: () => void;
+    await install(vi.fn(() => new Promise<void>((resolve) => { finish = resolve; })));
+    expect(relaunch).not.toHaveBeenCalled();
+    await act(async () => useTabsStore.getState().updateContent(useTabsStore.getState().activeId, "during download"));
+    await act(async () => finish());
+    await settle();
+    expect(relaunch).toHaveBeenCalledOnce();
+    expect(session?.tabs[session.tabs.length - 1]?.content).toBe("during download");
+  });
+
+  it("still requires saving when draft recovery is disabled and cancels the update if declined", async () => {
+    setRestoreLastFile(false);
+    await menu("new");
+    await act(async () => useTabsStore.getState().updateContent(useTabsStore.getState().activeId, "no recovery"));
+    const download = await install();
+    expect(ipc.mock.calls.some(([command]) => command === "plugin:dialog|save")).toBe(true);
+    expect(download).not.toHaveBeenCalled();
+    expect(relaunch).not.toHaveBeenCalled();
+    expect(useTabsStore.getState().getActive()?.content).toBe("no recovery");
+  });
 });
 
 describe("external folder drops", () => {

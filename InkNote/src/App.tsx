@@ -695,11 +695,18 @@ export default function App() {
     setSessionDraftPrompt(null);
   };
 
-  const saveAllTabs = useCallback(async () => {
+  const prepareForUpdate = useCallback(async () => {
+    await sessionReadyRef.current;
+    await flushSettingsStore();
+    const restoreDrafts = getRestoreLastFile();
     for (const tab of useTabsStore.getState().tabs) {
-      if (tab.dirty && !(await saveTab(tab.id))) return false;
+      if (tab.dirty && (tab.path || tab.sampleDocument || !restoreDrafts) && !(await saveTab(tab.id))) return false;
     }
-    return !useTabsStore.getState().tabs.some((tab) => tab.dirty);
+    if (restoreDrafts) {
+      if (!sessionBackupRef.current) throw new Error(t(getLocale(), "error.sessionBackupUnavailable"));
+      await sessionBackupRef.current.flush();
+    }
+    return !useTabsStore.getState().tabs.some((tab) => tab.dirty && (tab.path || tab.sampleDocument || !restoreDrafts));
   }, [saveTab]);
 
   const handleCloseFile = useCallback(async (id?: string | string[]) => {
@@ -1113,7 +1120,7 @@ export default function App() {
     updateRunningRef.current = true;
     let installed = false;
     try {
-      if (!(await saveAllTabs())) return;
+      if (!(await prepareForUpdate())) return;
 
       let downloaded = 0;
       let total = 0;
@@ -1167,7 +1174,7 @@ export default function App() {
         total,
       });
       showSuccess(t(locale, "update.installed"));
-      if (!(await saveAllTabs())) {
+      if (!(await prepareForUpdate())) {
         setUpdateProgress(null);
         return;
       }
@@ -1186,7 +1193,7 @@ export default function App() {
     } finally {
       updateRunningRef.current = false;
     }
-  }, [checkForUpdates, locale, saveAllTabs, show, showError, showSuccess]);
+  }, [checkForUpdates, locale, prepareForUpdate, show, showError, showSuccess]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
