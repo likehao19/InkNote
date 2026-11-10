@@ -1,5 +1,4 @@
-const REPOSITORY = "likehao19/InkNote";
-const RELEASE_API = `https://api.github.com/repos/${REPOSITORY}/releases/latest`;
+const RELEASE_API = "https://inknote.likh.cn/downloads/latest/release.json";
 
 const messages = {
   zh: {
@@ -226,8 +225,8 @@ function renderRecommendation() {
 
 async function loadLatestRelease() {
   try {
-    const response = await fetch(RELEASE_API, { headers: { Accept: "application/vnd.github+json" } });
-    if (!response.ok) throw new Error(`GitHub API returned ${response.status}`);
+    const response = await fetch(RELEASE_API, { cache: "no-store" });
+    if (!response.ok) throw new Error(`Release server returned ${response.status}`);
     const release = await response.json();
     const version = release.tag_name || "latest";
     document.querySelectorAll("[data-release-version]").forEach((node) => { node.textContent = version; });

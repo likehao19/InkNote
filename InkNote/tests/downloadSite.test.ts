@@ -53,4 +53,21 @@ describe("download button copy", () => {
     await vi.waitFor(() => expect(document.querySelector("[data-detected-label]")?.textContent).toBe("查看全部下载"));
     expect(document.querySelector("[data-detected-link]")?.getAttribute("href")).toBe("#platform-downloads");
   });
+
+  it("uses the server for version detection and downloads, including API failure", async () => {
+    vi.stubGlobal("navigator", { platform: "Win32" });
+    vi.mocked(fetch).mockRejectedValueOnce(new Error("offline"));
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      new Function(script)();
+      await vi.waitFor(() => expect(warning).toHaveBeenCalled());
+      expect(fetch).toHaveBeenCalledWith("https://inknote.likh.cn/downloads/latest/release.json", { cache: "no-store" });
+      for (const link of document.querySelectorAll<HTMLAnchorElement>("[data-platform]")) {
+        expect(link.href).toMatch(/^https:\/\/inknote\.likh\.cn\/downloads\/latest\/InkNote-/);
+      }
+      expect(document.querySelector<HTMLAnchorElement>("[data-detected-link]")!.href).toContain("/downloads/latest/InkNote-Windows");
+    } finally {
+      warning.mockRestore();
+    }
+  });
 });

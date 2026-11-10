@@ -1,0 +1,10 @@
+[Unit]
+Description=Check InkNote release mirror every 30 minutes
+
+[Timer]
+OnCalendar=*:0/30
+Persistent=true
+RandomizedDelaySec=30
+
+[Install]
+WantedBy=timers.target

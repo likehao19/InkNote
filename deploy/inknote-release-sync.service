@@ -1,0 +1,18 @@
+[Unit]
+Description=Synchronize complete InkNote release from GitHub
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=inknote-release
+Group=inknote-release
+ExecStart=/usr/bin/python3 /opt/inknote-release-mirror/release_mirror.py sync
+TimeoutStartSec=20min
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/inknote-downloads
+MemoryMax=256M
+CPUQuota=50%

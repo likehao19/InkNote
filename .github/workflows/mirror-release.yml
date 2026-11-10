@@ -1,0 +1,55 @@
+name: Mirror release to likh
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Complete stable release to mirror
+        default: latest
+        type: string
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+    secrets:
+      LIKH_DOWNLOAD_KEY:
+        required: true
+      LIKH_DOWNLOAD_KNOWN_HOSTS:
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mirror-release
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Download and verify complete release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: python3 scripts/release_mirror.py prepare --tag "$RELEASE_TAG" --output "$RUNNER_TEMP/inknote-release"
+      - name: Upload to restricted mirror receiver
+        env:
+          MIRROR_KEY: ${{ secrets.LIKH_DOWNLOAD_KEY }}
+          KNOWN_HOSTS: ${{ secrets.LIKH_DOWNLOAD_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          key="$RUNNER_TEMP/inknote-mirror-key"
+          hosts="$RUNNER_TEMP/inknote-known-hosts"
+          trap 'rm -f "$key" "$hosts"' EXIT
+          umask 077
+          printf '%s\n' "$MIRROR_KEY" > "$key"
+          printf '%s\n' "$KNOWN_HOSTS" > "$hosts"
+          (cd "$RUNNER_TEMP/inknote-release" && tar -cf - -- *) |
+            ssh -T -i "$key" -o BatchMode=yes -o StrictHostKeyChecking=yes \
+              -o UserKnownHostsFile="$hosts" -o ConnectTimeout=30 \
+              inknote-release@119.28.232.185 receive

@@ -53,6 +53,10 @@ jobs:
         working-directory: InkNote
         run: pnpm test
 
+      - name: Test release mirror
+        if: startsWith(matrix.platform, 'ubuntu-')
+        run: python3 -m unittest discover -s scripts -p 'test_release_mirror.py'
+
       - name: Build frontend
         working-directory: InkNote
         run: pnpm build
