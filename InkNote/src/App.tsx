@@ -1059,13 +1059,14 @@ export default function App() {
   }, [typewriterMode, toggleTypewriterMode, show, locale]);
 
   const reportUpdateCheck = useCallback(async (message: string, kind: "info" | "success" | "error" = "info") => {
-    show(message, kind);
     if (api.isMac) {
       await nativeMessage(message, {
         title: t(locale, "menu.checkUpdates"),
         kind: kind === "error" ? "error" : "info",
         okLabel: t(locale, "dialog.ok"),
       }).catch(showError);
+    } else {
+      show(message, kind);
     }
   }, [locale, show, showError]);
 
@@ -1093,7 +1094,7 @@ export default function App() {
       }
       const update = await check({ timeout: 30_000 });
       if (!update) {
-        setUpdateProgress(announce ? { phase: "latest", percent: 0, downloaded: 0, total: 0 } : null);
+        setUpdateProgress(null);
         if (announce) await reportUpdateCheck(t(locale, "update.latest"), "success");
         return;
       }

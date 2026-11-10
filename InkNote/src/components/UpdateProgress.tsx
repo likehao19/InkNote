@@ -1,8 +1,8 @@
-import { Check, Download, PackageOpen, RefreshCw } from "lucide-react";
+import { Download, PackageOpen, RefreshCw } from "lucide-react";
 import { t, type Locale } from "../lib/i18n";
 
 export type UpdateProgressState = {
-  phase: "checking" | "latest" | "available" | "downloading" | "installing";
+  phase: "checking" | "available" | "downloading" | "installing";
   version?: string;
   percent: number;
   downloaded: number;
@@ -34,8 +34,6 @@ export default function UpdateProgress({ locale, state, onInstall }: Props) {
   const determinate = state.phase === "downloading" && state.total > 0;
   const label = state.phase === "checking"
     ? t(locale, "update.checking")
-    : state.phase === "latest"
-      ? t(locale, "update.latest")
     : state.phase === "available"
       ? t(locale, "update.action", { v: state.version ?? "" })
       : state.phase === "installing"
@@ -46,9 +44,7 @@ export default function UpdateProgress({ locale, state, onInstall }: Props) {
   const detail = state.phase === "downloading" && determinate
     ? `${formatBytes(state.downloaded, locale)} / ${formatBytes(state.total, locale)}`
     : null;
-  const Icon = state.phase === "latest"
-    ? Check
-    : state.phase === "available"
+  const Icon = state.phase === "available"
     ? PackageOpen
     : state.phase === "installing" || state.phase === "checking"
       ? RefreshCw

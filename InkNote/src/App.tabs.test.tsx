@@ -166,6 +166,8 @@ describe("manual update check feedback", () => {
     await menu("check-updates");
     expect(ipc.mock.calls.some(([command, args]) => command === "plugin:dialog|message"
       && args?.message === "当前已经是最新版本")).toBe(true);
+    expect(document.querySelector(".toast")).toBeNull();
+    expect(document.querySelector(".update-control")).toBeNull();
     await menu("check-updates");
     expect(check).toHaveBeenCalledTimes(2);
   });
@@ -180,10 +182,21 @@ describe("manual update check feedback", () => {
     expect(check).toHaveBeenCalledTimes(2);
   });
 
-  it("keeps the up-to-date result visible after repeated menu checks", async () => {
+  it("keeps the Mac title bar update action when a newer release is available, without a duplicate toast", async () => {
+    vi.spyOn(fileApi, "isMac", "get").mockReturnValue(true);
+    vi.mocked(check).mockResolvedValue({ version: "0.2.20" } as Update);
+    await menu("check-updates");
+    expect(document.querySelector(".update-control.available")?.textContent).toContain("更新到 v0.2.20");
+    expect(ipc.mock.calls.some(([command]) => command === "plugin:dialog|message")).toBe(true);
+    expect(document.querySelector(".toast")).toBeNull();
+  });
+
+  it("uses a transient toast for repeated non-Mac checks without leaving a title bar badge", async () => {
+    vi.spyOn(fileApi, "isMac", "get").mockReturnValue(false);
     for (let i = 0; i < 2; i++) {
       await menu("check-updates");
-      expect(document.querySelector(".update-control")?.textContent).toContain("当前已经是最新版本");
+      expect(document.querySelector(".toast")?.textContent).toContain("当前已经是最新版本");
+      expect(document.querySelector(".update-control")).toBeNull();
     }
     expect(check).toHaveBeenCalledTimes(2);
   });
@@ -198,7 +211,8 @@ describe("manual update check feedback", () => {
     await settle();
     expect(document.body.textContent).toContain("request timed out");
     await menu("check-updates");
-    expect(document.querySelector(".update-control")?.textContent).toContain("当前已经是最新版本");
+    expect(document.querySelector(".toast")?.textContent).toContain("当前已经是最新版本");
+    expect(document.querySelector(".update-control")).toBeNull();
     expect(check).toHaveBeenCalledTimes(2);
   });
 });
