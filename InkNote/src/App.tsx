@@ -1078,9 +1078,9 @@ export default function App() {
       if (announce) {
         setUpdateProgress({ phase: "checking", percent: 0, downloaded: 0, total: 0 });
       }
-      const update = await check();
+      const update = await check({ timeout: 30_000 });
       if (!update) {
-        setUpdateProgress(null);
+        setUpdateProgress(announce ? { phase: "latest", percent: 0, downloaded: 0, total: 0 } : null);
         if (announce) showSuccess(t(locale, "update.latest"));
         return;
       }

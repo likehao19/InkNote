@@ -160,6 +160,30 @@ afterEach(async () => {
   document.body.replaceChildren();
 });
 
+describe("manual update check feedback", () => {
+  it("keeps the up-to-date result visible after repeated menu checks", async () => {
+    for (let i = 0; i < 2; i++) {
+      await menu("check-updates");
+      expect(document.querySelector(".update-control")?.textContent).toContain("当前已经是最新版本");
+    }
+    expect(check).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows checking while waiting and allows retry after a request timeout", async () => {
+    let rejectCheck!: (reason: Error) => void;
+    vi.mocked(check).mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectCheck = reject; }));
+    await menu("check-updates");
+    expect(document.querySelector(".update-control")?.textContent).toContain("正在检查更新");
+    expect(check).toHaveBeenCalledWith({ timeout: 30_000 });
+    await act(async () => rejectCheck(new Error("request timed out")));
+    await settle();
+    expect(document.body.textContent).toContain("request timed out");
+    await menu("check-updates");
+    expect(document.querySelector(".update-control")?.textContent).toContain("当前已经是最新版本");
+    expect(check).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("updates with unsaved drafts", () => {
   async function install(downloadAndInstall = vi.fn().mockResolvedValue(undefined)) {
     vi.mocked(check).mockResolvedValue({ version: "0.2.19", downloadAndInstall } as unknown as Update);
