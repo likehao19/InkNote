@@ -3,6 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { writeText as writeClipboardText } from "@tauri-apps/plugin-clipboard-manager";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { message as nativeMessage } from "@tauri-apps/plugin-dialog";
 import { disable as disableAutostart, enable as enableAutostart, isEnabled as isAutostartEnabled } from "@tauri-apps/plugin-autostart";
 import { Eye, Pencil } from "lucide-react";
 import type { AiSelectionSnapshot, EditorRef } from "./components/Editor";
@@ -129,6 +130,7 @@ import { extractMarkdownOutline } from "./lib/markdownOutline";
 import { NATIVE_MENU_EVENT, setupMacNativeMenu } from "./lib/nativeMenu";
 import { invalidateWorkspaceFileCache } from "./lib/workspaceSearch";
 import { flushSettingsStore } from "./lib/settingsStore";
+import { formatError } from "./lib/errors";
 import { scheduleIdleTask } from "./lib/startup";
 import {
   cleanupRemovedManagedImages,
@@ -1056,15 +1058,26 @@ export default function App() {
     if (next) show(t(locale, "toast.typewriterHint"));
   }, [typewriterMode, toggleTypewriterMode, show, locale]);
 
+  const reportUpdateCheck = useCallback(async (message: string, kind: "info" | "success" | "error" = "info") => {
+    show(message, kind);
+    if (api.isMac) {
+      await nativeMessage(message, {
+        title: t(locale, "menu.checkUpdates"),
+        kind: kind === "error" ? "error" : "info",
+        okLabel: t(locale, "dialog.ok"),
+      }).catch(showError);
+    }
+  }, [locale, show, showError]);
+
   const checkForUpdates = useCallback(async (announce: boolean) => {
     if (updateRunningRef.current || updateCheckRunningRef.current) {
-      if (announce) show(t(locale, "update.inProgress"));
+      if (announce) await reportUpdateCheck(t(locale, "update.inProgress"));
       return;
     }
     if (availableUpdateRef.current) {
       const version = availableUpdateRef.current.version;
       setUpdateProgress({ phase: "available", version, percent: 0, downloaded: 0, total: 0 });
-      if (announce) show(t(locale, "update.ready", { v: version }));
+      if (announce) await reportUpdateCheck(t(locale, "update.ready", { v: version }));
       return;
     }
 
@@ -1072,7 +1085,7 @@ export default function App() {
     try {
       if (!(await api.supportsInAppUpdate())) {
         setUpdateProgress(null);
-        if (announce) show(t(locale, "update.unsupportedPackage"));
+        if (announce) await reportUpdateCheck(t(locale, "update.unsupportedPackage"));
         return;
       }
       if (announce) {
@@ -1081,7 +1094,7 @@ export default function App() {
       const update = await check({ timeout: 30_000 });
       if (!update) {
         setUpdateProgress(announce ? { phase: "latest", percent: 0, downloaded: 0, total: 0 } : null);
-        if (announce) showSuccess(t(locale, "update.latest"));
+        if (announce) await reportUpdateCheck(t(locale, "update.latest"), "success");
         return;
       }
       availableUpdateRef.current = update;
@@ -1092,15 +1105,15 @@ export default function App() {
         downloaded: 0,
         total: 0,
       });
-      if (announce) show(t(locale, "update.ready", { v: update.version }));
+      if (announce) await reportUpdateCheck(t(locale, "update.ready", { v: update.version }));
     } catch (error) {
       setUpdateProgress(null);
-      if (announce) showError(error);
+      if (announce) await reportUpdateCheck(formatError(error), "error");
       else console.warn("Automatic update check failed", error);
     } finally {
       updateCheckRunningRef.current = false;
     }
-  }, [locale, show, showError, showSuccess]);
+  }, [locale, reportUpdateCheck]);
 
   const handleCheckUpdates = useCallback(async () => {
     await checkForUpdates(true);

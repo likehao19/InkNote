@@ -161,6 +161,25 @@ afterEach(async () => {
 });
 
 describe("manual update check feedback", () => {
+  it("shows a native result dialog on macOS even when already up to date", async () => {
+    vi.spyOn(fileApi, "isMac", "get").mockReturnValue(true);
+    await menu("check-updates");
+    expect(ipc.mock.calls.some(([command, args]) => command === "plugin:dialog|message"
+      && args?.message === "当前已经是最新版本")).toBe(true);
+    await menu("check-updates");
+    expect(check).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows native macOS errors and permits a subsequent check", async () => {
+    vi.spyOn(fileApi, "isMac", "get").mockReturnValue(true);
+    vi.mocked(check).mockRejectedValueOnce(new Error("request timed out"));
+    await menu("check-updates");
+    expect(ipc.mock.calls.some(([command, args]) => command === "plugin:dialog|message"
+      && args?.message === "request timed out")).toBe(true);
+    await menu("check-updates");
+    expect(check).toHaveBeenCalledTimes(2);
+  });
+
   it("keeps the up-to-date result visible after repeated menu checks", async () => {
     for (let i = 0; i < 2; i++) {
       await menu("check-updates");
