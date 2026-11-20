@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { EditorViewState } from "../lib/editorViewState";
+import { mapReloadedViewState, readEditorViewState, type EditorViewState } from "../lib/editorViewState";
 import type { EditorMode } from "../editor";
 import { getDefaultEditorMode } from "../lib/preferences";
 import {
@@ -227,9 +227,11 @@ export const useTabsStore = create<DocState>((set, get) => ({
       let activeId = s.activeId;
       const tabs = s.tabs.map((t) => {
         if (t.id !== id) return t;
+        const viewState = readEditorViewState(id) ?? t.viewState;
         const next = {
           ...t,
           revision: t.revision + 1,
+          viewState: viewState && mapReloadedViewState(viewState, t.content, content),
           fileIdentity,
           path,
           content,

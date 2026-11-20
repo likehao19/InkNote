@@ -9,10 +9,12 @@ import App from "./App";
 import { useTabsStore } from "./store/useTabsStore";
 import { resetSettingsStoreForTests } from "./lib/settingsStore";
 import { NATIVE_MENU_EVENT } from "./lib/nativeMenu";
-import { setRestoreLastFile, getSidebarVisiblePref, setSidebarVisiblePref } from "./lib/preferences";
+import { setAutoAddDocumentFolder, setRestoreLastFile, getSidebarVisiblePref, setSidebarVisiblePref } from "./lib/preferences";
 import * as fileApi from "./lib/tauri";
 import { captureSession, type SessionSnapshot } from "./lib/sessionRecovery";
-import { getWorkspaceFolders } from "./lib/workspace";
+import { registerEditorViewState } from "./lib/editorViewState";
+import { collectDocumentMatches } from "./lib/documentSearch";
+import { getWorkspaceFolders, setWorkspaceFolders } from "./lib/workspace";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 
@@ -329,6 +331,58 @@ describe("external folder drops", () => {
 });
 
 describe("multi-document workflows", () => {
+  it("does not add an opened document's folder unless the preference is enabled", async () => {
+    await openFile("/notes/A.md");
+    expect(getWorkspaceFolders()).toEqual([]);
+  });
+
+  it("persists external document folders without taking over the outline or nesting duplicate roots", async () => {
+    files.set("/notes/sub/Nested.md", "# Nested");
+    startupPath = "/notes/A.md";
+    await restart(() => {
+      setSidebarVisiblePref(true);
+      setAutoAddDocumentFolder(true);
+      setWorkspaceFolders(["/archive"]);
+    });
+    await waitForPath("/notes/A.md");
+    expect(getWorkspaceFolders()).toEqual(["/archive", "/notes"]);
+    expect(document.querySelector(".sidebar .tab.active")?.textContent).toBe("大纲");
+
+    await act(async () => { await emit("open-file", "/notes/sub/Nested.md"); });
+    await waitForPath("/notes/sub/Nested.md");
+    expect(getWorkspaceFolders()).toEqual(["/archive", "/notes"]);
+    expect(document.querySelector(".sidebar .tab.active")?.textContent).toBe("大纲");
+    await menu("sidebar-files");
+    expect(document.querySelectorAll(".tree-root-row")).toHaveLength(2);
+
+    startupPath = null;
+    await restart();
+    expect(getWorkspaceFolders()).toEqual(["/archive", "/notes"]);
+  });
+
+  it("keeps the welcome page hidden while an external startup document is being opened", async () => {
+    let resolveStartup!: (path: string | null) => void;
+    let resolveFile!: (file: fileApi.TextFileContent) => void;
+    const startup = new Promise<string | null>((resolve) => { resolveStartup = resolve; });
+    const file = new Promise<fileApi.TextFileContent>((resolve) => { resolveFile = resolve; });
+    files.set("/notes/A.md", "Opened directly");
+    const readFile = vi.spyOn(fileApi, "readTextFile").mockReturnValueOnce(file);
+    await restart(() => { vi.mocked(fileApi.getStartupFile).mockReturnValueOnce(startup); });
+    expect(document.querySelector(".welcome-panel")).toBeNull();
+
+    await act(async () => resolveStartup("/notes/A.md"));
+    expect(readFile).toHaveBeenCalledWith("/notes/A.md");
+    expect(document.querySelector(".welcome-panel")).toBeNull();
+
+    await act(async () => resolveFile({ content: "Opened directly", encoding: { name: "UTF-8", bom: false } }));
+    await waitForPath("/notes/A.md");
+    expect(useTabsStore.getState().getActive()?.content).toBe("Opened directly");
+    expect(document.querySelector(".welcome-panel")).toBeNull();
+
+    await restart(() => { setRestoreLastFile(false); });
+    await vi.waitFor(() => expect(document.querySelector(".welcome-panel")).not.toBeNull());
+  });
+
   it("keeps the sidebar startup preference off after temporarily showing it and restarting", async () => {
     await restart(() => setSidebarVisiblePref(false));
     expect(document.querySelector(".sidebar")).toBeNull();
@@ -513,6 +567,33 @@ describe("multi-document workflows", () => {
     expect(useTabsStore.getState().getActive()?.path).toBe("/notes/B.md");
   });
 
+  it("restores the live reading position when an external save inserts lines above it", async () => {
+    const content = "# A\n\nFirst paragraph.\n\nReading here.";
+    files.set("/notes/A.md", content);
+    await openFile("/notes/A.md");
+    const id = useTabsStore.getState().getActive()!.id;
+    const anchor = content.indexOf("Reading");
+    const position = { anchor, head: anchor + 7, scrollAnchor: anchor, scrollOffset: 4, scrollLeft: 12 };
+    const unregister = registerEditorViewState(id, () => position);
+    const inserted = "External introduction.\n\n";
+    try {
+      files.set("/notes/A.md", inserted + content);
+      await act(async () => { await emit("file-changed", "/notes/A.md"); });
+      await vi.waitFor(async () => {
+        await settle();
+        expect(useTabsStore.getState().getActive()?.content).toBe(inserted + content);
+      });
+      expect(useTabsStore.getState().getActive()?.viewState).toEqual({
+        ...position,
+        anchor: anchor + inserted.length,
+        head: position.head + inserted.length,
+        scrollAnchor: anchor + inserted.length,
+      });
+    } finally {
+      unregister();
+    }
+  });
+
   it("rechecks missed external changes on focus and tab activation", async () => {
     await openFile("/notes/A.md");
     await openFile("/notes/B.md");
@@ -659,7 +740,14 @@ describe("multi-document workflows", () => {
   });
 
   it("previews search matches without stealing focus or changing document content", async () => {
-    files.set("/notes/A.md", "first needle\nsecond needle\nlast needle");
+    vi.stubGlobal("Worker", class {
+      onmessage?: (event: MessageEvent) => void;
+      postMessage(args: Parameters<typeof collectDocumentMatches>) {
+        queueMicrotask(() => this.onmessage?.(new MessageEvent("message", { data: collectDocumentMatches(...args) })));
+      }
+      terminate() {}
+    });
+    files.set("/notes/A.md", "first needle\nsecond needle\nlast needle" + "\nneedle".repeat(100));
     await openFile("/notes/A.md");
     await menu("find");
     const input = await vi.waitFor(() => {
@@ -672,9 +760,12 @@ describe("multi-document workflows", () => {
       setValue.call(input, "needle");
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    await settle();
-    const view = activeView();
-    expect(view.state.selection.main.from).toBe(6);
+    const view = await vi.waitFor(async () => {
+      await settle();
+      const view = activeView();
+      expect(view.state.selection.main.from).toBe(6);
+      return view;
+    });
     expect(view.state.selection.main.to).toBe(12);
     expect(document.activeElement).toBe(input);
     expect(view.dom.querySelector(".cm-document-search-match")?.textContent).toBe("needle");
@@ -683,6 +774,11 @@ describe("multi-document workflows", () => {
     expect(document.activeElement).toBe(input);
     await act(async () => { input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true })); });
     expect(view.state.selection.main.from).toBe(6);
+    expect(document.querySelectorAll(".document-search-modal .global-search-item")).toHaveLength(100);
+    const nextPage = document.querySelector<HTMLButtonElement>(".search-result-pages button:last-child")!;
+    await act(async () => nextPage.click());
+    expect(document.querySelectorAll(".document-search-modal .global-search-item")).toHaveLength(3);
+    expect(view.state.doc.lineAt(view.state.selection.main.from).number).toBe(101);
     await act(async () => {
       setValue.call(input, "missing");
       input.dispatchEvent(new Event("input", { bubbles: true }));

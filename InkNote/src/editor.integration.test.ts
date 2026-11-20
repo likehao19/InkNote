@@ -7,6 +7,8 @@ import { createEditor, type EditorHandle } from "./editor";
 import sampleMarkdown from "../sample.md?raw";
 import { writeText as writeClipboardText } from "@tauri-apps/plugin-clipboard-manager";
 import { renderInlineMarkdown, selectedTableText } from "./editor/widgets/table";
+import { caretTextOffset, setCaretOffset } from "./editor/widgets/editableSource";
+import { clearMocks, mockConvertFileSrc } from "@tauri-apps/api/mocks";
 
 vi.mock("@tauri-apps/plugin-clipboard-manager", () => ({
   readText: vi.fn(),
@@ -134,7 +136,71 @@ describe("Markdown 所见即所得预览", () => {
   it("renders only safe table break tags and keeps code literals escaped", () => {
     expect(renderInlineMarkdown("a<br>b<BR />c\nd")).toBe("a<br>b<br>c<br>d");
     expect(renderInlineMarkdown("`<br>` <br onclick=alert(1)>"))
-      .toBe("<code>&lt;br&gt;</code> &lt;br onclick=alert(1)&gt;");
+      .toBe("<code>&lt;br&gt;</code> <br>");
+  });
+
+  it("renders inline HTML breaks, links and images without exposing attributes in preview", () => {
+    const markdown = 'Before<br>After <a href="#target" onclick="bad()">jump</a> <img src="https://example.com/p.png" onerror="bad()" alt="picture">\n\n# Target';
+    const { parent, handle } = mount(markdown, true);
+    expect(parent.querySelector(".cm-line br.md-html-break")).not.toBeNull();
+    const link = parent.querySelector<HTMLElement>("[data-html-href]")!;
+    expect(link.textContent).toBe("jump");
+    expect(link.dataset.htmlHref).toBe("#target");
+    link.dispatchEvent(new MouseEvent("mousedown", { button: 0, ctrlKey: true, bubbles: true, cancelable: true }));
+    expect(handle.view.state.selection.main.head).toBe(markdown.indexOf("# Target"));
+    const image = parent.querySelector(".md-image-inline img")!;
+    expect(image.getAttribute("src")).toBe("https://example.com/p.png");
+    expect(image.getAttribute("alt")).toBe("picture");
+    expect(parent.querySelector("[onerror], [onclick], [href]")).toBeNull();
+    expect(handle.view.state.doc.toString()).toBe(markdown);
+  });
+
+  it("keeps details interactive and renders the Markdown between its blank lines", async () => {
+    const markdown = '<details>\n<summary>More</summary>\n\n**Hidden body**\n\n</details>\n\nOutside';
+    const { parent, handle } = mount(markdown);
+    const summary = parent.querySelector<HTMLElement>(".md-html-preview details summary")!;
+    expect(summary.textContent).toBe("More");
+    expect(summary.parentElement?.textContent).toContain("Hidden body");
+    const pointer = new MouseEvent("mousedown", { button: 0, bubbles: true, cancelable: true });
+    summary.dispatchEvent(pointer);
+    expect(pointer.defaultPrevented).toBe(false);
+    expect(parent.querySelector(".md-html-widget.md-block--editing")).toBeNull();
+    await vi.waitFor(() => {
+      expect(parent.querySelector(".md-html-preview details")?.innerHTML).toContain("<strong>Hidden body</strong>");
+    }, { timeout: 4000 });
+    expect(handle.view.state.doc.toString()).toBe(markdown);
+  });
+
+  it("allows harmless tags in a table while filtering attributes and URLs", () => {
+    const html = renderInlineMarkdown('<u onclick="bad()">note</u> <a href="java&#x73;cript:bad()">link</a> <img src="https://example.com/p.png" srcset="bad" alt="x">');
+    const template = document.createElement("template");
+    template.innerHTML = html;
+    expect(template.content.querySelector("u")?.textContent).toBe("note");
+    expect(template.content.querySelector("a")?.textContent).toBe("link");
+    expect(template.content.querySelector("img")?.getAttribute("src")).toBe("https://example.com/p.png");
+    expect(template.content.querySelector("[onclick], [srcset], [href], [data-html-href]")).toBeNull();
+  });
+
+  it("resolves relative HTML images against the Markdown document rather than the app", () => {
+    mockConvertFileSrc("windows");
+    try {
+      const html = renderInlineMarkdown('<img src="images/photo.png" alt="local">', "D:\\notes\\doc.md");
+      const template = document.createElement("template");
+      template.innerHTML = html;
+      const url = template.content.querySelector("img")?.getAttribute("src");
+      expect(decodeURIComponent(url ?? "").replace(/\\/g, "/")).toMatch(/D:\/notes\/images\/photo\.png$/i);
+    } finally {
+      clearMocks();
+    }
+  });
+
+  it("removes active or app-controlling markup from an HTML block", () => {
+    const html = '<div id="app" class="modal" style="display:none"><script>bad()</script><iframe src="https://example.com"></iframe><svg><a>bad</a></svg><a href="java&#115;cript:bad()">safe text</a></div>';
+    const { parent, handle } = mount(html, true);
+    const preview = parent.querySelector(".md-html-preview")!;
+    expect(preview.textContent).toBe("safe text");
+    expect(preview.querySelector("script, iframe, svg, [style], [href], [data-html-href], #app, .modal")).toBeNull();
+    expect(handle.view.state.doc.toString()).toBe(html);
   });
 
   it.each([
@@ -395,42 +461,83 @@ describe("Markdown 所见即所得预览", () => {
     assertRendered();
   });
 
-  it("exits a code block when Enter is pressed on its trailing blank line", async () => {
-    const { parent, handle } = mount("```javascript\nconst answer = 42;\n```");
+  it.each(["ctrlKey", "metaKey"] as const)("keeps repeated Shift+Enter inside code and exits on %s+Enter", async (modifier) => {
+    const fence = "\x60\x60\x60";
+    const opening = fence + "javascript\n";
+    const { parent, handle } = mount(opening + fence);
     const code = parent.querySelector<HTMLElement>(".md-codeblock-widget code")!;
     code.focus();
-    const selection = window.getSelection()!;
-    const range = document.createRange();
-    range.selectNodeContents(code);
-    range.collapse(false);
-    selection.removeAllRanges();
-    selection.addRange(range);
-    code.dispatchEvent(new KeyboardEvent("keydown", {
-      key: "Enter",
-      bubbles: true,
-      cancelable: true,
-    }));
+    setCaretOffset(code, 0);
 
-    // happy-dom 不执行 contenteditable 的原生换行，这里模拟第一次 Enter 的结果。
-    code.textContent = "const answer = 42;\n";
-    range.selectNodeContents(code);
-    range.collapse(false);
-    selection.removeAllRanges();
-    selection.addRange(range);
-    code.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    for (let i = 0; i < 3; i++) {
+      code.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", shiftKey: true, bubbles: true, cancelable: true }));
+      expect(document.activeElement).toBe(code);
+    }
     await nextFrame();
+    const saved = opening + "\n".repeat(4) + fence;
+    expect(handle.view.state.doc.toString()).toBe(saved);
+    expect(mount(saved).parent.querySelector(".md-codeblock-gutter")?.textContent).toBe("1\n2\n3\n4");
 
-    code.dispatchEvent(new KeyboardEvent("keydown", {
-      key: "Enter",
-      bubbles: true,
-      cancelable: true,
-    }));
-
-    expect(handle.view.state.doc.toString()).toBe(
-      "```javascript\nconst answer = 42;\n```\n",
-    );
+    code.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", [modifier]: true, bubbles: true, cancelable: true }));
+    expect(handle.view.state.doc.toString()).toBe(saved + "\n");
     expect(handle.view.state.selection.main.head).toBe(handle.view.state.doc.length);
     expect(handle.view.hasFocus).toBe(true);
+  });
+
+  it("exits on two plain Enters at the end and keeps existing trailing blank lines", async () => {
+    const fence = "\x60\x60\x60";
+    const initial = fence + "py\nprint(1)\n\n" + fence;
+    const { parent, handle } = mount(initial);
+    const code = parent.querySelector<HTMLElement>(".md-codeblock-widget code")!;
+    const enter = () => code.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    code.focus();
+    setCaretOffset(code, code.textContent!.length);
+    enter();
+    await nextFrame();
+    expect(document.activeElement).toBe(code);
+    expect(code.textContent).toBe("print(1)\n\n");
+
+    enter();
+    expect(handle.view.state.doc.toString()).toBe(initial + "\n");
+    expect(handle.view.state.selection.main.head).toBe(handle.view.state.doc.length);
+    expect(handle.view.hasFocus).toBe(true);
+  });
+
+  it("keeps consecutive plain Enters inside the block when text follows the caret", async () => {
+    const fence = "\x60\x60\x60";
+    const { parent, handle } = mount(fence + "text\nbeforeafter\n" + fence);
+    const code = parent.querySelector<HTMLElement>(".md-codeblock-widget code")!;
+    code.focus();
+    setCaretOffset(code, "before".length);
+    for (let i = 0; i < 2; i++) {
+      code.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    }
+    await nextFrame();
+    expect(handle.view.state.doc.toString()).toBe(fence + "text\nbefore\n\nafter\n" + fence);
+    expect(document.activeElement).toBe(code);
+  });
+
+  it("keeps undo and redo focused at the edit inside a fenced code block", () => {
+    const fence = "\x60\x60\x60";
+    const opening = "Start of document.\n\n" + fence + "py\n";
+    const initial = opening + 'print("hello")\n\n' + fence;
+    const { parent, handle } = mount(initial);
+    const getCode = () => parent.querySelector<HTMLElement>(".md-codeblock-widget code")!;
+    const code = getCode();
+    code.focus();
+    code.textContent = 'print("xyhello")\n';
+    setCaretOffset(code, 9);
+    code.dispatchEvent(new InputEvent("input", { bubbles: true }));
+
+    code.dispatchEvent(new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true, cancelable: true }));
+    expect(handle.view.state.doc.toString()).toBe(initial);
+    expect(document.activeElement).toBe(getCode());
+    expect(caretTextOffset(getCode())).toBe(7);
+
+    expect(handle.runAction("redo")).toBe(true);
+    expect(handle.view.state.doc.toString()).toBe(opening + 'print("xyhello")\n\n' + fence);
+    expect(document.activeElement).toBe(getCode());
+    expect(caretTextOffset(getCode())).toBe(9);
   });
 
   it("shows sequential line numbers in code blocks", () => {

@@ -3,6 +3,10 @@ import { isMac } from "../lib/platform";
 import type { Locale } from "../lib/i18n";
 import { t } from "../lib/i18n";
 import { useModalEscape } from "../lib/useModalEscape";
+import type { collectDocumentMatches, DocumentSearchMatch } from "../lib/documentSearch";
+import SearchResultPages, { SEARCH_PAGE_SIZE } from "./SearchResultPages";
+
+const EMPTY_MATCHES: DocumentSearchMatch[] = [];
 
 interface Props {
   locale: Locale;
@@ -13,15 +17,6 @@ interface Props {
   onPreviewMatch: (match: DocumentSearchMatch | null) => void;
   onReplaceContent: (content: string, line: number) => void;
   onClose: () => void;
-}
-
-export interface DocumentSearchMatch {
-  from: number;
-  to: number;
-  line: number;
-  lineText: string;
-  lineStart: number;
-  lineEnd: number;
 }
 
 function escapeRegex(value: string) {
@@ -35,38 +30,6 @@ function isValidRegex(value: string) {
   } catch {
     return false;
   }
-}
-
-export function collectDocumentMatches(content: string, query: string, caseSensitive: boolean, useRegex: boolean): DocumentSearchMatch[] {
-  if (!query) return [];
-  let expression: RegExp;
-  try {
-    expression = new RegExp(useRegex ? query : escapeRegex(query), caseSensitive ? "g" : "gi");
-  } catch {
-    return [];
-  }
-
-  const matches: DocumentSearchMatch[] = [];
-  const lines = content.split("\n");
-  let offset = 0;
-  for (let index = 0; index < lines.length; index++) {
-    const lineText = lines[index];
-    expression.lastIndex = 0;
-    let match: RegExpExecArray | null;
-    while ((match = expression.exec(lineText))) {
-      matches.push({
-        from: offset + match.index,
-        to: offset + match.index + match[0].length,
-        line: index + 1,
-        lineText,
-        lineStart: match.index,
-        lineEnd: match.index + match[0].length,
-      });
-      if (!match[0].length) expression.lastIndex++;
-    }
-    offset += lineText.length + 1;
-  }
-  return matches;
 }
 
 function HighlightedLine({ match }: { match: DocumentSearchMatch }) {
@@ -101,15 +64,45 @@ export default function DocumentSearchDialog({
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const tr = (key: Parameters<typeof t>[1], vars?: Record<string, string | number>) => t(locale, key, vars);
-  const matches = useMemo(
-    () => collectDocumentMatches(content, query, caseSensitive, useRegex),
+  const request = useMemo<Parameters<typeof collectDocumentMatches>>(
+    () => [content, query, caseSensitive, useRegex],
     [content, query, caseSensitive, useRegex],
   );
+  const [result, setResult] = useState<{ request: typeof request; matches: DocumentSearchMatch[] | null }>();
   const invalidRegex = useRegex && Boolean(query) && !isValidRegex(query);
+  const currentResult = result?.request === request ? result : undefined;
+  const searching = Boolean(query) && !invalidRegex && !currentResult;
+  const matches = currentResult?.matches ?? EMPTY_MATCHES;
+  const pageOffset = Math.floor(activeIndex / SEARCH_PAGE_SIZE) * SEARCH_PAGE_SIZE;
 
   useModalEscape(true, onClose);
 
   useEffect(() => inputRef.current?.focus(), []);
+  useEffect(() => {
+    if (!query || invalidRegex) return;
+    let worker: Worker | undefined;
+    const timer = window.setTimeout(() => {
+      try {
+        worker = new Worker(new URL("../lib/documentSearch.worker.ts", import.meta.url), { type: "module" });
+        worker.onmessage = (event: MessageEvent<DocumentSearchMatch[]>) => {
+          setResult({ request, matches: event.data });
+          worker?.terminate();
+        };
+        worker.onerror = () => {
+          setResult({ request, matches: null });
+          worker?.terminate();
+        };
+        worker.postMessage(request);
+      } catch {
+        setResult({ request, matches: null });
+        worker?.terminate();
+      }
+    }, 120);
+    return () => {
+      window.clearTimeout(timer);
+      worker?.terminate();
+    };
+  }, [query, invalidRegex, request]);
   useEffect(() => {
     if (initialReplace) setShowReplace(true);
   }, [initialReplace]);
@@ -171,7 +164,7 @@ export default function DocumentSearchDialog({
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       setActiveIndex((index) => Math.max(index - 1, 0));
-    } else if (event.key === "Enter" && matches[activeIndex]) {
+    } else if (event.key === "Enter" && !(event.target instanceof HTMLButtonElement) && matches[activeIndex]) {
       event.preventDefault();
       openMatch(activeIndex);
     }
@@ -197,7 +190,9 @@ export default function DocumentSearchDialog({
             value={query}
             onChange={(event) => { setActiveIndex(0); setQuery(event.target.value); }}
           />
-          <span className="global-search-status">{tr("documentSearch.count", { n: matches.length })}</span>
+          <span className="global-search-status" role="status">
+            {searching ? tr("globalSearch.searching") : tr("documentSearch.count", { n: matches.length })}
+          </span>
           <button type="button" className="document-search-close" onClick={onClose} aria-label={tr("dialog.close")}>×</button>
         </div>
         {showReplace && (
@@ -234,26 +229,32 @@ export default function DocumentSearchDialog({
             <div className="global-search-hint">{tr("documentSearch.hint")}</div>
           ) : invalidRegex ? (
             <div className="global-search-empty global-search-error">{tr("globalSearch.invalidRegex")}</div>
-          ) : matches.length === 0 ? (
+          ) : currentResult?.matches === null ? (
+            <div className="global-search-empty global-search-error">{tr("documentSearch.failed")}</div>
+          ) : searching ? null : matches.length === 0 ? (
             <div className="global-search-empty">{tr("globalSearch.noResults")}</div>
           ) : (
             <ul className="global-search-list" ref={listRef}>
-              {matches.map((match, index) => (
-                <li key={`${match.from}:${match.to}`}>
-                  <button
-                    type="button"
-                    className={`global-search-item${index === activeIndex ? " active" : ""}`}
-                    onClick={() => openMatch(index)}
-                    onMouseEnter={() => setActiveIndex(index)}
-                  >
-                    <span className="global-search-line">{tr("status.line", { n: match.line })}</span>
-                    <HighlightedLine match={match} />
-                  </button>
-                </li>
-              ))}
+              {matches.slice(pageOffset, pageOffset + SEARCH_PAGE_SIZE).map((match, pageIndex) => {
+                const index = pageOffset + pageIndex;
+                return (
+                  <li key={`${match.from}:${match.to}`}>
+                    <button
+                      type="button"
+                      className={`global-search-item${index === activeIndex ? " active" : ""}`}
+                      onClick={() => openMatch(index)}
+                      onMouseEnter={() => setActiveIndex(index)}
+                    >
+                      <span className="global-search-line">{tr("status.line", { n: match.line })}</span>
+                      <HighlightedLine match={match} />
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
+        <SearchResultPages locale={locale} offset={pageOffset} total={matches.length} onSelect={setActiveIndex} />
       </div>
     </div>
   );

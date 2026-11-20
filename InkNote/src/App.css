@@ -1551,6 +1551,7 @@ html:not([data-theme="dark"]) .md-codeblock-widget code::selection {
   cursor: text;
 }
 .md-codeblock-box {
+  --codeblock-line-height: 1.55;
   position: relative;
   display: flex;
   width: 100%;
@@ -1570,7 +1571,7 @@ html:not([data-theme="dark"]) .md-codeblock-widget code::selection {
   color: var(--md-code-comment);
   font-family: var(--font-mono);
   font-size: 0.85em;
-  line-height: 1.55;
+  line-height: var(--codeblock-line-height);
   border-right: 1px solid var(--md-panel-border);
 }
 .md-codeblock-widget pre {
@@ -1594,7 +1595,7 @@ html:not([data-theme="dark"]) .md-codeblock-widget code::selection {
   white-space: pre;
   font-family: var(--font-mono);
   font-size: 0.85em;
-  line-height: 1.55;
+  line-height: var(--codeblock-line-height);
   color: var(--md-code-fg);
 }
 
@@ -1604,8 +1605,9 @@ html:not([data-theme="dark"]) .md-codeblock-widget code::selection {
   overflow-y: auto;
 }
 
-/* GitHub Markdown：代码块本身是无边框的 pre，不常驻行号栏。 */
+/* GitHub Markdown：无边框面板。 */
 html[data-md-theme="github"] .md-codeblock-box {
+  --codeblock-line-height: 1.45;
   border: 0;
   border-radius: 6px;
 }
@@ -1617,7 +1619,6 @@ html[data-md-theme="github"] .md-codeblock-gutter {
 html[data-md-theme="github"] .md-codeblock-widget code {
   padding: 34px 16px 16px 12px;
   font-size: 0.85em;
-  line-height: 1.45;
 }
 html[data-md-theme="github"] .cm-md-code {
   padding: 0.2em 0.4em;
@@ -1629,8 +1630,9 @@ html[data-theme="dark"][data-md-theme="github"] .cm-md-code {
   background: rgba(110, 118, 129, 0.4);
 }
 
-/* Vue 文档风格同样保持干净的无行号代码面板，用深色代码区与 GitHub 区分。 */
+/* Vue 文档风格使用深色代码区。 */
 html[data-md-theme="vue"] .md-codeblock-box {
+  --codeblock-line-height: 1.6;
   border: 0;
   border-radius: 8px;
 }
@@ -1641,7 +1643,6 @@ html[data-md-theme="vue"] .md-codeblock-gutter {
 }
 html[data-md-theme="vue"] .md-codeblock-widget code {
   padding: 36px 20px 18px 12px;
-  line-height: 1.6;
 }
 .md-codeblock-lang {
   max-width: 132px;
@@ -2548,6 +2549,10 @@ html[data-md-theme="minimal"] .md-table-widget th {
   border-radius: var(--md-component-radius);
   background: color-mix(in srgb, var(--md-panel-bg) 55%, transparent);
 }
+.md-html-preview summary { cursor: pointer; }
+.md-html-preview img,
+.md-table-widget td img,
+.md-table-widget th img { max-width: 100%; object-fit: contain; }
 .md-block--editing > .md-metadata-preview,
 .md-block--editing > .md-html-preview {
   display: none;
@@ -3414,9 +3419,16 @@ html[data-theme="dark"] .toast-error {
   display: flex;
   flex-direction: column;
   padding: 0;
+  overflow: clip;
+}
+.global-search-modal > :not(.global-search-body) {
+  flex-shrink: 0;
 }
 .document-search-backdrop { align-items: flex-start; justify-content: flex-end; padding: 60px 16px 0; background: transparent; }
-.document-search-modal { width: min(560px, 94vw); max-height: 36vh; }
+.document-search-modal {
+  width: min(560px, 94vw);
+  max-height: min(max(240px, 36vh), calc(100vh - 76px));
+}
 .editor-host .cm-document-search-line { background: color-mix(in srgb, #e9b949 15%, transparent); }
 .editor-host .cm-document-search-match { background: #ffe082; color: #292015; outline: 1px solid #c99419; border-radius: 2px; }
 .editor-host .cm-document-search-component { outline: 2px solid #c99419; outline-offset: 2px; background-color: color-mix(in srgb, #e9b949 15%, var(--bg)); }
@@ -3490,10 +3502,11 @@ html[data-theme="dark"] .toast-error {
   to { transform: rotate(360deg); }
 }
 .global-search-body {
-  flex: 1;
-  min-height: 200px;
+  flex: 1 1 auto;
+  min-height: 0;
   max-height: 50vh;
   overflow: auto;
+  overscroll-behavior: contain;
 }
 .global-search-empty,
 .global-search-hint {
@@ -3509,6 +3522,16 @@ html[data-theme="dark"] .global-search-error { color: #f1707b; }
   list-style: none;
   margin: 0;
   padding: 4px 0;
+}
+.search-result-pages {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
+  color: var(--fg-muted);
+  font-size: 12px;
 }
 .global-search-group { margin: 0; }
 .global-search-file {

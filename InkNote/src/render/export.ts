@@ -6,6 +6,9 @@ import remarkFrontmatter from "remark-frontmatter";
 import remarkRehype from "remark-rehype";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
+import {
+  HTML_BLOCK_TAGS, HTML_IMAGE_PROTOCOLS, HTML_IMAGE_SIZE, HTML_INLINE_TAGS, HTML_LINK_PROTOCOLS, HTML_STRIP_TAGS,
+} from "../lib/htmlPolicy";
 import rehypeKatex from "rehype-katex";
 import rehypeHighlight from "rehype-highlight";
 import rehypeStringify from "rehype-stringify";
@@ -62,9 +65,16 @@ function markdownThemeCss(theme: MarkdownTheme, colorTheme: ResolvedTheme): stri
 }
 
 /** 允许常用排版标签，同时剔除 script、事件属性和危险 URL。 */
-const SANITIZE_SCHEMA = {
+const SANITIZE_SCHEMA: typeof defaultSchema = {
   ...defaultSchema,
-  tagNames: [...(defaultSchema.tagNames ?? []), "mark", "u", "kbd"],
+  tagNames: [...new Set([...(defaultSchema.tagNames ?? []), ...HTML_INLINE_TAGS, ...HTML_BLOCK_TAGS])],
+  strip: [...new Set([...(defaultSchema.strip ?? []), ...HTML_STRIP_TAGS])],
+  protocols: { ...defaultSchema.protocols, href: HTML_LINK_PROTOCOLS, src: HTML_IMAGE_PROTOCOLS },
+  attributes: {
+    ...defaultSchema.attributes,
+    details: ["open"],
+    img: [...(defaultSchema.attributes?.img ?? []), ["width", HTML_IMAGE_SIZE], ["height", HTML_IMAGE_SIZE]],
+  },
 };
 
 function rehypeHighlightMarks() {
@@ -272,7 +282,7 @@ export async function embedImagesInHtml(
   }
   let out = html;
   for (const { match, src } of parts) {
-    if (src.startsWith("data:") || /^https?:/i.test(src)) continue;
+    if (src.startsWith("data:") || src.startsWith("//") || /^https?:/i.test(src)) continue;
     const pendingDataUrl = pendingImageDataUrl(pendingImages, src);
     if (pendingDataUrl) {
       out = out.replace(match, match.replace(src, pendingDataUrl));

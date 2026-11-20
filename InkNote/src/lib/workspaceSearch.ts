@@ -86,6 +86,7 @@ export function scorePathMatch(query: string, path: string): number {
 export interface SearchOptions {
   filenameOnly?: boolean;
   useRegex?: boolean;
+  signal?: AbortSignal;
 }
 
 async function findMatchesInText(
@@ -161,11 +162,13 @@ export async function searchWorkspace(
   if (!q) return { matches: [], fileCount: 0 };
 
   const files = await resolveSearchFiles(folderPaths, recentFiles);
+  opts.signal?.throwIfAborted();
   const matches: SearchMatch[] = [];
 
   if (opts.filenameOnly) {
     const batchSize = 50;
     for (let from = 0; from < files.length; from += batchSize) {
+      opts.signal?.throwIfAborted();
       const batchMatches = await Promise.all(
         files.slice(from, from + batchSize).map((path) => findMatchesInText(path, "", q, opts)),
       );
@@ -174,6 +177,7 @@ export async function searchWorkspace(
   } else {
     const batchSize = 12;
     for (let from = 0; from < files.length; from += batchSize) {
+      opts.signal?.throwIfAborted();
       const batch = files.slice(from, from + batchSize);
       const contents = await Promise.all(batch.map(async (path) => {
         try {
@@ -183,6 +187,7 @@ export async function searchWorkspace(
           return null;
         }
       }));
+      opts.signal?.throwIfAborted();
       const batchMatches = await Promise.all(contents.map((item) => (
         item ? findMatchesInText(item.path, item.text, q, opts) : []
       )));
@@ -190,6 +195,7 @@ export async function searchWorkspace(
     }
   }
 
+  opts.signal?.throwIfAborted();
   return { matches, fileCount: files.length };
 }
 

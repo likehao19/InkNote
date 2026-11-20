@@ -121,6 +121,7 @@ export async function initializeSettingsStore() {
       "mdnote.showStatusBar",
       "mdnote.typewriterPadding",
       "mdnote.externalOpenReadOnly",
+      "mdnote.autoAddDocumentFolder",
       "mdnote.newDocumentMetadata",
       "mdnote.metadataTitle",
       "mdnote.metadataAuthor",

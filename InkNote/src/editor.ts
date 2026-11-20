@@ -56,14 +56,12 @@ import { resolveAssetPath } from "./lib/paths";
 import { addPendingImage } from "./lib/pendingImages";
 import { IMAGE_ASSET_DIR } from "./lib/imageAssets";
 import { htmlToMarkdown } from "./lib/htmlPaste";
-import { openUrl } from "@tauri-apps/plugin-opener";
-import {
-  editorShowError,
-  editorShowMessage,
-} from "./lib/editorBridge";
+import { HTML_TAG_PATTERN, htmlTemplate, InlineHtmlWidget } from "./editor/htmlPreview";
+import { openPreviewLink } from "./editor/previewLinks";
+import { safeHtmlUrl } from "./lib/htmlPolicy";
+import { editorShowMessage } from "./lib/editorBridge";
 import { getLocale, t as tr } from "./lib/i18n";
 import { currentBlockRange } from "./editor/widgets/blockRange";
-import { extractMarkdownOutline } from "./lib/markdownOutline";
 
 export type EditorMode = "preview" | "source";
 
@@ -137,28 +135,13 @@ const NEVER_REVEAL = { from: 1, to: 0 };
 /** 任务项：兼容标准无序/有序形式，也兼容单独 `[x] 文本` 的简写。 */
 const TASK_LINE_RE = /^(\s*(?:(?:[-*+]|\d+[.)])\s+)?)\[([ xX])\](\s|$)/;
 
-/** 行内包裹语法：Lezer 不认或不给配对信息，但导出链路支持，预览必须跟上 */
-function tagWrap(tag: string, cls: string) {
-  return { re: new RegExp(`<${tag}(?:\\s+[^>\\n]*)?>([^\\n]*?)</${tag}>`, "gi"), cls };
-}
-
-const INLINE_WRAPS: Array<{ re: RegExp; cls: string }> = [
-  { re: /==([^=\n]+?)==/g, cls: "md-highlight" },
-  tagWrap("u", "md-underline"),
-  tagWrap("sup", "md-sup"),
-  tagWrap("sub", "md-sub"),
-  tagWrap("mark", "md-highlight"),
-  tagWrap("b", "md-strong"),
-  tagWrap("strong", "md-strong"),
-  tagWrap("i", "md-em"),
-  tagWrap("em", "md-em"),
-  tagWrap("s", "md-del"),
-  tagWrap("del", "md-del"),
-  tagWrap("kbd", "md-kbd"),
-];
-
-/** 单独出现、没有配对的行内标签（换行、水平线等） */
-const INLINE_VOID_TAGS = /<br\s*\/?>/gi;
+const INLINE_HTML_STYLES = new Map([
+  ["u", "md-underline"], ["ins", "md-underline"],
+  ["sup", "md-sup"], ["sub", "md-sub"], ["mark", "md-highlight"],
+  ["b", "md-strong"], ["strong", "md-strong"], ["i", "md-em"], ["em", "md-em"],
+  ["s", "md-del"], ["del", "md-del"], ["kbd", "md-kbd"],
+  ["code", "cm-md-code"], ["span", "md-html-span"], ["a", "cm-md-link"],
+]);
 
 function fencedCodeInfo(node: SyntaxNodeRef, doc: EditorState["doc"]): string {
   const info = node.node.getChild("CodeInfo");
@@ -262,6 +245,8 @@ function buildPreviewSets(
   const tree = previewSyntaxTree(state);
   const text = documentText(doc);
   const linkDefinitions = collectLinkDefinitions(tree, doc);
+  const inlineHtmlStarts = new Map<string, Array<{ from: number; to: number; raw: string }>>();
+  let inlineHtmlLine = 0;
 
   const fm = parseFrontMatter(text);
   const fmEnd = fm ? fm.to : 0;
@@ -286,6 +271,30 @@ function buildPreviewSets(
   /** 块级替换装饰要求区间恰好占满整行，否则会把所在行从中间劈开 */
   const coversWholeLines = (from: number, to: number) =>
     doc.lineAt(from).from === from && doc.lineAt(to).to === to;
+
+  // CommonMark ends a raw HTML block at an empty line. Keep complete details
+  // elements together so their body remains inside the interactive widget.
+  const detailsEnds = new Map<number, number>();
+  const detailsStack: Array<number | null> = [];
+  if (/<details(?=[\s>])/i.test(text)) tree.iterate({
+    enter(node) {
+      if (node.name !== "HTMLBlock" || node.from < fmEnd) return;
+      const raw = doc.sliceString(node.from, node.to);
+      if (/^\s*<(?:!--|(?:script|style|pre|textarea)(?=[\s>]))/i.test(raw)) return;
+      for (const token of raw.matchAll(HTML_TAG_PATTERN)) {
+        if (token[2].toLowerCase() !== "details") continue;
+        if (!token[1]) {
+          detailsStack.push(token.index === 0 && coversWholeLines(node.from, node.to) ? node.from : null);
+        } else {
+          const start = detailsStack.pop();
+          const end = node.from + token.index + token[0].length;
+          if (start != null && coversWholeLines(start, end)) detailsEnds.set(start, end);
+        }
+      }
+    },
+  });
+  const htmlRanges: TableRange[] = [];
+  let htmlBlockEnd = -1;
 
   const addLineClass = (
     lineFrom: number,
@@ -325,6 +334,7 @@ function buildPreviewSets(
       // （`---` 会被解析成 HorizontalRule + SetextHeading）
       // 注意用 to <= fmEnd 判断：根节点 from 也是 0，用 from 会直接中止整棵树的遍历
       if (fm && to <= fmEnd) return false;
+      if (n !== "Document" && from < htmlBlockEnd && to <= htmlBlockEnd) return false;
 
       if (HEADINGS.has(n)) {
         // 标题上方留白：Typora 里标题与前文之间有明显间距
@@ -515,6 +525,52 @@ function buildPreviewSets(
         return;
       }
 
+      if (n === "HTMLTag") {
+        const raw = doc.sliceString(from, to);
+        const tag = /^<(\/?)([a-z]+)(?=[\s/>])/i.exec(raw);
+        if (!tag) return;
+        const closing = Boolean(tag[1]);
+        const name = tag[2].toLowerCase();
+        if (!closing && (name === "br" || name === "img")) {
+          decos.push(Decoration.replace({
+            widget: new InlineHtmlWidget(raw, name, filePath),
+            revealFrom: from, revealTo: to,
+          }).range(from, to));
+          return;
+        }
+        const style = INLINE_HTML_STYLES.get(name);
+        if (!style) return;
+        const line = doc.lineAt(from).number;
+        if (line !== inlineHtmlLine) {
+          inlineHtmlLine = line;
+          inlineHtmlStarts.clear();
+        }
+        const starts = inlineHtmlStarts.get(name) ?? [];
+        if (!closing) {
+          if (raw.endsWith("/>") || doc.lineAt(to).number !== line) return;
+          starts.push({ from, to, raw });
+          inlineHtmlStarts.set(name, starts);
+          return;
+        }
+        const start = starts.pop();
+        if (!start) return;
+        const reveal = { from: start.from, to };
+        hide(start.from, start.to, reveal);
+        hide(from, to, reveal);
+        if (start.to < from) {
+          const href = name === "a"
+            ? safeHtmlUrl(htmlTemplate(start.raw).firstElementChild?.getAttribute("href") ?? "", "link")
+            : null;
+          if (name !== "a" || href) {
+            decos.push(Decoration.mark({
+              class: style,
+              ...(href ? { attributes: { "data-html-href": href } } : {}),
+            }).range(start.to, from));
+          }
+        }
+        return;
+      }
+
       if (n === "LinkReference") {
         const labelNode = node.node.getChild("LinkLabel");
         const rawLabel = labelNode ? doc.sliceString(labelNode.from + 1, labelNode.to - 1) : "";
@@ -542,14 +598,17 @@ function buildPreviewSets(
       }
 
       if (n === "HTMLBlock") {
-        if (!coversWholeLines(from, to)) return false;
-        atomicBlocks.push({ from, to });
+        const end = Math.max(to, detailsEnds.get(from) ?? to);
+        if (!coversWholeLines(from, end)) return false;
+        htmlBlockEnd = end;
+        htmlRanges.push({ from, to: end });
+        atomicBlocks.push({ from, to: end });
         decos.push(
           Decoration.replace({
-            widget: new HtmlBlockWidget(from, to, doc.sliceString(from, to)),
+            widget: new HtmlBlockWidget(from, end, doc.sliceString(from, end), filePath),
             block: true,
-            ...blockReveal(from, to),
-          }).range(from, to),
+            ...blockReveal(from, end),
+          }).range(from, end),
         );
         return false;
       }
@@ -591,7 +650,7 @@ function buildPreviewSets(
         atomicBlocks.push({ from, to });
         decos.push(
           Decoration.replace({
-            widget: new TableWidget(from, to, header, rows, aligns),
+            widget: new TableWidget(from, to, header, rows, aligns, filePath),
             block: true,
             ...blockReveal(from, to),
           }).range(from, to),
@@ -603,20 +662,21 @@ function buildPreviewSets(
         // 未闭合的围栏按 CommonMark 会一直吃到文末，渲染成组件会把整篇文档吞掉
         if (node.node.getChildren("CodeMark").length < 2) return;
         const lang = fencedCodeInfo(node, doc).trim().toLowerCase();
-        const code = fencedCodeText(node, doc);
         const block = coversWholeLines(from, to);
         if (!block) {
           // 缩进在列表里的围栏代码块：只隐藏围栏，不做块级替换
           hideChildren(node, "CodeMark");
           return;
         }
+        const bodyStart = doc.lineAt(from).to + 1;
+        const bodyEnd = Math.max(bodyStart, doc.lineAt(to).from - 1);
         atomicBlocks.push({ from, to });
         decos.push(
           Decoration.replace({
             widget:
               lang === "mermaid"
-                ? new MermaidWidget(from, to, code)
-                : new CodeBlockWidget(from, to, code, lang),
+                ? new MermaidWidget(from, to, fencedCodeText(node, doc))
+                : new CodeBlockWidget(from, to, doc.sliceString(bodyStart, bodyEnd), lang),
             block: true,
             ...blockReveal(from, to),
           }).range(from, to),
@@ -626,7 +686,8 @@ function buildPreviewSets(
     },
   });
 
-  const inCode = (from: number, to: number) => isInCode(tree, from, to);
+  const inCode = (from: number, to: number) => htmlRanges.some((range) => from < range.to && to > range.from)
+    || isInCode(tree, from, to);
 
   // `[x] 文本` 不是标准 GFM ListItem，Lezer 不会生成 Task 节点；作为编辑器
   // 兼容语法单独补装饰，保留源文件原样并复用同一套点击切换逻辑。
@@ -658,38 +719,17 @@ function buildPreviewSets(
     );
   }
 
-  // ==高亮==、<u>/<mark>/<b>/<i>/<kbd> 等行内标签
-  for (const wrap of INLINE_WRAPS) {
-    wrap.re.lastIndex = 0;
-    let m: RegExpExecArray | null;
-    while ((m = wrap.re.exec(text))) {
-      const inner = m[1];
-      if (!inner) continue; // 空内容，mark 不能为空区间
-      const from = m.index;
-      const to = from + m[0].length;
-      if (fm && from < fmEnd) continue;
-      if (inCode(from, to)) continue;
-
-      const open = m[0].indexOf(inner);
-      const innerFrom = from + open;
-      const innerTo = innerFrom + inner.length;
-      const reveal = { from, to };
-      hide(from, innerFrom, reveal);
-      decos.push(Decoration.mark({ class: wrap.cls }).range(innerFrom, innerTo));
-      hide(innerTo, to, reveal);
-    }
+  const highlights = /==([^=\n]+?)==/g;
+  for (const match of text.matchAll(highlights)) {
+    const from = match.index;
+    const to = from + match[0].length;
+    if (from < fmEnd || inCode(from, to)) continue;
+    const reveal = { from, to };
+    hide(from, from + 2, reveal);
+    decos.push(Decoration.mark({ class: "md-highlight" }).range(from + 2, to - 2));
+    hide(to - 2, to, reveal);
   }
 
-  // <br> 这类无配对标签直接藏掉
-  INLINE_VOID_TAGS.lastIndex = 0;
-  let voidTag: RegExpExecArray | null;
-  while ((voidTag = INLINE_VOID_TAGS.exec(text))) {
-    const from = voidTag.index;
-    const to = from + voidTag[0].length;
-    if (fm && from < fmEnd) continue;
-    if (inCode(from, to)) continue;
-    hide(from, to, { from, to });
-  }
 
   // YAML Front Matter（fm.to 含结尾换行，块级装饰必须去掉它才是整行区间）
   if (fm) {
@@ -1225,29 +1265,13 @@ function mediaHandlers(onOpenMarkdown?: (content: string, path?: string) => void
 
       let pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
       const target = event.target as HTMLElement;
-      // 与 Typora 一致：普通点击是定位光标，Ctrl/Cmd + 点击才打开链接
-      if (pos != null && (event.ctrlKey || event.metaKey) && target.closest(".cm-md-link")) {
-        const url = urlAtPos(view.state, pos);
+      // 普通点击用于定位和编辑，Ctrl/Cmd + 点击打开链接。
+      const link = target.closest<HTMLElement>("[data-html-href]") ?? target.closest<HTMLElement>(".cm-md-link");
+      if (link && (event.ctrlKey || event.metaKey)) {
+        const url = link.dataset.htmlHref ?? (pos == null ? null : urlAtPos(view.state, pos));
         if (url) {
           event.preventDefault();
-          if (url.startsWith("#")) {
-            let anchor = url.slice(1);
-            try {
-              anchor = decodeURIComponent(anchor);
-            } catch {
-              /* keep the literal fragment when a document contains malformed escaping */
-            }
-            const heading = extractMarkdownOutline(view.state.doc.toString()).find(
-              (item) => item.anchor === anchor,
-            );
-            if (heading) {
-              const line = view.state.doc.line(heading.line);
-              view.dispatch({ selection: { anchor: line.from }, scrollIntoView: true });
-              view.focus();
-            }
-            return true;
-          }
-          void openUrl(url).catch(() => editorShowError(url));
+          openPreviewLink(view, url);
           return true;
         }
       }

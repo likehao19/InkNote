@@ -1,5 +1,6 @@
 import { EditorView } from "@codemirror/view";
-import { undo, redo, selectAll } from "@codemirror/commands";
+import { selectAll } from "@codemirror/commands";
+import { runEditorHistory } from "../widgets/editableSource";
 import { requestTableInsert } from "../tableInsertBridge";
 import { insertTableAtCursor, mutateTableInView } from "../widgets/table";
 import { editorPickLink, editorPickImage, editorRequestSearch, editorShowError, editorShowMessage } from "../../lib/editorBridge";
@@ -315,9 +316,9 @@ async function copyHtmlFromView(view: EditorView) {
 export function runEditorAction(view: EditorView, action: EditorAction): boolean {
   switch (action) {
     case "undo":
-      return undo(view);
+      return runEditorHistory(view, false);
     case "redo":
-      return redo(view);
+      return runEditorHistory(view, true);
     case "cut":
       return clipboardAction(view, "cut");
     case "copy":

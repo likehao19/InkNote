@@ -130,6 +130,7 @@ export interface SettingsValues {
   typewriterPadding: number;
   showStatusBar: boolean;
   externalOpenReadOnly: boolean;
+  autoAddDocumentFolder: boolean;
   newDocumentMetadata: boolean;
   metadataTitle: string;
   metadataAuthor: string;
@@ -166,6 +167,7 @@ export interface SettingsHandlers {
   onTypewriterPadding: (vh: number) => void;
   onShowStatusBar: (on: boolean) => void;
   onExternalOpenReadOnly: (on: boolean) => void;
+  onAutoAddDocumentFolder: (on: boolean) => void;
   onNewDocumentMetadata: (on: boolean) => void;
   onMetadataTitle: (value: string) => void;
   onMetadataAuthor: (value: string) => void;
@@ -189,6 +191,7 @@ function buildSearchIndex(): { category: SettingsCategory; keys: MessageKey[] }[
       keys: [
         "settings.language", "settings.languageDesc",
         "settings.externalOpenMode", "settings.externalOpenModeDesc",
+        "settings.autoAddDocumentFolder", "settings.autoAddDocumentFolderDesc",
         "settings.restoreLastFolder", "settings.restoreLastFolderDesc",
         "settings.restoreLastFile", "settings.restoreLastFileDesc",
         "settings.confirmDiscard", "settings.confirmDiscardDesc",
@@ -428,6 +431,9 @@ export default function Settings({ values, handlers, onClose }: Props) {
                     </SettingItem>
                     <SettingItem label={tr("settings.restoreLastFolder")} desc={tr("settings.restoreLastFolderDesc")}>
                       <Toggle checked={values.restoreLastFolder} onChange={handlers.onRestoreLastFolder} />
+                    </SettingItem>
+                    <SettingItem label={tr("settings.autoAddDocumentFolder")} desc={tr("settings.autoAddDocumentFolderDesc")}>
+                      <Toggle checked={values.autoAddDocumentFolder} onChange={handlers.onAutoAddDocumentFolder} />
                     </SettingItem>
                     <SettingItem label={tr("settings.restoreLastFile")} desc={tr("settings.restoreLastFileDesc")}>
                       <Toggle checked={values.restoreLastFile} onChange={handlers.onRestoreLastFile} />

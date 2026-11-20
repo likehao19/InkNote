@@ -29,6 +29,7 @@ const KEYS = {
   showStatusBar: "mdnote.showStatusBar",
   typewriterPadding: "mdnote.typewriterPadding",
   externalOpenReadOnly: "mdnote.externalOpenReadOnly",
+  autoAddDocumentFolder: "mdnote.autoAddDocumentFolder",
   newDocumentMetadata: "mdnote.newDocumentMetadata",
   metadataTitle: "mdnote.metadataTitle",
   metadataAuthor: "mdnote.metadataAuthor",
@@ -132,6 +133,14 @@ export function setSpellCheck(on: boolean) {
 
 export function getRestoreLastFolder(): boolean {
   return readBool(KEYS.restoreLastFolder, true);
+}
+
+export function getAutoAddDocumentFolder(): boolean {
+  return readBool(KEYS.autoAddDocumentFolder, false);
+}
+
+export function setAutoAddDocumentFolder(on: boolean) {
+  writeBool(KEYS.autoAddDocumentFolder, on);
 }
 
 export function setRestoreLastFolder(on: boolean) {

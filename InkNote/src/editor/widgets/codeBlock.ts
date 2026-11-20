@@ -115,8 +115,12 @@ function paintCode(codeEl: HTMLElement, code: string, lang: string, keepCaret: b
     codeEl.className = "hljs";
   }
 
-  // 结尾是换行时补一个占位文本节点，否则最后一行在 contenteditable 里点不进去
-  if (code.endsWith("\n")) codeEl.appendChild(document.createTextNode(""));
+  // 保留末尾空行的可见光标位置，占位符不属于代码内容。
+  if (!code || code.endsWith("\n")) {
+    const end = document.createElement("br");
+    end.setAttribute("data-code-end", "");
+    codeEl.appendChild(end);
+  }
 
   if (offset != null) setCaretOffset(codeEl, offset);
 }
@@ -153,7 +157,7 @@ export class CodeBlockWidget extends WidgetType {
     if (this.indented && !lang.trim()) {
       return code.replace(/\n+$/, "").split("\n").map((line) => `    ${line}`).join("\n");
     }
-    return `\`\`\`${lang.trim()}\n${code.replace(/\n+$/, "")}\n\`\`\``;
+    return `\`\`\`${lang.trim()}\n${code}\n\`\`\``;
   }
 
   toDOM() {
@@ -253,7 +257,7 @@ export class CodeBlockWidget extends WidgetType {
         paintGutter(gutter, text);
       },
       indentOnTab: true,
-      exitOnTrailingBlankLine: true,
+      codeBlock: true,
     });
 
     // 点在代码区以外的盒内留白也进入编辑；外层留白不抢点击

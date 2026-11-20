@@ -12,6 +12,8 @@ import { clickedOnBlockPadding } from "./editableSource";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { writeText as writeClipboardText } from "@tauri-apps/plugin-clipboard-manager";
 import { extractMarkdownOutline } from "../../lib/markdownOutline";
+import { HTML_TAG_PATTERN, safeInlineHtmlTag } from "../htmlPreview";
+import { openPreviewLink } from "../previewLinks";
 
 export type TableAlign = "left" | "center" | "right";
 
@@ -498,16 +500,21 @@ function escapeHtml(text: string): string {
 }
 
 /** 单元格里的行内 Markdown 渲染（粗体/斜体/删除线/行内代码/高亮/链接） */
-export function renderInlineMarkdown(src: string): string {
-  const parts = escapeHtml(parseCellValue(src).content).split(/(`[^`]+`)/g);
+export function renderInlineMarkdown(src: string, filePath: string | null = null): string {
+  const parts = parseCellValue(src).content.split(/(`[^`]+`)/g);
   return parts
     .map((part, i) => {
-      if (i % 2 === 1) return `<code>${part.slice(1, -1)}</code>`;
-      return part
-        .replace(/&lt;br\s*\/?&gt;/gi, "<br>")
+      if (i % 2 === 1) return `<code>${escapeHtml(part.slice(1, -1))}</code>`;
+      const tags: string[] = [];
+      const text = part.replace(/\0/g, "\ufffd").replace(HTML_TAG_PATTERN, (token, closing: string, name: string, offset: number, original: string) => {
+        if (original[offset - 1] === "\\") return token;
+        const safe = safeInlineHtmlTag(token, name, Boolean(closing), filePath);
+        return safe === null ? token : `\0${tags.push(safe) - 1}\0`;
+      });
+      return escapeHtml(text)
         .replace(/\r\n?|\n/g, "<br>")
         .replace(/\[([^\]]*)\]\(([^)\s]+)\)/g, (_match, label: string, target: string) => {
-          if (/^(?:javascript|data|vbscript):/i.test(target)) return label;
+          if (target.includes("\0") || /^(?:javascript|data|vbscript):/i.test(target)) return label;
           return `<a class="md-table-link" data-href="${target}">${label}</a>`;
         })
         .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
@@ -515,7 +522,8 @@ export function renderInlineMarkdown(src: string): string {
         .replace(/(^|[^*])\*([^*]+)\*/g, "$1<em>$2</em>")
         .replace(/(^|[^_\w])_([^_]+)_/g, "$1<em>$2</em>")
         .replace(/~~([^~]+)~~/g, "<del>$1</del>")
-        .replace(/==([^=]+)==/g, "<mark>$1</mark>");
+        .replace(/==([^=]+)==/g, "<mark>$1</mark>")
+        .replace(/\0(\d+)\0/g, (_tag, index: string) => tags[Number(index)]);
     })
     .join("");
 }
@@ -567,7 +575,7 @@ function setCellRaw(cell: HTMLElement, raw: string, columnAlign: TableAlign = "l
     if (cell.textContent !== editable) cell.textContent = editable;
     ensureCellCaret(cell);
   } else {
-    cell.innerHTML = renderInlineMarkdown(parsed.content);
+    cell.innerHTML = renderInlineMarkdown(parsed.content, cell.dataset.documentPath ?? null);
   }
 }
 
@@ -594,7 +602,7 @@ function showCellSource(cell: HTMLElement) {
 function showCellRendered(cell: HTMLElement) {
   const raw = cell.dataset.raw ?? cell.textContent ?? "";
   cell.dataset.raw = raw;
-  cell.innerHTML = renderInlineMarkdown(raw);
+  cell.innerHTML = renderInlineMarkdown(raw, cell.dataset.documentPath ?? null);
 }
 
 function readAligns(wrap: HTMLElement): TableAlign[] {
@@ -1168,12 +1176,14 @@ function appendEditableRow(
   cells: string[],
   aligns: TableAlign[],
   tag: "th" | "td",
+  filePath: string | null,
 ) {
   cells.forEach((cell, i) => {
     const el = document.createElement(tag);
     el.contentEditable = "true";
     el.spellcheck = false;
     el.dataset.col = String(i);
+    if (filePath) el.dataset.documentPath = filePath;
     setCellRaw(el, cell, aligns[i] ?? "left");
     tr.appendChild(el);
   });
@@ -1199,6 +1209,13 @@ function attachCellEvents(wrap: HTMLElement) {
 
   const openRenderedLink = (event: MouseEvent, view: EditorView) => {
     if (!(event.ctrlKey || event.metaKey)) return false;
+    const htmlLink = (event.target as HTMLElement | null)?.closest<HTMLElement>("[data-html-href]")?.dataset.htmlHref;
+    if (htmlLink) {
+      event.preventDefault();
+      event.stopPropagation();
+      openPreviewLink(view, htmlLink);
+      return true;
+    }
     const link = (event.target as HTMLElement | null)?.closest<HTMLElement>(".md-table-link");
     const target = link?.dataset.href;
     if (!target) return false;
@@ -1618,6 +1635,7 @@ export class TableWidget extends WidgetType {
     readonly header: string[],
     readonly rows: string[][],
     readonly aligns: TableAlign[] = [],
+    readonly filePath: string | null = null,
   ) {
     super();
   }
@@ -1629,6 +1647,7 @@ export class TableWidget extends WidgetType {
   eq(other: TableWidget) {
     return (
       other.to - other.from === this.to - this.from &&
+      other.filePath === this.filePath &&
       other.header.join("\0") === this.header.join("\0") &&
       other.rows.map((r) => r.join("\0")).join("\n") ===
         this.rows.map((r) => r.join("\0")).join("\n") &&
@@ -1656,7 +1675,7 @@ export class TableWidget extends WidgetType {
     if (this.header.length) {
       const thead = document.createElement("thead");
       const headerTr = document.createElement("tr");
-      appendEditableRow(headerTr, this.header, aligns, "th");
+      appendEditableRow(headerTr, this.header, aligns, "th", this.filePath);
       thead.appendChild(headerTr);
       table.appendChild(thead);
     }
@@ -1664,7 +1683,7 @@ export class TableWidget extends WidgetType {
     const tbody = document.createElement("tbody");
     for (const row of this.rows) {
       const tr = document.createElement("tr");
-      appendEditableRow(tr, row, aligns, "td");
+      appendEditableRow(tr, row, aligns, "td", this.filePath);
       tbody.appendChild(tr);
     }
     table.appendChild(tbody);
@@ -1680,7 +1699,8 @@ export class TableWidget extends WidgetType {
     return wrap;
   }
 
-  updateDOM(dom: HTMLElement) {
+  updateDOM(dom: HTMLElement, _view: EditorView, previous: TableWidget) {
+    if (previous.filePath !== this.filePath) return false;
     const ths = dom.querySelectorAll<HTMLElement>("thead th");
     const trs = dom.querySelectorAll<HTMLElement>("tbody tr");
     const aligns = [...this.aligns];

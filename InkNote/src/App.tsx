@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { writeText as writeClipboardText } from "@tauri-apps/plugin-clipboard-manager";
+import { readText as readClipboardText, writeText as writeClipboardText } from "@tauri-apps/plugin-clipboard-manager";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { message as nativeMessage } from "@tauri-apps/plugin-dialog";
@@ -30,7 +30,6 @@ import {
   trimRecentFiles,
 } from "./lib/recent";
 import {
-  clearLastFolder,
   getWorkspaceFolders,
   setWorkspaceFolders,
   getLastFile,
@@ -66,11 +65,13 @@ import {
   getRestoreLastFile,
   getEditorZoom,
   getExternalOpenReadOnly,
+  getAutoAddDocumentFolder,
   getNewDocumentMetadata,
   getMetadataTitle,
   getMetadataAuthor,
   setEditorZoom as persistEditorZoom,
   setExternalOpenReadOnly as persistExternalOpenReadOnly,
+  setAutoAddDocumentFolder as persistAutoAddDocumentFolder,
   setNewDocumentMetadata as persistNewDocumentMetadata,
   setMetadataTitle as persistMetadataTitle,
   setMetadataAuthor as persistMetadataAuthor,
@@ -253,6 +254,7 @@ export default function App() {
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>(getSidebarTab);
   const [sidebarVisible, setSidebarVisible] = useState(getSidebarVisiblePref);
   const [sidebarStartupVisible, setSidebarStartupVisible] = useState(getSidebarVisiblePref);
+  const [startupPending, setStartupPending] = useState(true);
   const dirWatchChainRef = useRef<Promise<void>>(Promise.resolve());
   const fileWatchChainRef = useRef<Promise<void>>(Promise.resolve());
   const externalChecksRef = useRef(new Map<string, number>());
@@ -321,6 +323,7 @@ export default function App() {
   const [tabSize, setTabSize] = useState(getTabSize);
   const [spellCheck, setSpellCheck] = useState(getSpellCheck);
   const [externalOpenReadOnly, setExternalOpenReadOnly] = useState(getExternalOpenReadOnly);
+  const [autoAddDocumentFolder, setAutoAddDocumentFolder] = useState(getAutoAddDocumentFolder);
   const [newDocumentMetadata, setNewDocumentMetadata] = useState(getNewDocumentMetadata);
   const [metadataTitle, setMetadataTitle] = useState(getMetadataTitle);
   const [metadataAuthor, setMetadataAuthor] = useState(getMetadataAuthor);
@@ -431,8 +434,29 @@ export default function App() {
     return true;
   }, [setPath]);
 
+  const addDocumentFolderToWorkspace = useCallback((path: string) => {
+    if (!getAutoAddDocumentFolder() || !/\.(md|markdown)$/i.test(path)) return;
+    const parent = /^(.*[\\/])[^\\/]+$/.exec(path)?.[1];
+    if (!parent) return;
+    const folder = /^(?:[a-z]:)?[\\/]$/i.test(parent) ? parent : parent.slice(0, -1);
+    const coversFolder = (root: string) => {
+      const prefix = root.replace(/[\\/]+$/, "");
+      return sameDocumentPath(prefix + "/", folder.slice(0, prefix.length) + "/")
+        && (folder.length === prefix.length || /[\\/]/.test(folder.charAt(prefix.length)));
+    };
+    setFolderPaths((current) => {
+      if (current.some(coversFolder)) return current;
+      const saved = getWorkspaceFolders();
+      const visible = getRestoreLastFolder() ? saved : current;
+      const existing = saved.find(coversFolder);
+      if (existing) return visible.includes(existing) ? visible : [...visible, existing];
+      setWorkspaceFolders([...saved, folder]);
+      return [...visible, folder];
+    });
+  }, []);
+
   const loadFile = useCallback(
-    async (path: string, options: { external?: boolean } = {}) => {
+    async (path: string, options: { external?: boolean; restore?: boolean } = {}) => {
       const request = ++fileLoadRequestRef.current;
       const existing = useTabsStore.getState().tabs.find((tab) => tab.path && sameDocumentPath(tab.path, path));
       if (existing) {
@@ -453,6 +477,7 @@ export default function App() {
         const openedId = openTab(path, file.content, file.encoding, file.fileIdentity, request === fileLoadRequestRef.current);
         if (external && externalOpenReadOnly) setMode(openedId, "preview");
         setDocumentOptions(openedId, { externalDocument: external, documentEditable: !(external && externalOpenReadOnly) });
+        if (!options.restore) addDocumentFolderToWorkspace(path);
         addRecentFile(path);
         setRecentFiles(getRecentFiles());
         if (useTabsStore.getState().activeId === openedId) {
@@ -469,7 +494,7 @@ export default function App() {
         return false;
       }
     },
-    [openTab, activateTab, setDocumentOptions, setMode, setTitle, showError, externalOpenReadOnly, followRenamedTab],
+    [openTab, activateTab, setDocumentOptions, setMode, setTitle, showError, externalOpenReadOnly, followRenamedTab, addDocumentFolderToWorkspace],
   );
 
   const openFileAtLine = useCallback(
@@ -495,7 +520,7 @@ export default function App() {
   const addWorkspaceFolders = useCallback((selected: string[]) => {
     if (!selected.length) return;
     setFolderPaths((current) => {
-      const next = [...current];
+      const next = getRestoreLastFolder() ? getWorkspaceFolders() : [...current];
       for (const path of selected) {
         if (!next.some((folder) => sameDocumentPath(folder, path))) next.push(path);
       }
@@ -1367,6 +1392,13 @@ export default function App() {
     const onNativeMenu = (event: Event) => {
       const action = (event as CustomEvent<string>).detail;
       const b = bootRef.current;
+      const focused = document.activeElement;
+      if (action === "editor:pastePlain" && focused?.matches('textarea, input[type="search"], input[type="text"], input:not([type])')) {
+        void readClipboardText().then((text) => {
+          if (document.activeElement === focused) document.execCommand("insertText", false, text);
+        }).catch(() => {});
+        return;
+      }
       if (action.startsWith("editor:")) {
         b.runEditorAction(action.slice("editor:".length) as EditorAction);
         return;
@@ -1406,7 +1438,7 @@ export default function App() {
         return;
       }
       un.push(f);
-      void api.getStartupFile().then(async (p) => {
+      return api.getStartupFile().then(async (p) => {
         if (disposed) return;
         const startupOpens = [...(p ? [p] : []), ...pendingOpens.splice(0)];
         ready = true;
@@ -1449,19 +1481,30 @@ export default function App() {
               }),
             ).then((folders) => {
               if (disposed) return;
-              const valid = folders.filter((folder): folder is string => folder !== null);
-              setFolderPaths(valid);
-              setWorkspaceFolders(valid);
-              if (!valid.length) clearLastFolder();
+              const invalid = new Set(savedFolders.filter((_, index) => folders[index] === null));
+              setFolderPaths(() => {
+                const saved = getWorkspaceFolders();
+                const next = saved.filter((folder) => !invalid.has(folder));
+                if (next.length !== saved.length) setWorkspaceFolders(next);
+                return next;
+              });
             });
           });
         }
         if (!startupOpens.length && !restored && restoreRequest === fileLoadRequestRef.current
           && !useTabsStore.getState().getActive()?.path && getRestoreLastFile()) {
           const last = getLastFile();
-          if (last) void bootRef.current.loadFile(last);
+          if (last) await bootRef.current.loadFile(last, { restore: true });
         }
-      }).catch((error) => { if (!disposed) showError(error); finishSessionReady(); });
+      });
+    }).catch((error) => {
+      if (!disposed) showError(error);
+    }).finally(() => {
+      finishSessionReady();
+      if (!disposed) {
+        ready = true;
+        setStartupPending(false);
+      }
     });
 
     return () => {
@@ -1913,8 +1956,9 @@ export default function App() {
     show(t(locale, editable ? "toast.editMode" : "toast.previewMode"));
   }, [documentEditable, active?.content, activeTabId, setMode, show, locale]);
 
-  const showWelcome = !welcomeDismissed && !active?.path && !active?.content.trim();
-  const showDocumentAccessControl = Boolean(active && !showWelcome);
+  const emptyEditor = !welcomeDismissed && !active?.path && !active?.content.trim();
+  const showWelcome = emptyEditor && !startupPending;
+  const showDocumentAccessControl = Boolean(active && !emptyEditor);
   const wasWelcomeRef = useRef(showWelcome);
 
   useEffect(() => {
@@ -2185,6 +2229,7 @@ export default function App() {
               typewriterPadding,
               showStatusBar,
               externalOpenReadOnly,
+              autoAddDocumentFolder,
               newDocumentMetadata,
               metadataTitle,
               metadataAuthor,
@@ -2207,6 +2252,10 @@ export default function App() {
                 setMarkdownTheme(next);
               },
               onRestoreLastFolder: setRestoreLastFolder,
+              onAutoAddDocumentFolder: (on) => {
+                persistAutoAddDocumentFolder(on);
+                setAutoAddDocumentFolder(on);
+              },
               onRestoreLastFile: setRestoreLastFile,
               onConfirmDiscard: setConfirmDiscard,
               onConfirmDelete: setConfirmDelete,

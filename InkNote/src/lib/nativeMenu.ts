@@ -65,7 +65,7 @@ export async function setupMacNativeMenu(locale: Locale, shortcuts: ShortcutMap)
       await separator(),
       await command("editor:cut", tr("menu.cut"), "CmdOrCtrl+X"),
       await command("editor:copy", tr("menu.copy"), "CmdOrCtrl+C"),
-      await command("editor:paste", tr("menu.paste"), "CmdOrCtrl+V"),
+      await PredefinedMenuItem.new({ item: "Paste", text: tr("menu.paste") }),
       await command("editor:pastePlain", tr("shortcuts.pastePlain"), "CmdOrCtrl+Shift+V"),
       await command("editor:selectAll", tr("menu.selectAll"), "CmdOrCtrl+A"),
       await separator(),

@@ -3,6 +3,7 @@ import type { Locale } from "../lib/i18n";
 import { t } from "../lib/i18n";
 import { useModalEscape } from "../lib/useModalEscape";
 import { basename, dirOf } from "../lib/paths";
+import SearchResultPages, { SEARCH_PAGE_SIZE } from "./SearchResultPages";
 import {
   hasSearchScope,
   searchWorkspace,
@@ -69,7 +70,7 @@ export default function GlobalSearchDialog({
   const invalidRegex = useRegex && Boolean(query.trim()) && !isValidRegex(query.trim());
 
   const runSearch = useCallback(
-    async (q: string) => {
+    async (q: string, signal: AbortSignal) => {
       const request = ++requestRef.current;
       const trimmed = q.trim();
       if (!trimmed || !scoped || (useRegex && !isValidRegex(trimmed))) {
@@ -85,6 +86,7 @@ export default function GlobalSearchDialog({
         const result = await searchWorkspace(folderPaths, [], trimmed, {
           filenameOnly,
           useRegex,
+          signal,
         });
         if (request !== requestRef.current) return;
         setMatches(result.matches);
@@ -113,8 +115,15 @@ export default function GlobalSearchDialog({
       return;
     }
     setSearching(true);
-    const timer = setTimeout(() => void runSearch(query), 280);
-    return () => clearTimeout(timer);
+    setMatches([]);
+    setActiveIndex(0);
+    const controller = new AbortController();
+    const timer = setTimeout(() => void runSearch(query, controller.signal), 280);
+    return () => {
+      requestRef.current++;
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [query, runSearch, scoped, invalidRegex]);
 
   useEffect(() => {
@@ -138,22 +147,23 @@ export default function GlobalSearchDialog({
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActiveIndex((i) => Math.min(i + 1, matches.length - 1));
+      setActiveIndex((i) => Math.max(0, Math.min(i + 1, matches.length - 1)));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setActiveIndex((i) => Math.max(i - 1, 0));
-    } else if (e.key === "Enter" && matches[activeIndex]) {
+    } else if (e.key === "Enter" && !(e.target instanceof HTMLButtonElement) && matches[activeIndex]) {
       e.preventDefault();
       openAt(matches[activeIndex]);
     }
   };
 
-  const grouped = matches.reduce<Record<string, SearchMatch[]>>((acc, m) => {
+  const pageOffset = Math.floor(activeIndex / SEARCH_PAGE_SIZE) * SEARCH_PAGE_SIZE;
+  const grouped = matches.slice(pageOffset, pageOffset + SEARCH_PAGE_SIZE).reduce<Record<string, SearchMatch[]>>((acc, m) => {
     (acc[m.path] ??= []).push(m);
     return acc;
   }, {});
 
-  let flatIndex = 0;
+  let flatIndex = pageOffset;
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -251,6 +261,7 @@ export default function GlobalSearchDialog({
             </div>
           )}
         </div>
+        <SearchResultPages locale={locale} offset={pageOffset} total={matches.length} onSelect={setActiveIndex} />
       </div>
     </div>
   );

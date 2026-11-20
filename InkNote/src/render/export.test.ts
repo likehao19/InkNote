@@ -26,6 +26,18 @@ describe("markdownToBodyHtml", () => {
     expect(dark).toContain("--doc-accent:#9aacaa");
   });
 
+  it("preserves details and safe images and links across the HTML export", async () => {
+    const html = await markdownToBodyHtml(
+      '<details open ontoggle="bad()">\n<summary>More</summary>\n\n**Body**<br><a href="https://example.com">link</a> <img src="photo.png" width="64" onerror="bad()">\n\n</details>\n\n<iframe src="https://example.com"></iframe>',
+    );
+    expect(html).toMatch(/<details open>/);
+    expect(html).toContain("<summary>More</summary>");
+    expect(html).toContain("<strong>Body</strong><br>");
+    expect(html).toContain('<a href="https://example.com">link</a>');
+    expect(html).toMatch(/<img[^>]*src="photo\.png"[^>]*width="64"/);
+    expect(html).not.toMatch(/ontoggle|onerror|iframe/i);
+  });
+
   it("uses the document name and includes portable code/task styles", async () => {
     const html = await markdownToHtml("- [x] done\n\n```ts\nconst n = 1\n```", "light", "en", "D:\\notes\\guide.md");
 

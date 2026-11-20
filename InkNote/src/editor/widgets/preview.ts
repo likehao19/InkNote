@@ -1,5 +1,7 @@
 import { EditorView, WidgetType } from "@codemirror/view";
 import { bindBlockBoundaryCursor, bindBlockClickEdit, stampBlockRange } from "./blockRange";
+import { safeHtmlFragment } from "../htmlPreview";
+import { openPreviewLink } from "../previewLinks";
 import {
   attachSourceEditing,
   beginSourceEditing,
@@ -96,24 +98,23 @@ export class EditableMetadataWidget extends WidgetType {
   }
 }
 
-function renderSafeHtml(target: HTMLElement, html: string) {
-  const parsed = new DOMParser().parseFromString(html, "text/html");
-  parsed.querySelectorAll("script,style,iframe,object,embed,link,meta,base").forEach((el) => el.remove());
-  parsed.querySelectorAll<HTMLElement>("*").forEach((el) => {
-    for (const attr of Array.from(el.attributes)) {
-      const name = attr.name.toLowerCase();
-      const value = attr.value.trim().replace(/[\u0000-\u0020]+/g, "");
-      if (name.startsWith("on") || name === "style") el.removeAttribute(attr.name);
-      if (
-        ["href", "src", "xlink:href", "action", "formaction"].includes(name) &&
-        (/^(?:javascript|vbscript):/i.test(value) ||
-          (/^data:/i.test(value) && !(name === "src" && /^data:image\/(?:png|gif|jpe?g|webp);/i.test(value))))
-      ) {
-        el.removeAttribute(attr.name);
-      }
-    }
-  });
-  target.replaceChildren(...Array.from(parsed.body.childNodes));
+
+function renderHtmlBlock(preview: HTMLElement, source: HTMLElement, html: string, filePath: string | null) {
+  preview.replaceChildren(safeHtmlFragment(html, filePath));
+  if (!/<details(?=[\s>])/i.test(html) || !/\n[\t ]*\n/.test(html)) return;
+
+  // Markdown between blank lines in a details element is rendered as it is in export.
+  const firstChild = preview.firstChild;
+  void import("../../render/export").then(({ markdownToBodyHtml }) => markdownToBodyHtml(html)).then((rendered) => {
+    if (!preview.isConnected || preview.firstChild !== firstChild || source.textContent !== html) return;
+    const open = Array.from(preview.querySelectorAll("details"), (details) => details.open);
+    const fragment = safeHtmlFragment(rendered, filePath);
+    fragment.querySelectorAll("details").forEach((details, index) => {
+      if (open[index] !== undefined) details.open = open[index];
+    });
+    preview.replaceChildren(fragment);
+    EditorView.findFromDOM(preview)?.requestMeasure();
+  }).catch(() => { /* Keep the HTML preview if Markdown rendering fails. */ });
 }
 
 export class HtmlBlockWidget extends WidgetType {
@@ -121,12 +122,13 @@ export class HtmlBlockWidget extends WidgetType {
     readonly from: number,
     readonly to: number,
     readonly html: string,
+    readonly filePath: string | null,
   ) {
     super();
   }
 
   eq(other: HtmlBlockWidget) {
-    return other.to - other.from === this.to - this.from && other.html === this.html;
+    return other.to - other.from === this.to - this.from && other.html === this.html && other.filePath === this.filePath;
   }
 
   toDOM() {
@@ -141,33 +143,54 @@ export class HtmlBlockWidget extends WidgetType {
 
     const preview = document.createElement("div");
     preview.className = "md-html-preview";
-    renderSafeHtml(preview, this.html);
+    renderHtmlBlock(preview, source, this.html, this.filePath);
     wrap.append(source, preview);
     bindBlockBoundaryCursor(wrap, preview);
 
     attachSourceEditing(wrap, {
       source: () => source,
       toMarkdown: (text) => text.replace(/\n+$/, ""),
-      onInput: (text) => renderSafeHtml(preview, text),
+      onInput: (text) => renderHtmlBlock(preview, source, text, this.filePath),
       indentOnTab: true,
     });
     preview.addEventListener("mousedown", (event) => {
       const target = event.target as HTMLElement;
-      if (target.closest("a,button,input,select,textarea")) return;
+      const link = target.closest<HTMLElement>("[data-html-href]");
+      const view = EditorView.findFromDOM(wrap);
+      if (event.button !== 0) return;
+      if (link?.dataset.htmlHref && view && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        event.stopPropagation();
+        openPreviewLink(view, link.dataset.htmlHref);
+        return;
+      }
+      if (!view || view.state.readOnly || target.closest("summary")) return;
       event.preventDefault();
       beginSourceEditing(wrap, source, false);
     });
+    preview.addEventListener("keydown", (event) => {
+      const link = (event.target as HTMLElement).closest<HTMLElement>("[data-html-href]");
+      const view = EditorView.findFromDOM(wrap);
+      if (event.key === "Enter" && link?.dataset.htmlHref && view) {
+        event.preventDefault();
+        openPreviewLink(view, link.dataset.htmlHref);
+      }
+    });
+    const measure = () => EditorView.findFromDOM(wrap)?.requestMeasure();
+    preview.addEventListener("toggle", measure, true);
+    preview.addEventListener("load", measure, true);
     return wrap;
   }
 
-  updateDOM(dom: HTMLElement) {
+  updateDOM(dom: HTMLElement, _view: EditorView, previous: HtmlBlockWidget) {
+    if (this.filePath !== previous.filePath) return false;
     const source = dom.querySelector<HTMLElement>(".md-block-source");
     const preview = dom.querySelector<HTMLElement>(".md-html-preview");
     if (!source || !preview) return false;
     stampBlockRange(dom, this.from, this.to);
     if (document.activeElement !== source) {
       source.textContent = this.html;
-      renderSafeHtml(preview, this.html);
+      renderHtmlBlock(preview, source, this.html, this.filePath);
     }
     EditorView.findFromDOM(dom)?.requestMeasure();
     return true;

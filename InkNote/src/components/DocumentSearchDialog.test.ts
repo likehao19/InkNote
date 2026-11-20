@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collectDocumentMatches } from "./DocumentSearchDialog";
+import { collectDocumentMatches } from "../lib/documentSearch";
 
 describe("current document search", () => {
   it("returns every match with its document line number", () => {

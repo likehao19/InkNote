@@ -1,5 +1,6 @@
 import { EditorView } from "@codemirror/view";
 import { undo, redo } from "@codemirror/commands";
+import { Transaction } from "@codemirror/state";
 import { currentBlockRange } from "./blockRange";
 
 /**
@@ -80,7 +81,7 @@ export function readPlainText(
     }
     if (node.nodeName === "BR") {
       if (caret === null && node === caretNode) caret = text.length;
-      text += "\n";
+      if (!(node as HTMLElement).hasAttribute("data-code-end")) text += "\n";
       return;
     }
     if (node.nodeType === Node.ELEMENT_NODE) {
@@ -103,22 +104,6 @@ export function caretTextOffset(root: HTMLElement): number | null {
   const range = sel.getRangeAt(0);
   if (!root.contains(range.startContainer)) return null;
   return readPlainText(root, range.startContainer, range.startOffset).caret;
-}
-
-/** DOM 经过语法高亮重排后，文本偏移可能短暂失配；Range 更适合判断是否在末尾。 */
-function caretIsAtEnd(root: HTMLElement): boolean {
-  const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0 || !selection.isCollapsed) return false;
-  const current = selection.getRangeAt(0);
-  if (!root.contains(current.endContainer)) return false;
-  const tail = document.createRange();
-  tail.selectNodeContents(root);
-  try {
-    tail.setStart(current.endContainer, current.endOffset);
-  } catch {
-    return false;
-  }
-  return tail.toString().length === 0;
 }
 
 /** 把光标放到元素内的第 offset 个字符处 */
@@ -164,6 +149,27 @@ export function sourceText(el: HTMLElement): string {
   return readPlainText(el).text;
 }
 
+const codeHistory = new WeakMap<HTMLElement, (redoRequested: boolean) => boolean>();
+
+export function runEditorHistory(view: EditorView, redoRequested: boolean): boolean {
+  const focused = document.activeElement;
+  const inCode = focused instanceof HTMLElement && view.dom.contains(focused) ? codeHistory.get(focused) : undefined;
+  return inCode ? inCode(redoRequested) : (redoRequested ? redo(view) : undo(view));
+}
+
+function changedTextEnd(before: string, after: string, caret: number): number {
+  if (before === after) return caret;
+  let start = 0;
+  while (start < before.length && start < after.length && before[start] === after[start]) start++;
+  let oldEnd = before.length;
+  let newEnd = after.length;
+  while (oldEnd > start && newEnd > start && before[oldEnd - 1] === after[newEnd - 1]) {
+    oldEnd--;
+    newEnd--;
+  }
+  return newEnd;
+}
+
 let blockSyncing = false;
 
 /** Widget 内部改写文档时置位，避免自触发 */
@@ -189,10 +195,20 @@ function writeBlock(view: EditorView, wrap: HTMLElement, markdown: string) {
 }
 
 /** 把光标移到块后面的正文位置并交还给编辑器 */
-export function exitBlock(view: EditorView, wrap: HTMLElement, before = false) {
+export function exitBlock(view: EditorView, wrap: HTMLElement, before = false, ensureLineAfter = false) {
   const range = currentBlockRange(view, wrap);
   if (!range) return;
   const doc = view.state.doc;
+  if (ensureLineAfter && range.to === doc.length) {
+    view.dispatch({
+      changes: { from: range.to, insert: "\n" },
+      selection: { anchor: range.to + 1 },
+      userEvent: "input.block-exit",
+      scrollIntoView: true,
+    });
+    view.focus();
+    return;
+  }
   let pos: number;
   if (before) {
     const line = doc.lineAt(Math.min(range.from, doc.length));
@@ -216,8 +232,8 @@ export interface SourceEditingOptions {
   onEditingChange?: (editing: boolean) => void;
   /** Tab 是否插入缩进（代码块要，公式块不要） */
   indentOnTab?: boolean;
-  /** 末尾空行再次回车时退出，并确保块后存在正文行 */
-  exitOnTrailingBlankLine?: boolean;
+  /** 代码块保留回车插入的空行，撤销后恢复块内光标。 */
+  codeBlock?: boolean;
 }
 
 /**
@@ -227,8 +243,7 @@ export interface SourceEditingOptions {
 export function attachSourceEditing(wrap: HTMLElement, opts: SourceEditingOptions) {
   let composing = false;
   let frame = 0;
-  let trailingEnterArmed = false;
-  let trailingBlockFrom: number | null = null;
+  let exitOnNextEnter = false;
 
   const viewOf = () => EditorView.findFromDOM(wrap);
   const inSource = (event: Event) => {
@@ -238,6 +253,7 @@ export function attachSourceEditing(wrap: HTMLElement, opts: SourceEditingOption
   };
 
   const flush = () => {
+    if (opts.codeBlock && !frame) return;
     if (frame) {
       cancelAnimationFrame(frame);
       frame = 0;
@@ -259,6 +275,48 @@ export function attachSourceEditing(wrap: HTMLElement, opts: SourceEditingOption
     });
   };
 
+  const source = opts.source();
+  if (opts.codeBlock && source) {
+    codeHistory.set(source, (redoRequested) => {
+      const view = viewOf();
+      if (!view) return false;
+      flush();
+      const range = currentBlockRange(view, wrap);
+      const before = sourceText(source);
+      const caret = caretTextOffset(source) ?? before.length;
+      const scroll = view.scrollSnapshot();
+      const command = redoRequested ? redo : undo;
+      return command({ state: view.state, dispatch: (transaction) => {
+        let withinBlock = range != null;
+        transaction.changes.iterChangedRanges((from, to) => {
+          if (!range || from < range.from || to > range.to) withinBlock = false;
+        });
+        source.blur();
+        if (!withinBlock || !range) {
+          view.dispatch(transaction);
+          view.focus();
+          return;
+        }
+
+        const from = transaction.changes.mapPos(range.from, -1);
+        view.dispatch([transaction, transaction.state.update({
+          selection: { anchor: from },
+          effects: scroll.map(transaction.changes) ?? EditorView.scrollIntoView(from),
+          annotations: Transaction.addToHistory.of(false),
+        })]);
+        const code = findBlockWrap(view, (block) => block.from === from)
+          ?.querySelector<HTMLElement>("code[data-block-source]") ??
+          (wrap.isConnected ? opts.source() : null);
+        if (code) {
+          code.focus({ preventScroll: true });
+          setCaretOffset(code, changedTextEnd(before, sourceText(code), caret));
+        } else {
+          view.focus();
+        }
+      } });
+    });
+  }
+
   wrap.addEventListener("focusin", (event) => {
     if (!inSource(event)) return;
     if (viewOf()?.state.readOnly) return;
@@ -268,6 +326,7 @@ export function attachSourceEditing(wrap: HTMLElement, opts: SourceEditingOption
 
   wrap.addEventListener("focusout", (event) => {
     if (!inSource(event)) return;
+    exitOnNextEnter = false;
     flush();
     requestAnimationFrame(() => {
       if (wrap.contains(document.activeElement)) return;
@@ -276,13 +335,11 @@ export function attachSourceEditing(wrap: HTMLElement, opts: SourceEditingOption
     });
   });
 
-  wrap.addEventListener("mousedown", () => {
-    trailingEnterArmed = false;
-    trailingBlockFrom = null;
-  });
+  wrap.addEventListener("mousedown", () => { exitOnNextEnter = false; });
 
   wrap.addEventListener("compositionstart", () => {
     composing = true;
+    exitOnNextEnter = false;
   });
 
   wrap.addEventListener("compositionend", (event) => {
@@ -298,6 +355,7 @@ export function attachSourceEditing(wrap: HTMLElement, opts: SourceEditingOption
     if (viewOf()?.state.readOnly) return;
     const el = inSource(event);
     if (!el) return;
+    exitOnNextEnter = false;
     opts.onInput?.(sourceText(el), el);
     schedule();
   });
@@ -305,6 +363,7 @@ export function attachSourceEditing(wrap: HTMLElement, opts: SourceEditingOption
   wrap.addEventListener("paste", (event) => {
     const el = inSource(event);
     if (!el) return;
+    exitOnNextEnter = false;
     if (viewOf()?.state.readOnly) {
       event.preventDefault();
       return;
@@ -346,46 +405,48 @@ export function attachSourceEditing(wrap: HTMLElement, opts: SourceEditingOption
       return;
     }
 
-    if (
-      event.key === "Enter" &&
-      !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey &&
-      opts.exitOnTrailingBlankLine
-    ) {
-      if (trailingEnterArmed) {
-        event.preventDefault();
-        const text = sourceText(el);
-        el.textContent = text.endsWith("\n") ? text.slice(0, -1) : text;
-        if (trailingBlockFrom == null) return;
-        const markdown = opts.toMarkdown(sourceText(el));
+    if (opts.codeBlock && event.key === "Enter" && !event.altKey && !composing && !event.isComposing) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.ctrlKey || event.metaKey) {
+        exitOnNextEnter = false;
         flush();
-
-        const doc = view.state.doc;
-        const blockEnd = Math.min(trailingBlockFrom + markdown.length, doc.length);
-        if (blockEnd === doc.length) {
-          view.dispatch({
-            changes: { from: blockEnd, insert: "\n" },
-            selection: { anchor: blockEnd + 1 },
-            userEvent: "input.block-exit",
-          });
-        } else {
-          const after = doc.sliceString(blockEnd, blockEnd + 1) === "\n"
-            ? blockEnd + 1
-            : blockEnd;
-          view.dispatch({ selection: { anchor: after } });
-        }
-        view.focus();
-        trailingEnterArmed = false;
-        trailingBlockFrom = null;
+        exitBlock(view, wrap, false, true);
         return;
       }
 
-      const range = currentBlockRange(view, wrap);
-      trailingEnterArmed = caretIsAtEnd(el) && range != null;
-      trailingBlockFrom = trailingEnterArmed ? range!.from : null;
+      const selection = window.getSelection();
+      const text = sourceText(el);
+      const atEnd = selection?.isCollapsed && caretTextOffset(el) === text.length;
+      const plainEnter = !event.shiftKey && !event.repeat;
+      if (plainEnter && atEnd && exitOnNextEnter && text.endsWith("\n")) {
+        exitOnNextEnter = false;
+        el.textContent = text.slice(0, -1);
+        opts.onInput?.(el.textContent, el);
+        schedule();
+        flush();
+        exitBlock(view, wrap, false, true);
+        return;
+      }
+      exitOnNextEnter = Boolean(plainEnter && atEnd);
+      const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+      if (range && el.contains(range.commonAncestorContainer)) {
+        range.deleteContents();
+        const newline = document.createTextNode("\n");
+        range.insertNode(newline);
+        range.setStartAfter(newline);
+        range.collapse(true);
+        selection!.removeAllRanges();
+        selection!.addRange(range);
+      } else {
+        el.appendChild(document.createTextNode("\n"));
+        setCaretOffset(el, sourceText(el).length);
+      }
+      opts.onInput?.(sourceText(el), el);
+      schedule();
       return;
     }
-    trailingEnterArmed = false;
-    trailingBlockFrom = null;
+    exitOnNextEnter = false;
 
     if (event.ctrlKey || event.metaKey) {
       const key = event.key.toLowerCase();
@@ -402,6 +463,11 @@ export function attachSourceEditing(wrap: HTMLElement, opts: SourceEditingOption
       }
       if (key === "z" || key === "y") {
         event.preventDefault();
+        if (opts.codeBlock) {
+          event.stopPropagation();
+          runEditorHistory(view, key === "y" || event.shiftKey);
+          return;
+        }
         flush();
         el.blur();
         view.focus();
