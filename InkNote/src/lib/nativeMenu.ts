@@ -1,6 +1,7 @@
 import { Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
 import { isMac } from "./platform";
 import { t, type Locale, type MessageKey } from "./i18n";
+import { MARKDOWN_THEMES } from "./markdownTheme";
 import { toTauriAccelerator, type ShortcutMap } from "./shortcuts";
 
 export const NATIVE_MENU_EVENT = "inknote-native-menu";
@@ -136,6 +137,31 @@ export async function setupMacNativeMenu(locale: Locale, shortcuts: ShortcutMap)
     ],
   });
 
+  const themeMenu = await Submenu.new({
+    text: tr("menu.theme"),
+    items: [
+      ...(await Promise.all(
+        MARKDOWN_THEMES.filter((item) => item.group === "typora").map((item) =>
+          command(`theme:${item.id}`, tr(`settings.markdownTheme.${item.id}` as MessageKey)),
+        ),
+      )),
+      await separator(),
+      ...(await Promise.all(
+        MARKDOWN_THEMES.filter((item) => item.group === "curated").map((item) =>
+          command(`theme:${item.id}`, tr(`settings.markdownTheme.${item.id}` as MessageKey)),
+        ),
+      )),
+      await separator(),
+      ...(await Promise.all(
+        MARKDOWN_THEMES.filter((item) => item.group === "classic").map((item) =>
+          command(`theme:${item.id}`, tr(`settings.markdownTheme.${item.id}` as MessageKey)),
+        ),
+      )),
+      await separator(),
+      await command("settings-appearance", tr("menu.themeSettings")),
+    ],
+  });
+
   const windowMenu = await Submenu.new({
     text: locale === "zh" ? "窗口" : "Window",
     items: [
@@ -155,7 +181,7 @@ export async function setupMacNativeMenu(locale: Locale, shortcuts: ShortcutMap)
   await helpMenu.setAsHelpMenuForNSApp();
 
   const menu = await Menu.new({
-    items: [appMenu, fileMenu, editMenu, paragraphMenu, formatMenu, viewMenu, windowMenu, helpMenu],
+    items: [appMenu, fileMenu, editMenu, paragraphMenu, formatMenu, viewMenu, themeMenu, windowMenu, helpMenu],
   });
   await menu.setAsAppMenu();
 }

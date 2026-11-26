@@ -10,6 +10,7 @@ import type { SidebarTab } from "./Sidebar";
 import type { EditorAction, EditorMode } from "../editor";
 import type { Locale } from "../lib/i18n";
 import { t } from "../lib/i18n";
+import type { MarkdownTheme } from "../lib/markdownTheme";
 
 interface Props {
   locale: Locale;
@@ -21,6 +22,7 @@ interface Props {
   sidebarTab: SidebarTab;
   editorMode: EditorMode;
   documentEditable: boolean;
+  markdownTheme: MarkdownTheme;
   updateState: UpdateProgressState | null;
   onOpen: () => void;
   onOpenFolder: () => void;
@@ -38,6 +40,8 @@ interface Props {
   onToggleFocus: () => void;
   onToggleTypewriter: () => void;
   onOpenSettings: () => void;
+  onOpenAppearanceSettings: () => void;
+  onSelectMarkdownTheme: (theme: MarkdownTheme) => void;
   onOpenShortcuts: () => void;
   onCheckUpdates: () => void;
   onInstallUpdate: () => void;
@@ -60,6 +64,7 @@ export default function Titlebar({
   sidebarTab,
   editorMode,
   documentEditable,
+  markdownTheme,
   updateState,
   onOpen,
   onOpenFolder,
@@ -77,6 +82,8 @@ export default function Titlebar({
   onToggleFocus,
   onToggleTypewriter,
   onOpenSettings,
+  onOpenAppearanceSettings,
+  onSelectMarkdownTheme,
   onOpenShortcuts,
   onCheckUpdates,
   onInstallUpdate,
@@ -101,6 +108,8 @@ export default function Titlebar({
           onExportHtml,
           onExportPdf,
           onOpenSettings,
+          onOpenAppearanceSettings,
+          onSelectMarkdownTheme,
           onEditorAction,
           onToggleSidebar,
           onSidebarTab,
@@ -126,6 +135,7 @@ export default function Titlebar({
           canReopenClosed,
           documentEditable,
           pdfExportSupported: !isLinux,
+          markdownTheme,
         },
         locale,
       ),
@@ -140,6 +150,8 @@ export default function Titlebar({
       onExportHtml,
       onExportPdf,
       onOpenSettings,
+      onOpenAppearanceSettings,
+      onSelectMarkdownTheme,
       onEditorAction,
       onToggleSidebar,
       onSidebarTab,
@@ -162,6 +174,7 @@ export default function Titlebar({
       focusMode,
       typewriterMode,
       documentEditable,
+      markdownTheme,
     ],
   );
 

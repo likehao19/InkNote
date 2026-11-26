@@ -1,8 +1,9 @@
 import type { EditorAction } from "../editor";
 import { findReplaceShortcut, modShortcut, redoShortcut, shortcut } from "../lib/shortcuts";
 import { basename } from "../lib/paths";
-import type { Locale } from "../lib/i18n";
+import type { Locale, MessageKey } from "../lib/i18n";
 import { t } from "../lib/i18n";
+import { MARKDOWN_THEMES, type MarkdownTheme } from "../lib/markdownTheme";
 import type { MenuGroupDef } from "./MenuBar";
 import type { SidebarTab } from "./Sidebar";
 import type { EditorMode } from "../editor";
@@ -17,6 +18,8 @@ export interface MenuCallbacks {
   onExportHtml: () => void;
   onExportPdf: () => void;
   onOpenSettings: () => void;
+  onOpenAppearanceSettings?: () => void;
+  onSelectMarkdownTheme?: (theme: MarkdownTheme) => void;
   onEditorAction: (action: EditorAction) => void;
   onToggleSidebar: () => void;
   onSidebarTab: (tab: SidebarTab) => void;
@@ -43,6 +46,7 @@ export interface MenuState {
   canReopenClosed?: boolean;
   documentEditable: boolean;
   pdfExportSupported: boolean;
+  markdownTheme?: MarkdownTheme;
 }
 
 export function buildMenuGroups(
@@ -219,6 +223,37 @@ export function buildMenuGroups(
         },
       ],
     },
+    ...(cb.onSelectMarkdownTheme
+      ? [
+          {
+            label: tr("menu.theme"),
+            items: [
+              ...MARKDOWN_THEMES.filter((item) => item.group === "typora").map((item) => ({
+                label: tr(`settings.markdownTheme.${item.id}` as MessageKey),
+                action: () => cb.onSelectMarkdownTheme!(item.id),
+                checked: state.markdownTheme === item.id,
+              })),
+              { separator: true, label: "" },
+              ...MARKDOWN_THEMES.filter((item) => item.group === "curated").map((item) => ({
+                label: tr(`settings.markdownTheme.${item.id}` as MessageKey),
+                action: () => cb.onSelectMarkdownTheme!(item.id),
+                checked: state.markdownTheme === item.id,
+              })),
+              { separator: true, label: "" },
+              ...MARKDOWN_THEMES.filter((item) => item.group === "classic").map((item) => ({
+                label: tr(`settings.markdownTheme.${item.id}` as MessageKey),
+                action: () => cb.onSelectMarkdownTheme!(item.id),
+                checked: state.markdownTheme === item.id,
+              })),
+              { separator: true, label: "" },
+              {
+                label: tr("menu.themeSettings"),
+                action: cb.onOpenAppearanceSettings ?? cb.onOpenSettings,
+              },
+            ],
+          },
+        ]
+      : []),
     {
       label: tr("menu.help"),
       items: [

@@ -102,3 +102,54 @@ describe("recent files context menu", () => {
     expect(onDeletePath).toHaveBeenCalledWith("/tmp/recent.md", false);
   });
 });
+
+describe("outline hierarchy", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it("renders heading levels with data-level attributes and navigates on click", () => {
+    const onOutlineClick = vi.fn();
+    act(() => {
+      root.render(
+        <Sidebar
+          locale="zh"
+          tab="outline"
+          onTab={() => {}}
+          folderPaths={[]}
+          onOpenPath={() => {}}
+          outline={[
+            { level: 1, text: "总览", line: 1 },
+            { level: 2, text: "1. 背景", line: 5 },
+            { level: 3, text: "1.1 细节说明", line: 12 },
+          ]}
+          activeOutlineLine={5}
+          onOutlineClick={onOutlineClick}
+          currentPath={null}
+          recentFiles={[]}
+          onRemoveRecent={() => {}}
+        />,
+      );
+    });
+
+    const items = Array.from(container.querySelectorAll<HTMLLIElement>(".outline-item"));
+    expect(items).toHaveLength(3);
+    expect(items[0].dataset.level).toBe("1");
+    expect(items[1].dataset.level).toBe("2");
+    expect(items[1].classList.contains("active")).toBe(true);
+    expect(items[2].dataset.level).toBe("3");
+
+    act(() => items[2].click());
+    expect(onOutlineClick).toHaveBeenCalledWith(12);
+  });
+});

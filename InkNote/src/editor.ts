@@ -887,6 +887,27 @@ const searchPreview = StateField.define<DecorationSet>({
   provide: (field) => EditorView.decorations.from(field),
 });
 
+const jumpHighlightEffect = StateEffect.define<{ pos: number; variant: "a" | "b" } | null>();
+const jumpHighlight = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(value, tr) {
+    if (tr.docChanged) value = Decoration.none;
+    for (const effect of tr.effects) {
+      if (!effect.is(jumpHighlightEffect)) continue;
+      const target = effect.value;
+      value = target
+        ? Decoration.set([
+            Decoration.line({
+              class: `cm-jump-highlight cm-jump-highlight--${target.variant}`,
+            }).range(tr.state.doc.lineAt(Math.min(target.pos, tr.state.doc.length)).from),
+          ])
+        : Decoration.none;
+    }
+    return value;
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
+
 /** 光标以整块为单位跳过这些区域（块内部有自己的编辑器） */
 const ATOMIC_MARK = Decoration.mark({});
 
@@ -1403,6 +1424,7 @@ export function createEditor(
     extensions: [
       searchPreviewRange,
       searchPreview,
+      jumpHighlight,
       history(),
       drawSelection(),
       dropCursor(),
@@ -1488,6 +1510,15 @@ export function createEditor(
   });
 
   const view = new EditorView({ state, parent });
+  let jumpTimer: number | null = null;
+  let jumpVariant: "a" | "b" = "a";
+
+  const clearJumpTimer = () => {
+    if (jumpTimer !== null) {
+      window.clearTimeout(jumpTimer);
+      jumpTimer = null;
+    }
+  };
 
   return {
     view,
@@ -1564,10 +1595,21 @@ export function createEditor(
     scrollToLine: (line: number) => {
       const n = Math.max(1, Math.min(line, view.state.doc.lines));
       const pos = view.state.doc.line(n).from;
+      clearJumpTimer();
+      jumpVariant = jumpVariant === "a" ? "b" : "a";
       view.dispatch({
-        effects: EditorView.scrollIntoView(pos, { y: "center" }),
+        effects: [
+          EditorView.scrollIntoView(pos, { y: "center" }),
+          jumpHighlightEffect.of({ pos, variant: jumpVariant }),
+        ],
         selection: { anchor: pos },
       });
+      jumpTimer = window.setTimeout(() => {
+        jumpTimer = null;
+        if (view.dom.isConnected) {
+          view.dispatch({ effects: jumpHighlightEffect.of(null) });
+        }
+      }, 1850);
       view.focus();
     },
     previewSearchMatch: (match) => {
@@ -1583,6 +1625,9 @@ export function createEditor(
     },
     runAction: (action: EditorAction) => runEditorAction(view, action),
     insertTable: (rows: number, cols: number) => insertTableAtCursor(view, rows, cols),
-    destroy: () => view.destroy(),
+    destroy: () => {
+      clearJumpTimer();
+      view.destroy();
+    },
   };
 }
