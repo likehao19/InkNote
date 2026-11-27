@@ -1,6 +1,10 @@
-import type { Locale } from "../lib/i18n";
+import type { Locale, MessageKey } from "../lib/i18n";
 import { t } from "../lib/i18n";
-import type { MarkdownTheme } from "../lib/markdownTheme";
+import {
+  MARKDOWN_THEMES,
+  type MarkdownTheme,
+  type MarkdownThemeGroup,
+} from "../lib/markdownTheme";
 
 interface Props {
   locale: Locale;
@@ -8,13 +12,19 @@ interface Props {
   onChange: (theme: MarkdownTheme) => void;
 }
 
-const OPTIONS: MarkdownTheme[] = ["github", "vue", "minimal"];
+const GROUPS: Array<{ id: MarkdownThemeGroup; titleKey: MessageKey }> = [
+  { id: "typora", titleKey: "settings.markdownTheme.group.typora" },
+  { id: "curated", titleKey: "settings.markdownTheme.group.curated" },
+  { id: "classic", titleKey: "settings.markdownTheme.group.classic" },
+];
 
-const LABEL_KEYS: Record<MarkdownTheme, Parameters<typeof t>[1]> = {
-  github: "settings.markdownTheme.github",
-  vue: "settings.markdownTheme.vue",
-  minimal: "settings.markdownTheme.minimal",
-};
+function labelKey(theme: MarkdownTheme): MessageKey {
+  return `settings.markdownTheme.${theme}` as MessageKey;
+}
+
+function descKey(theme: MarkdownTheme): MessageKey {
+  return `settings.markdownTheme.${theme}.desc` as MessageKey;
+}
 
 function DocumentPreview({ theme, mode }: { theme: MarkdownTheme; mode: "light" | "dark" }) {
   return (
@@ -29,25 +39,38 @@ function DocumentPreview({ theme, mode }: { theme: MarkdownTheme; mode: "light" 
 }
 
 export default function MarkdownThemePicker({ locale, value, onChange }: Props) {
-  const tr = (key: Parameters<typeof t>[1]) => t(locale, key);
+  const tr = (key: MessageKey) => t(locale, key);
 
   return (
-    <div className="theme-picker markdown-theme-picker">
-      {OPTIONS.map((option) => (
-        <button
-          key={option}
-          type="button"
-          className={value === option ? "theme-picker-card selected" : "theme-picker-card"}
-          onClick={() => onChange(option)}
-          aria-pressed={value === option}
-        >
-          <div className="md-theme-preview" aria-hidden="true">
-            <DocumentPreview theme={option} mode="light" />
-            <DocumentPreview theme={option} mode="dark" />
+    <div className="markdown-theme-groups">
+      {GROUPS.map((group) => {
+        const items = MARKDOWN_THEMES.filter((item) => item.group === group.id);
+        return (
+          <div key={group.id} className="markdown-theme-group">
+            <div className="markdown-theme-group-title">{tr(group.titleKey)}</div>
+            <div className="theme-picker markdown-theme-picker">
+              {items.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={value === item.id ? "theme-picker-card selected" : "theme-picker-card"}
+                  onClick={() => onChange(item.id)}
+                  aria-pressed={value === item.id}
+                >
+                  <div className="md-theme-preview" aria-hidden="true">
+                    <DocumentPreview theme={item.id} mode="light" />
+                    <DocumentPreview theme={item.id} mode="dark" />
+                  </div>
+                  <div className="theme-picker-meta">
+                    <span className="theme-picker-label">{tr(labelKey(item.id))}</span>
+                    <span className="theme-picker-sub">{tr(descKey(item.id))}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
-          <span className="theme-picker-label">{tr(LABEL_KEYS[option])}</span>
-        </button>
-      ))}
+        );
+      })}
     </div>
   );
 }

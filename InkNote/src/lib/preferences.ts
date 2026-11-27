@@ -315,6 +315,8 @@ export function applyEditorLayoutPrefs() {
   root.style.setProperty("--editor-focus-max-width", `${getFocusMaxWidth()}rem`);
   root.style.setProperty("--typewriter-padding", `${getTypewriterPadding()}vh`);
   root.style.setProperty("--editor-font-family", resolveFontFamily());
+  if (getFontFamily() === "system") root.style.removeProperty("--editor-custom-font");
+  else root.style.setProperty("--editor-custom-font", resolveFontFamily());
   root.style.setProperty("--editor-mono-font", resolveMonoFontFamily());
   root.style.setProperty("--editor-zoom", String(getEditorZoom() / 100));
   root.style.setProperty(

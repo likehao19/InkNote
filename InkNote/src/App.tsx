@@ -7,6 +7,7 @@ import { message as nativeMessage } from "@tauri-apps/plugin-dialog";
 import { disable as disableAutostart, enable as enableAutostart, isEnabled as isAutostartEnabled } from "@tauri-apps/plugin-autostart";
 import { Eye, Pencil } from "lucide-react";
 import type { AiSelectionSnapshot, EditorRef } from "./components/Editor";
+import type { SettingsCategory } from "./components/Settings";
 import Titlebar from "./components/Titlebar";
 import DocumentTabs from "./components/DocumentTabs";
 import { loadSession, restoreSession, saveSessionDraft, startSessionBackup, type SessionTab } from "./lib/sessionRecovery";
@@ -45,6 +46,7 @@ import { apply as applyTheme, getThemePref, resolveTheme, setThemePref, type The
 import {
   applyMarkdownTheme,
   getMarkdownTheme,
+  isMarkdownTheme,
   setMarkdownTheme,
   type MarkdownTheme,
 } from "./lib/markdownTheme";
@@ -243,6 +245,11 @@ export default function App() {
   }, [activeTabId]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsCategory, setSettingsCategory] = useState<SettingsCategory>("general");
+  const openSettings = useCallback((category: SettingsCategory = "general") => {
+    setSettingsCategory(category);
+    setSettingsOpen(true);
+  }, []);
   const [aiConfig, setAiConfigState] = useState<AiConfig>(getAiConfig);
   const [aiDialog, setAiDialog] = useState<{
     tabId: string;
@@ -304,6 +311,10 @@ export default function App() {
   const [locale, setLocaleState] = useState<Locale>(getLocale);
   const [theme, setTheme] = useState<ThemePref>(getThemePref);
   const [markdownTheme, setMarkdownThemeState] = useState<MarkdownTheme>(getMarkdownTheme);
+  const handleMarkdownTheme = useCallback((next: MarkdownTheme) => {
+    setMarkdownThemeState(next);
+    setMarkdownTheme(next);
+  }, []);
   const [fontSize, setFontSize] = useState(getFontSize);
   const [lineHeight, setLineHeight] = useState(getLineHeight);
   const [editorWidthPreset, setEditorWidthPreset] = useState<EditorWidthPreset>(getEditorWidthPreset);
@@ -1403,6 +1414,14 @@ export default function App() {
         b.runEditorAction(action.slice("editor:".length) as EditorAction);
         return;
       }
+      if (action.startsWith("theme:")) {
+        const nextTheme = action.slice("theme:".length);
+        if (isMarkdownTheme(nextTheme)) {
+          setMarkdownThemeState(nextTheme);
+          setMarkdownTheme(nextTheme);
+        }
+        return;
+      }
       switch (action) {
         case "new": void b.handleNewFile(); break;
         case "open": void b.openFile(); break;
@@ -1414,7 +1433,8 @@ export default function App() {
         case "save-as": void b.saveAs(); break;
         case "export-html": void b.exportHtml(); break;
         case "export-pdf": void b.exportPdf(); break;
-        case "settings": setSettingsOpen(true); break;
+        case "settings": openSettings("general"); break;
+        case "settings-appearance": openSettings("appearance"); break;
         case "about": setAboutOpen(true); break;
         case "shortcuts": setShortcutsOpen(true); break;
         case "check-updates": void b.handleCheckUpdates(); break;
@@ -2033,6 +2053,7 @@ export default function App() {
         sidebarTab={sidebarTab}
         editorMode={active?.mode ?? "preview"}
         documentEditable={documentEditable}
+        markdownTheme={markdownTheme}
         updateState={updateProgress}
         onOpen={openFile}
         onOpenFolder={openFolder}
@@ -2049,7 +2070,9 @@ export default function App() {
         onToggleEditorMode={toggleEditorMode}
         onToggleFocus={handleToggleFocus}
         onToggleTypewriter={handleToggleTypewriter}
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={() => openSettings("general")}
+        onOpenAppearanceSettings={() => openSettings("appearance")}
+        onSelectMarkdownTheme={handleMarkdownTheme}
         onOpenShortcuts={() => setShortcutsOpen(true)}
         onCheckUpdates={() => void handleCheckUpdates()}
         onInstallUpdate={() => void handleInstallUpdate()}
@@ -2202,6 +2225,7 @@ export default function App() {
           onCancel={() => resolveSaveChoice("cancel")} />}
         {settingsOpen && (
           <Settings
+            initialCategory={settingsCategory}
             onClose={() => setSettingsOpen(false)}
             values={{
               locale,
@@ -2247,10 +2271,7 @@ export default function App() {
                 setTheme(next);
                 setThemePref(next);
               },
-              onMarkdownTheme: (next) => {
-                setMarkdownThemeState(next);
-                setMarkdownTheme(next);
-              },
+              onMarkdownTheme: handleMarkdownTheme,
               onRestoreLastFolder: setRestoreLastFolder,
               onAutoAddDocumentFolder: (on) => {
                 persistAutoAddDocumentFolder(on);

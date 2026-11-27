@@ -7,6 +7,7 @@ import { applyMarkdownTheme } from "./lib/markdownTheme";
 import { apply as applyTheme, applyBootstrapTheme } from "./lib/theme";
 import { initializeSettingsStore } from "./lib/settingsStore";
 import "./App.css";
+import "./styles/markdownThemes.css";
 
 performance.mark("inknote:bootstrap-start");
 initPlatform();

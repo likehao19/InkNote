@@ -1,0 +1,1361 @@
+/* ============================================================
+   InkNote Typora-Style Markdown Theme System
+   Faithful to official typora-default-themes (Pixyll, Newsprint,
+   Whitey, Night, GitHub) + Curated Elegant Themes (Lapis, Warm Paper,
+   Nord, Academic).
+   ============================================================
+   All themes preserve CodeMirror 6 layout invariants:
+   - Never apply vertical margin to .cm-line or block widget roots.
+   - Use padding / border / CSS custom properties for rhythm & surfaces.
+   ============================================================ */
+
+/* ============================================================
+   Whole-App Chrome Theme Integration (Titlebar, Tabs, Sidebar,
+   Outline, Menus, Statusbar — synchronized with active theme)
+   ============================================================ */
+
+/* 1. Pixyll Chrome: crisp gallery white + subtle editorial contrast */
+html[data-md-theme="pixyll"] {
+  --bg: #f7f7f7;
+  --bg-toolbar: #fafafa;
+  --bg-sidebar: #fafafa;
+  --bg-editor: #ffffff;
+  --bg-statusbar: #fafafa;
+  --bg-hover: rgba(0, 0, 0, 0.04);
+  --bg-active: rgba(0, 0, 0, 0.07);
+  --fg: #333333;
+  --fg-muted: #666666;
+  --fg-faint: #9a9a9a;
+  --tree-fg: #555555;
+  --border: #e8e8e8;
+  --border-strong: #d0d0d0;
+  --accent: #463f5c;
+  --accent-hover: #352f47;
+  --menu-bg: #ffffff;
+  --menu-border: rgba(0, 0, 0, 0.14);
+  --menu-hover-bg: #463f5c;
+  --outline-font: "Merriweather", "PT Serif", Georgia, "Songti SC", "SimSun", serif;
+  --outline-h1-font: "Lato", "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+html[data-theme="dark"][data-md-theme="pixyll"] {
+  --bg: #17191d;
+  --bg-toolbar: #191b20;
+  --bg-sidebar: #181a1f;
+  --bg-editor: #1e2024;
+  --bg-statusbar: #181a1f;
+  --fg: #dde1e7;
+  --fg-muted: #9aa1ad;
+  --fg-faint: #6f7683;
+  --tree-fg: #b4bac5;
+  --border: #2c3038;
+  --border-strong: #414754;
+  --accent: #a6b8e0;
+  --accent-hover: #bccbeb;
+  --menu-bg: #22252b;
+  --menu-border: #3a3f4a;
+  --menu-hover-bg: #364158;
+}
+
+/* 2. Newsprint Chrome: signature warm newsprint paper across the entire app */
+html[data-md-theme="newsprint"] {
+  --bg: #eae8e1;
+  --bg-toolbar: #eceae3;
+  --bg-sidebar: #eeede7;
+  --bg-editor: #f3f2ee;
+  --bg-statusbar: #eceae3;
+  --bg-hover: rgba(31, 9, 9, 0.05);
+  --bg-active: rgba(31, 9, 9, 0.09);
+  --fg: #1f0909;
+  --fg-muted: #5d564e;
+  --fg-faint: #8e877e;
+  --tree-fg: #4e473f;
+  --border: #d4d1c8;
+  --border-strong: #bab5a9;
+  --accent: #065588;
+  --accent-hover: #05446d;
+  --menu-bg: #f3f2ee;
+  --menu-border: #c9c5bb;
+  --menu-hover-bg: #065588;
+  --scrollbar-thumb: rgba(31, 9, 9, 0.2);
+  --scrollbar-thumb-hover: rgba(31, 9, 9, 0.34);
+  --outline-font: "PT Serif", "Times New Roman", "Songti SC", "SimSun", serif;
+}
+html[data-theme="dark"][data-md-theme="newsprint"] {
+  --bg: #191715;
+  --bg-toolbar: #1b1917;
+  --bg-sidebar: #1c1a18;
+  --bg-editor: #201e1c;
+  --bg-statusbar: #1b1917;
+  --fg: #e2dcd2;
+  --fg-muted: #a39b8e;
+  --fg-faint: #787066;
+  --tree-fg: #b8b0a3;
+  --border: #332f2a;
+  --border-strong: #4a443d;
+  --accent: #74b0d9;
+  --accent-hover: #8fc1e3;
+  --menu-bg: #24211e;
+  --menu-border: #3d3832;
+  --menu-hover-bg: #264860;
+}
+
+/* 3. Whitey Chrome: serene bright book-page shell */
+html[data-md-theme="whitey"] {
+  --bg: #f7f7f7;
+  --bg-toolbar: #fafafa;
+  --bg-sidebar: #fbfbfb;
+  --bg-editor: #fefefe;
+  --bg-statusbar: #fafafa;
+  --fg: #333333;
+  --fg-muted: #707070;
+  --fg-faint: #a0a0a0;
+  --tree-fg: #585858;
+  --border: #e6e6e6;
+  --border-strong: #cccccc;
+  --accent: #2484c1;
+  --accent-hover: #1c6da1;
+  --menu-bg: #fefefe;
+  --menu-hover-bg: #2484c1;
+  --outline-font: "Vollkorn", Palatino, Georgia, "Songti SC", "SimSun", serif;
+}
+html[data-theme="dark"][data-md-theme="whitey"] {
+  --bg: #161719;
+  --bg-toolbar: #18191b;
+  --bg-sidebar: #191a1c;
+  --bg-editor: #1c1d1f;
+  --bg-statusbar: #18191b;
+  --fg: #dcdfe4;
+  --fg-muted: #9aa0a8;
+  --fg-faint: #6f757d;
+  --tree-fg: #b4b9c0;
+  --border: #2e3136;
+  --border-strong: #42464e;
+  --accent: #5cb0e5;
+  --accent-hover: #7cc0eb;
+  --menu-bg: #222427;
+  --menu-border: #3a3e45;
+  --menu-hover-bg: #214e6b;
+}
+
+/* 4. Night Chrome: full Typora Night dark slate shell regardless of OS light/dark */
+html[data-md-theme="night"] {
+  color-scheme: dark;
+  --bg: #2c2f33;
+  --bg-toolbar: #2a2d30;
+  --bg-sidebar: #2e3033;
+  --bg-editor: #363b40;
+  --bg-statusbar: #2a2d30;
+  --bg-hover: rgba(255, 255, 255, 0.06);
+  --bg-active: rgba(255, 255, 255, 0.11);
+  --fg: #d4dadf;
+  --fg-muted: #9da2a6;
+  --fg-faint: #777e86;
+  --tree-fg: #b2b8be;
+  --border: #434950;
+  --border-strong: #586069;
+  --accent: #6dc1e7;
+  --accent-hover: #89ceee;
+  --menu-bg: #32363b;
+  --menu-border: #4c535b;
+  --menu-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  --menu-hover-bg: #4a89dc;
+  --menu-hover-fg: #ffffff;
+  --scrollbar-thumb: rgba(255, 255, 255, 0.2);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.34);
+}
+
+/* 5. GitHub Chrome */
+html[data-md-theme="github"] {
+  --bg: #f6f8fa;
+  --bg-toolbar: #f6f8fa;
+  --bg-sidebar: #fafafa;
+  --bg-editor: #ffffff;
+  --bg-statusbar: #f6f8fa;
+  --border: #e1e4e8;
+  --accent: #0969da;
+  --accent-hover: #0757b5;
+}
+html[data-theme="dark"][data-md-theme="github"] {
+  --bg: #010409;
+  --bg-toolbar: #010409;
+  --bg-sidebar: #090d13;
+  --bg-editor: #0d1117;
+  --bg-statusbar: #010409;
+  --fg: #e6edf3;
+  --fg-muted: #8b949e;
+  --tree-fg: #b1bac4;
+  --border: #262c36;
+  --border-strong: #3b434f;
+  --accent: #58a6ff;
+  --accent-hover: #79b8ff;
+  --menu-bg: #161b22;
+  --menu-border: #30363d;
+}
+
+/* 6. Lapis Chrome: cool slate-blue mist */
+html[data-md-theme="lapis"] {
+  --bg: #f2f5fa;
+  --bg-toolbar: #f5f8fc;
+  --bg-sidebar: #f6f9fc;
+  --bg-editor: #ffffff;
+  --bg-statusbar: #f5f8fc;
+  --fg: #2b323b;
+  --fg-muted: #5f6d80;
+  --fg-faint: #8e9bad;
+  --tree-fg: #4a5768;
+  --border: #dde5f0;
+  --border-strong: #c2cfe2;
+  --accent: #4870ac;
+  --accent-hover: #385b90;
+  --menu-bg: #ffffff;
+  --menu-hover-bg: #4870ac;
+}
+html[data-theme="dark"][data-md-theme="lapis"] {
+  --bg: #13171f;
+  --bg-toolbar: #141921;
+  --bg-sidebar: #151a22;
+  --bg-editor: #191e26;
+  --bg-statusbar: #141921;
+  --fg: #d9e1ec;
+  --fg-muted: #8f9eb3;
+  --fg-faint: #67768c;
+  --tree-fg: #a9b6c9;
+  --border: #283040;
+  --border-strong: #39445a;
+  --accent: #7aa2f7;
+  --accent-hover: #96b7f9;
+  --menu-bg: #1e2531;
+  --menu-border: #313b4c;
+  --menu-hover-bg: #314b78;
+}
+
+/* 7. Warm Paper / 暖纸笺 Chrome: soft parchment stationery */
+html[data-md-theme="sepia"] {
+  --bg: #f1ebdf;
+  --bg-toolbar: #f4efe4;
+  --bg-sidebar: #f5f0e6;
+  --bg-editor: #faf6ee;
+  --bg-statusbar: #f4efe4;
+  --bg-hover: rgba(58, 48, 38, 0.05);
+  --bg-active: rgba(58, 48, 38, 0.09);
+  --fg: #3a3026;
+  --fg-muted: #756656;
+  --fg-faint: #a19280;
+  --tree-fg: #5e5042;
+  --border: #e1d7c6;
+  --border-strong: #cbbda6;
+  --accent: #a84b31;
+  --accent-hover: #8f3d26;
+  --menu-bg: #faf6ee;
+  --menu-border: #d8ccb8;
+  --menu-hover-bg: #a84b31;
+  --outline-font: "Georgia", "Songti SC", "Noto Serif SC", "SimSun", serif;
+}
+html[data-theme="dark"][data-md-theme="sepia"] {
+  --bg: #1a1714;
+  --bg-toolbar: #1c1915;
+  --bg-sidebar: #1e1a16;
+  --bg-editor: #221e1a;
+  --bg-statusbar: #1c1915;
+  --fg: #e5dcd0;
+  --fg-muted: #a69989;
+  --fg-faint: #7a6e60;
+  --tree-fg: #bfb2a2;
+  --border: #363029;
+  --border-strong: #4c4339;
+  --accent: #d9915b;
+  --accent-hover: #e4a678;
+  --menu-bg: #28231e;
+  --menu-border: #403830;
+  --menu-hover-bg: #6e4526;
+}
+
+/* 8. Nord Chrome: serene Arctic Snow Storm / Polar Night */
+html[data-md-theme="nord"] {
+  --bg: #e5e9f0;
+  --bg-toolbar: #eceff4;
+  --bg-sidebar: #eef1f6;
+  --bg-editor: #f6f8fb;
+  --bg-statusbar: #eceff4;
+  --fg: #2e3440;
+  --fg-muted: #5b677f;
+  --fg-faint: #8794ab;
+  --tree-fg: #434c5e;
+  --border: #d8dee9;
+  --border-strong: #c0c8d8;
+  --accent: #5e81ac;
+  --accent-hover: #4c6f99;
+  --menu-bg: #f6f8fb;
+  --menu-border: #d0d7e3;
+  --menu-hover-bg: #5e81ac;
+}
+html[data-theme="dark"][data-md-theme="nord"] {
+  --bg: #242933;
+  --bg-toolbar: #272c36;
+  --bg-sidebar: #292e39;
+  --bg-editor: #2e3440;
+  --bg-statusbar: #272c36;
+  --fg: #eceff4;
+  --fg-muted: #9aa7bd;
+  --fg-faint: #707d94;
+  --tree-fg: #c2cad8;
+  --border: #3b4252;
+  --border-strong: #4c566a;
+  --accent: #88c0d0;
+  --accent-hover: #9fd0de;
+  --menu-bg: #323946;
+  --menu-border: #434c5e;
+  --menu-hover-bg: #4c566a;
+}
+
+/* 9. Academic Chrome: crisp paper monograph */
+html[data-md-theme="academic"] {
+  --bg: #f5f5f2;
+  --bg-toolbar: #f8f8f5;
+  --bg-sidebar: #f9f9f7;
+  --bg-editor: #ffffff;
+  --bg-statusbar: #f8f8f5;
+  --fg: #1a1a1a;
+  --fg-muted: #595959;
+  --fg-faint: #8c8c8a;
+  --tree-fg: #444442;
+  --border: #e0e0dc;
+  --border-strong: #c6c6c0;
+  --accent: #1d4e89;
+  --accent-hover: #153c6b;
+  --menu-bg: #ffffff;
+  --menu-hover-bg: #1d4e89;
+  --outline-font: "STIX Two Text", "Cambria", "Georgia", "Songti SC", "SimSun", serif;
+}
+html[data-theme="dark"][data-md-theme="academic"] {
+  --bg: #141517;
+  --bg-toolbar: #161719;
+  --bg-sidebar: #17181a;
+  --bg-editor: #1a1b1d;
+  --bg-statusbar: #161719;
+  --fg: #e2e2df;
+  --fg-muted: #9e9e99;
+  --fg-faint: #70706c;
+  --tree-fg: #b8b8b3;
+  --border: #2e3035;
+  --border-strong: #42444a;
+  --accent: #7aa7dc;
+  --accent-hover: #96bce6;
+  --menu-bg: #222326;
+  --menu-border: #3a3b40;
+  --menu-hover-bg: #2c4a70;
+}
+
+/* 10. Vue & Minimal Chrome harmonizing */
+html[data-md-theme="vue"] {
+  --bg: #f3f6f5;
+  --bg-toolbar: #f6f9f7;
+  --bg-sidebar: #f7faf8;
+  --bg-statusbar: #f6f9f7;
+  --accent: #42b883;
+  --accent-hover: #33a06f;
+  --menu-hover-bg: #3aa675;
+}
+html[data-theme="dark"][data-md-theme="vue"] {
+  --bg: #181a1b;
+  --bg-toolbar: #1a1d1e;
+  --bg-sidebar: #1c1f20;
+  --bg-statusbar: #1a1d1e;
+  --accent: #42d392;
+  --accent-hover: #5ee0a5;
+  --menu-hover-bg: #266b4c;
+}
+html[data-md-theme="minimal"] {
+  --bg: #f4f6f6;
+  --bg-toolbar: #f7f9f9;
+  --bg-sidebar: #f8fafa;
+  --bg-statusbar: #f7f9f9;
+  --accent: #647a76;
+  --accent-hover: #50635f;
+  --menu-hover-bg: #647a76;
+}
+html[data-theme="dark"][data-md-theme="minimal"] {
+  --bg: #191b1b;
+  --bg-toolbar: #1b1d1d;
+  --bg-sidebar: #1d2020;
+  --bg-statusbar: #1b1d1d;
+  --accent: #9aacaa;
+  --accent-hover: #b2c2c0;
+  --menu-hover-bg: #3e4c4a;
+}
+html[data-md-theme="vue"] .editor-host--preview .cm-content,
+html[data-md-theme="minimal"] .editor-host--preview .cm-content {
+  padding: 36px 0 96px;
+}
+
+/* Base theme token bridge on .editor-host */
+.editor-host {
+  --md-editor-bg: var(--bg-editor);
+  --md-fg: var(--fg);
+  --md-blockquote-fg: var(--md-muted);
+  --md-blockquote-style: normal;
+  --md-list-marker-color: var(--md-muted);
+  --md-inline-code-bg: var(--md-panel-bg);
+  --md-inline-code-fg: inherit;
+  --md-inline-code-border: 1px solid var(--md-panel-border);
+  --md-inline-code-radius: 5px;
+  --md-hr-bg: linear-gradient(90deg, transparent, var(--border-strong) 12%, var(--border-strong) 88%, transparent);
+  --md-selection: var(--selection);
+  background: var(--md-editor-bg);
+}
+
+.editor-host .cm-editor {
+  background: var(--md-editor-bg);
+}
+
+.editor-host--line-numbers .cm-gutters {
+  background: var(--md-editor-bg);
+}
+
+.editor-host--preview .cm-scroller {
+  font-family: var(--editor-custom-font, var(--md-body-font, var(--editor-font-family, var(--font-ui))));
+}
+
+.editor-host--preview .cm-line.md-list-item {
+  padding-top: 0.16em;
+  padding-bottom: 0.16em;
+}
+
+.editor-host--preview .cm-line.md-list-item.md-bullet-list[style*="--md-list-marker-left"]:not(.md-task-item)::before {
+  content: "◦";
+  font-weight: 400;
+}
+
+.editor-host .cm-content {
+  color: var(--md-fg);
+  caret-color: var(--md-fg);
+}
+
+.editor-host .cm-cursor,
+.editor-host .cm-dropCursor {
+  border-left-color: color-mix(in srgb, var(--md-fg) 52%, transparent);
+}
+
+.editor-host .cm-selectionBackground,
+.editor-host .cm-content ::selection {
+  background: var(--md-selection);
+}
+
+.editor-host .cm-line.md-blockquote {
+  color: var(--md-blockquote-fg);
+  font-style: var(--md-blockquote-style);
+}
+
+.editor-host .cm-line.md-list-item.md-bullet-list:not(.md-task-item)::before,
+.editor-host .cm-line.md-list-item.md-ordered-list:not(.md-task-item)::before {
+  color: var(--md-list-marker-color);
+}
+
+.editor-host .cm-md-code {
+  background: var(--md-inline-code-bg);
+  color: var(--md-inline-code-fg);
+  border: var(--md-inline-code-border);
+  border-radius: var(--md-inline-code-radius);
+}
+
+.editor-host .md-hr-line {
+  background: var(--md-hr-bg);
+}
+
+/* ============================================================
+   1. Pixyll (Official Typora pixyll.css)
+   ============================================================ */
+html[data-md-theme="pixyll"] .editor-host {
+  --md-editor-bg: #ffffff;
+  --md-fg: #333333;
+  --md-heading-color: #333333;
+  --md-muted: #7a7a7a;
+  --md-accent: #463f5c;
+  --md-body-font: "Merriweather", "PT Serif", Georgia, "Times New Roman", "Songti SC", "STSong", "Noto Serif SC", "SimSun", serif;
+  --md-heading-font: "Lato", "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --md-panel-bg: #f8f8f8;
+  --md-panel-border: #7a7a7a;
+  --md-quote-bg: transparent;
+  --md-quote-border: #7a7a7a;
+  --md-blockquote-fg: #555555;
+  --md-blockquote-style: italic;
+  --editor-quote-bar: 5px;
+  --editor-block-indent: 18px;
+  --md-list-marker-color: #333333;
+  --md-inline-code-bg: transparent;
+  --md-inline-code-fg: #7a7a7a;
+  --md-inline-code-border: 0;
+  --md-inline-code-radius: 0px;
+  --md-code-bg: #fafafa;
+  --md-code-fg: #333333;
+  --md-code-keyword: #a71d5d;
+  --md-code-string: #183691;
+  --md-code-number: #0086b3;
+  --md-code-comment: #8c8c8c;
+  --md-code-attr: #2b4db8;
+  --md-code-title: #795da3;
+  --md-code-builtin: #005cc5;
+  --md-code-operator: #6e7781;
+  --md-component-radius: 4px;
+  --md-hr-bg: #cccccc;
+}
+
+html[data-theme="dark"][data-md-theme="pixyll"] .editor-host {
+  --md-editor-bg: #1e2024;
+  --md-fg: #dde1e7;
+  --md-heading-color: #f2f4f7;
+  --md-muted: #9aa1ad;
+  --md-accent: #a6b8e0;
+  --md-panel-bg: #25282e;
+  --md-panel-border: #555c68;
+  --md-quote-border: #7d8594;
+  --md-blockquote-fg: #adb4c0;
+  --md-list-marker-color: #cfd5df;
+  --md-inline-code-bg: transparent;
+  --md-inline-code-fg: #a8b1bf;
+  --md-code-bg: #23262c;
+  --md-code-fg: #d5dae2;
+  --md-code-keyword: #f08da9;
+  --md-code-string: #9cc4ff;
+  --md-code-number: #78d5f5;
+  --md-code-comment: #7f8794;
+  --md-code-attr: #82aaff;
+  --md-code-title: #c792ea;
+  --md-code-builtin: #ffcb6b;
+  --md-code-operator: #89ddff;
+  --md-hr-bg: #424852;
+}
+
+html[data-md-theme="pixyll"] .editor-host--preview .cm-content {
+  padding: 36px 0 96px;
+}
+html[data-md-theme="pixyll"] .editor-host .cm-md-h1 { font-size: 2.65em; font-weight: 800; line-height: 1.22; letter-spacing: -0.02em; }
+html[data-md-theme="pixyll"] .editor-host .cm-md-h2 { font-size: 1.72em; font-weight: 700; line-height: 1.28; letter-spacing: -0.015em; }
+html[data-md-theme="pixyll"] .editor-host .cm-md-h3 { font-size: 1.35em; font-weight: 700; }
+html[data-md-theme="pixyll"] .editor-host .cm-md-h4 { font-size: 1.12em; font-weight: 700; }
+html[data-md-theme="pixyll"] .editor-host .cm-line.md-heading-1 { padding-top: 0.9em; padding-bottom: 0.42em; }
+html[data-md-theme="pixyll"] .editor-host .cm-line.md-heading-2 { padding-top: 1.15em; padding-bottom: 0.3em; }
+html[data-md-theme="pixyll"] .editor-host .cm-line.md-heading-3 { padding-top: 0.9em; padding-bottom: 0.2em; }
+html[data-md-theme="pixyll"] .editor-host .cm-line.md-list-item { padding-top: 0.14em; padding-bottom: 0.14em; }
+html[data-md-theme="pixyll"] .editor-host .cm-line.md-list-item.md-bullet-list[style*="--md-list-marker-left"]:not(.md-task-item)::before {
+  content: "◦";
+  font-weight: 400;
+}
+html[data-md-theme="pixyll"] .editor-host .cm-line.md-task-item::before { border-radius: 50%; border: 1.5px solid #555555; }
+html[data-md-theme="pixyll"] .editor-host .cm-line.md-task-done::before { background: #333333; border-color: #333333; }
+html[data-md-theme="pixyll"] .editor-host .cm-md-link,
+html[data-md-theme="pixyll"] .editor-host .md-table-link {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+html[data-md-theme="pixyll"] .editor-host .cm-md-code,
+html[data-md-theme="pixyll"] .editor-host .md-table-widget td code,
+html[data-md-theme="pixyll"] .editor-host .md-table-widget th code {
+  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
+  color: var(--md-inline-code-fg);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0 2px;
+  font-size: 0.9em;
+}
+/* Official Pixyll table: no top line above thead, 2px bottom on thead th, 1px row dividers, no bottom line after last row */
+html[data-md-theme="pixyll"] .editor-host .md-table-body {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+html[data-md-theme="pixyll"] .editor-host .md-table-widget table {
+  border-collapse: collapse;
+  border: 0;
+  font-size: 0.96em;
+}
+html[data-md-theme="pixyll"] .editor-host .md-table-widget thead th {
+  font-family: var(--md-heading-font);
+  font-weight: 700;
+  vertical-align: bottom;
+  background: transparent;
+  color: var(--md-heading-color);
+  border: 0;
+  border-bottom: 2px solid var(--md-heading-color);
+  padding: 12px 12px 10px;
+}
+html[data-md-theme="pixyll"] .editor-host .md-table-widget tbody td {
+  background: transparent;
+  border: 0;
+  border-top: 1px solid #9a9a9a;
+  padding: 12px;
+  line-height: 1.5;
+  vertical-align: top;
+}
+html[data-theme="dark"][data-md-theme="pixyll"] .editor-host .md-table-widget tbody td {
+  border-top-color: #4d535e;
+}
+html[data-md-theme="pixyll"] .editor-host .md-table-widget tbody tr:first-child td { border-top: 0; }
+html[data-md-theme="pixyll"] .editor-host .md-table-widget tbody tr:nth-child(2n) td { background: transparent; }
+html[data-md-theme="pixyll"] .editor-host .md-codeblock-box {
+  background: var(--md-code-bg);
+  border: 1px solid #e2e2e2;
+  border-radius: 4px;
+  box-shadow: none;
+}
+html[data-theme="dark"][data-md-theme="pixyll"] .editor-host .md-codeblock-box {
+  border-color: #363b44;
+}
+
+/* ============================================================
+   2. GitHub (Official Typora github.css)
+   ============================================================ */
+html[data-md-theme="github"] .editor-host {
+  --md-editor-bg: #ffffff;
+  --md-fg: #333333;
+  --md-heading-color: #333333;
+  --md-muted: #777777;
+  --md-accent: #4183c4;
+  --md-heading-font: "Open Sans", "Clear Sans", "Helvetica Neue", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --md-blockquote-fg: #777777;
+  --md-panel-bg: #f8f8f8;
+  --md-panel-border: #dfe2e5;
+  --md-quote-border: #dfe2e5;
+  --editor-quote-bar: 4px;
+  --md-inline-code-bg: #f3f4f4;
+  --md-inline-code-border: 1px solid #e7eaed;
+  --md-inline-code-radius: 3px;
+  --md-hr-bg: #e7e7e7;
+}
+
+html[data-theme="dark"][data-md-theme="github"] .editor-host {
+  --md-editor-bg: #0d1117;
+  --md-fg: #e6edf3;
+  --md-heading-color: #f0f6fc;
+  --md-muted: #8b949e;
+  --md-accent: #58a6ff;
+  --md-blockquote-fg: #8b949e;
+  --md-inline-code-bg: rgba(110, 118, 129, 0.35);
+  --md-inline-code-border: 1px solid #30363d;
+  --md-hr-bg: #30363d;
+}
+
+html[data-md-theme="github"] .editor-host--preview .cm-content {
+  padding: 36px 0 96px;
+}
+html[data-md-theme="github"] .editor-host .cm-line.md-heading-1,
+html[data-md-theme="github"] .editor-host .cm-line.md-heading-2 {
+  padding-bottom: 0.32em;
+}
+html[data-md-theme="github"] .editor-host .cm-line.md-heading-1::after,
+html[data-md-theme="github"] .editor-host .cm-line.md-heading-2::after {
+  content: "";
+  display: block;
+  height: 1px;
+  margin-top: 0.28em;
+  background: #eeeeee;
+}
+html[data-theme="dark"][data-md-theme="github"] .editor-host .cm-line.md-heading-1::after,
+html[data-theme="dark"][data-md-theme="github"] .editor-host .cm-line.md-heading-2::after {
+  background: #30363d;
+}
+html[data-md-theme="github"] .editor-host .md-table-widget thead th {
+  background: #f8f8f8;
+  font-weight: 700;
+}
+html[data-theme="dark"][data-md-theme="github"] .editor-host .md-table-widget thead th {
+  background: #161b22;
+}
+
+/* ============================================================
+   3. Newsprint (Official Typora newsprint.css)
+   ============================================================ */
+html[data-md-theme="newsprint"] .editor-host {
+  --md-editor-bg: #f3f2ee;
+  --md-fg: #1f0909;
+  --md-heading-color: #1f0909;
+  --md-muted: #656565;
+  --md-accent: #065588;
+  --md-body-font: "PT Serif", "Times New Roman", "Songti SC", "STSong", "Noto Serif SC", "SimSun", Times, serif;
+  --md-heading-font: "PT Serif", "Times New Roman", "Songti SC", "STSong", "Noto Serif SC", "SimSun", Times, serif;
+  --md-panel-bg: #dadada;
+  --md-panel-border: #c5c5c5;
+  --md-quote-bg: transparent;
+  --md-quote-border: #bababa;
+  --md-blockquote-fg: #656565;
+  --md-blockquote-style: italic;
+  --editor-quote-bar: 5px;
+  --md-list-marker-color: #1f0909;
+  --md-inline-code-bg: #dadada;
+  --md-inline-code-fg: #1f0909;
+  --md-inline-code-border: 0;
+  --md-inline-code-radius: 0px;
+  --md-code-bg: #eae7df;
+  --md-code-fg: #1f0909;
+  --md-code-keyword: #8c2d19;
+  --md-code-string: #2c5e3b;
+  --md-code-number: #065588;
+  --md-code-comment: #6e6860;
+  --md-code-attr: #1f548c;
+  --md-code-title: #6b3e82;
+  --md-code-builtin: #8c4a19;
+  --md-code-operator: #5a534b;
+  --md-component-radius: 0px;
+  --md-hr-bg: #c5c5c5;
+  --md-selection: rgba(32, 43, 51, 0.32);
+}
+
+html[data-theme="dark"][data-md-theme="newsprint"] .editor-host {
+  --md-editor-bg: #201e1c;
+  --md-fg: #e2dcd2;
+  --md-heading-color: #f0eae0;
+  --md-muted: #a39b8e;
+  --md-accent: #74b0d9;
+  --md-panel-bg: #322e2a;
+  --md-panel-border: #47423c;
+  --md-quote-border: #6e675d;
+  --md-blockquote-fg: #ada598;
+  --md-list-marker-color: #d8d1c7;
+  --md-inline-code-bg: #35312c;
+  --md-inline-code-fg: #ece6dc;
+  --md-code-bg: #2d2926;
+  --md-code-fg: #e2dcd2;
+  --md-code-keyword: #e0826d;
+  --md-code-string: #90c49b;
+  --md-code-number: #7dbbe6;
+  --md-code-comment: #8a8277;
+  --md-code-attr: #7dbbe6;
+  --md-code-title: #c7a2e0;
+  --md-code-builtin: #e5b878;
+  --md-code-operator: #b3aa9d;
+  --md-hr-bg: #47423c;
+  --md-selection: rgba(116, 176, 217, 0.28);
+}
+
+html[data-md-theme="newsprint"] .editor-host--preview .cm-content {
+  padding: 40px 0 96px;
+}
+html[data-md-theme="newsprint"] .editor-host .cm-md-h1 { font-size: 1.875em; font-weight: 400; line-height: 1.3; letter-spacing: 0; }
+html[data-md-theme="newsprint"] .editor-host .cm-md-h2 { font-size: 1.3125em; font-weight: 700; line-height: 1.25; }
+html[data-md-theme="newsprint"] .editor-host .cm-md-h3 { font-size: 1.3125em; font-weight: 400; }
+html[data-md-theme="newsprint"] .editor-host .cm-md-h4 { font-size: 1.125em; font-weight: 700; }
+html[data-md-theme="newsprint"] .editor-host .cm-line.md-heading-1 { padding-top: 1.1em; padding-bottom: 0.45em; }
+html[data-md-theme="newsprint"] .editor-host .cm-line.md-heading-1::after {
+  content: "";
+  display: block;
+  height: 1px;
+  margin-top: 0.55em;
+  background: var(--md-panel-border);
+}
+html[data-md-theme="newsprint"] .editor-host .cm-md-code,
+html[data-md-theme="newsprint"] .editor-host .md-table-widget td code,
+html[data-md-theme="newsprint"] .editor-host .md-table-widget th code {
+  background: var(--md-inline-code-bg);
+  color: var(--md-inline-code-fg);
+  border: 0;
+  border-radius: 0;
+  padding: 0 4px;
+  font-size: 0.875em;
+}
+/* Official Newsprint borderless table with #dadada thead and #e8e7e7 even rows */
+html[data-md-theme="newsprint"] .editor-host .md-table-body {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+html[data-md-theme="newsprint"] .editor-host .md-table-widget table { border-collapse: collapse; border: 0; }
+html[data-md-theme="newsprint"] .editor-host .md-table-widget thead th {
+  background: #dadada;
+  color: #1f0909;
+  font-weight: 700;
+  border: 0;
+  padding: 6px 10px;
+}
+html[data-theme="dark"][data-md-theme="newsprint"] .editor-host .md-table-widget thead th {
+  background: #36322d;
+  color: #f0eae0;
+}
+html[data-md-theme="newsprint"] .editor-host .md-table-widget tbody td {
+  background: transparent;
+  border: 0;
+  padding: 6px 10px;
+}
+html[data-md-theme="newsprint"] .editor-host .md-table-widget tbody tr:nth-child(2n) td { background: #e8e7e7; }
+html[data-theme="dark"][data-md-theme="newsprint"] .editor-host .md-table-widget tbody tr:nth-child(2n) td { background: #2a2723; }
+html[data-md-theme="newsprint"] .editor-host .md-codeblock-box {
+  background: var(--md-code-bg);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+html[data-md-theme="newsprint"] .editor-host .md-codeblock-gutter { border-right: 0; }
+
+/* ============================================================
+   4. Whitey (Official Typora whitey.css — Centered Serif Book Page)
+   ============================================================ */
+html[data-md-theme="whitey"] .editor-host {
+  --md-editor-bg: #fefefe;
+  --md-fg: #333333;
+  --md-heading-color: #333333;
+  --md-muted: #777777;
+  --md-accent: #2484c1;
+  --md-body-font: "Vollkorn", Palatino, Georgia, "Songti SC", "STSong", "Noto Serif SC", "SimSun", Times, serif;
+  --md-heading-font: "Vollkorn", Palatino, Georgia, "Songti SC", "STSong", "Noto Serif SC", "SimSun", Times, serif;
+  --md-panel-bg: #f8f8f8;
+  --md-panel-border: #dddddd;
+  --md-quote-bg: transparent;
+  --md-quote-border: #dddddd;
+  --md-blockquote-fg: #666666;
+  --editor-quote-bar: 1px;
+  --md-list-marker-color: #555555;
+  --md-inline-code-bg: #ffffff;
+  --md-inline-code-fg: #333333;
+  --md-inline-code-border: 0;
+  --md-inline-code-radius: 0px;
+  --md-code-bg: #ffffff;
+  --md-code-fg: #333333;
+  --md-code-keyword: #2484c1;
+  --md-code-string: #3b7a57;
+  --md-code-number: #8c4a27;
+  --md-code-comment: #999999;
+  --md-component-radius: 0px;
+  --md-hr-bg: #dddddd;
+}
+
+html[data-theme="dark"][data-md-theme="whitey"] .editor-host {
+  --md-editor-bg: #1c1d1f;
+  --md-fg: #dcdfe4;
+  --md-heading-color: #eef0f3;
+  --md-muted: #9aa0a8;
+  --md-accent: #5cb0e5;
+  --md-panel-bg: #242629;
+  --md-panel-border: #3b3f45;
+  --md-quote-border: #4b5058;
+  --md-blockquote-fg: #a2a8b0;
+  --md-list-marker-color: #9aa0a8;
+  --md-inline-code-bg: #242629;
+  --md-inline-code-fg: #dcdfe4;
+  --md-code-bg: #1f2124;
+  --md-code-fg: #dcdfe4;
+  --md-code-keyword: #6ab6ea;
+  --md-code-string: #8bc79a;
+  --md-code-number: #e0a875;
+  --md-code-comment: #7f8690;
+  --md-hr-bg: #3b3f45;
+}
+
+html[data-md-theme="whitey"] .editor-host--preview .cm-content {
+  padding: 40px 0 96px;
+}
+html[data-md-theme="whitey"] .editor-host .cm-md-h1 { font-size: 2.55em; font-weight: 400; }
+html[data-md-theme="whitey"] .editor-host .cm-md-h2 { font-size: 1.62em; font-weight: 400; }
+html[data-md-theme="whitey"] .editor-host .cm-md-h3 { font-size: 1.3em; font-weight: 400; font-style: italic; }
+html[data-md-theme="whitey"] .editor-host .cm-line.md-heading-1,
+html[data-md-theme="whitey"] .editor-host .cm-line.md-heading-2,
+html[data-md-theme="whitey"] .editor-host .cm-line.md-heading-3 { text-align: center; }
+html[data-md-theme="whitey"] .editor-host .cm-line.md-heading-2::after {
+  content: "";
+  display: block;
+  width: 100px;
+  height: 1px;
+  margin: 0.4em auto 0;
+  background: #2f2f2f;
+}
+html[data-theme="dark"][data-md-theme="whitey"] .editor-host .cm-line.md-heading-2::after { background: #9aa0a8; }
+html[data-md-theme="whitey"] .editor-host .cm-line.md-list-item.md-bullet-list:not(.md-task-item)::before { content: "▪"; font-size: 0.85em; }
+html[data-md-theme="whitey"] .editor-host .md-table-body { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+html[data-md-theme="whitey"] .editor-host .md-table-widget table { border-collapse: collapse; border: 0; }
+html[data-md-theme="whitey"] .editor-host .md-table-widget thead th { background: transparent; font-weight: 700; border: 0; border-bottom: 1px solid var(--md-panel-border); padding: 9px 10px; }
+html[data-md-theme="whitey"] .editor-host .md-table-widget tbody td { background: transparent; border: 0; border-top: 1px solid var(--md-panel-border); padding: 9px 10px; }
+html[data-md-theme="whitey"] .editor-host .md-table-widget tbody tr:nth-child(2n) td { background: transparent; }
+
+/* ============================================================
+   5. Night (Official Typora night.css — #363B40 Slate Dark)
+   ============================================================ */
+html[data-md-theme="night"] .editor-host {
+  color-scheme: dark;
+  --md-editor-bg: #363b40;
+  --md-fg: #b8bfc6;
+  --md-heading-color: #dedede;
+  --md-muted: #9da2a6;
+  --md-accent: #e0e0e0;
+  --md-body-font: "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --md-heading-font: "Lucida Grande", "Corbel", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --md-panel-bg: #333333;
+  --md-panel-border: #474d54;
+  --md-quote-bg: transparent;
+  --md-quote-border: #474d54;
+  --md-blockquote-fg: #9da2a6;
+  --editor-quote-bar: 2px;
+  --md-list-marker-color: #8f98a2;
+  --md-inline-code-bg: rgba(0, 0, 0, 0.14);
+  --md-inline-code-fg: #d6dde4;
+  --md-inline-code-border: 0;
+  --md-inline-code-radius: 2px;
+  --md-code-bg: #2d3136;
+  --md-code-fg: #d4dadf;
+  --md-code-keyword: #f28b82;
+  --md-code-string: #a5d6a7;
+  --md-code-number: #81d4fa;
+  --md-code-comment: #8b949e;
+  --md-code-attr: #79c0ff;
+  --md-code-title: #d2a8ff;
+  --md-code-builtin: #ffa657;
+  --md-code-operator: #9eb0c2;
+  --md-component-radius: 0px;
+  --md-hr-bg: #474d54;
+  --md-selection: rgba(74, 137, 220, 0.45);
+  --bg-editor: #363b40;
+  --fg: #b8bfc6;
+  --fg-muted: #9da2a6;
+  --fg-faint: #7b838c;
+  --border: #474d54;
+  --border-strong: #5d646d;
+  --mark-bg: #d3d40e;
+  --mark-fg: #1a1a1a;
+}
+
+html[data-md-theme="night"] .editor-host--preview .cm-content {
+  padding: 36px 0 96px;
+}
+html[data-md-theme="night"] .editor-host .cm-md-h1 { font-size: 2.35em; font-weight: 400; letter-spacing: -0.02em; }
+html[data-md-theme="night"] .editor-host .cm-md-h2 { font-size: 1.63em; font-weight: 700; }
+html[data-md-theme="night"] .editor-host .cm-md-h3 { font-size: 1.18em; font-weight: 700; }
+html[data-md-theme="night"] .editor-host .cm-md-h4,
+html[data-md-theme="night"] .editor-host .cm-md-h6 { color: #ffffff; font-weight: 400; }
+html[data-md-theme="night"] .editor-host .cm-md-link,
+html[data-md-theme="night"] .editor-host .md-table-link { text-decoration: underline; }
+html[data-md-theme="night"] .editor-host .cm-line.md-list-item.md-bullet-list:not(.md-task-item)::before { content: "▪"; font-size: 0.8em; }
+html[data-md-theme="night"] .editor-host .md-table-body { border: 1px solid #474d54; border-radius: 0; background: #363b40; }
+html[data-md-theme="night"] .editor-host .md-table-widget thead th { background: transparent; color: #dedede; font-weight: 700; }
+html[data-md-theme="night"] .editor-host .md-table-widget tbody tr:nth-child(2n) td { background: transparent; }
+html[data-md-theme="night"] .editor-host .md-codeblock-box { background: #333333; border: 0; border-radius: 0; }
+html[data-md-theme="night"] .editor-host .md-codeblock-gutter { border-right: 0; }
+html[data-md-theme="night"] .editor-host .md-codeblock-widget code::selection { background: rgba(74, 137, 220, 0.45); color: #ffffff; }
+html[data-md-theme="night"] .editor-host .md-hr-line { height: 2px; }
+
+/* ============================================================
+   6. Lapis / 青金 (Curated Elegant — Inspired by typora-theme-lapis)
+   ============================================================ */
+html[data-md-theme="lapis"] .editor-host {
+  --md-editor-bg: #ffffff;
+  --md-fg: #2b323b;
+  --md-heading-color: #36598a;
+  --md-muted: #647182;
+  --md-accent: #4870ac;
+  --md-body-font: "Source Han Serif SC", "Noto Serif SC", "PingFang SC", "Segoe UI", "Microsoft YaHei", sans-serif;
+  --md-heading-font: "Source Han Sans SC", "PingFang SC", "Segoe UI", "Microsoft YaHei", sans-serif;
+  --md-panel-bg: #f3f6fa;
+  --md-panel-border: #dce4ef;
+  --md-quote-bg: #f4f7fb;
+  --md-quote-border: #4870ac;
+  --md-blockquote-fg: #516075;
+  --editor-quote-bar: 4px;
+  --md-list-marker-color: #4870ac;
+  --md-inline-code-bg: #eef3f9;
+  --md-inline-code-fg: #315485;
+  --md-inline-code-border: 0;
+  --md-inline-code-radius: 4px;
+  --md-code-bg: #f6f8fb;
+  --md-code-fg: #2b3440;
+  --md-code-keyword: #3b5998;
+  --md-code-string: #2d7a64;
+  --md-code-number: #b45309;
+  --md-code-comment: #8592a6;
+  --md-component-radius: 6px;
+  --md-hr-bg: linear-gradient(90deg, transparent, #c7d5e8 15%, #c7d5e8 85%, transparent);
+  --md-selection: rgba(72, 112, 172, 0.16);
+}
+
+html[data-theme="dark"][data-md-theme="lapis"] .editor-host {
+  --md-editor-bg: #191e26;
+  --md-fg: #d9e1ec;
+  --md-heading-color: #7ea8e6;
+  --md-muted: #8f9eb3;
+  --md-accent: #7aa2f7;
+  --md-panel-bg: #212834;
+  --md-panel-border: #313b4c;
+  --md-quote-bg: #1e2531;
+  --md-quote-border: #6a93d4;
+  --md-blockquote-fg: #a2b1c6;
+  --md-list-marker-color: #7aa2f7;
+  --md-inline-code-bg: #252e3d;
+  --md-inline-code-fg: #9ec0f5;
+  --md-code-bg: #1f2631;
+  --md-code-fg: #d9e1ec;
+  --md-code-keyword: #82aaff;
+  --md-code-string: #80cbc4;
+  --md-code-number: #f7b872;
+  --md-code-comment: #6e7d94;
+  --md-hr-bg: linear-gradient(90deg, transparent, #354154 15%, #354154 85%, transparent);
+  --md-selection: rgba(122, 162, 247, 0.25);
+}
+
+html[data-md-theme="lapis"] .editor-host--preview .cm-content { padding: 36px 0 96px; }
+html[data-md-theme="lapis"] .editor-host .cm-line.md-heading-1 { padding-top: 1.15em; padding-bottom: 0.3em; }
+html[data-md-theme="lapis"] .editor-host .cm-line.md-heading-1::after { content: ""; display: block; width: 60px; height: 3px; margin-top: 0.34em; border-radius: 2px; background: var(--md-accent); }
+html[data-md-theme="lapis"] .editor-host .cm-line.md-heading-2 { padding-top: 1.05em; padding-bottom: 0.18em; padding-left: calc(var(--editor-padding-x) + 12px); }
+html[data-md-theme="lapis"] .editor-host .cm-line.md-heading-2::before { content: ""; position: absolute; left: var(--editor-padding-x); top: 1.24em; bottom: 0.28em; width: 4px; border-radius: 2px; background: var(--md-accent); }
+html[data-md-theme="lapis"] .editor-host .cm-line.md-blockquote {
+  background: linear-gradient(90deg, transparent var(--editor-padding-x), var(--md-quote-bg) var(--editor-padding-x), var(--md-quote-bg) calc(100% - var(--editor-padding-x)), transparent calc(100% - var(--editor-padding-x)));
+  padding-top: 0.2em;
+  padding-bottom: 0.2em;
+}
+html[data-md-theme="lapis"] .editor-host .md-table-widget thead th { background: #eef3f9; color: var(--md-heading-color); font-weight: 650; }
+html[data-theme="dark"][data-md-theme="lapis"] .editor-host .md-table-widget thead th { background: #222a37; }
+html[data-md-theme="lapis"] .editor-host .md-table-widget tbody tr:nth-child(2n) td { background: #f8fafd; }
+html[data-theme="dark"][data-md-theme="lapis"] .editor-host .md-table-widget tbody tr:nth-child(2n) td { background: #1e2430; }
+
+/* ============================================================
+   7. Warm Paper / 暖纸笺 (Curated Elegant — Eye-Care Parchment)
+   ============================================================ */
+html[data-md-theme="sepia"] .editor-host {
+  --md-editor-bg: #faf6ee;
+  --md-fg: #3a3026;
+  --md-heading-color: #2b2118;
+  --md-muted: #7c6d5c;
+  --md-accent: #a84b31;
+  --md-body-font: "Georgia", "Charter", "Songti SC", "STSong", "Noto Serif SC", "SimSun", serif;
+  --md-heading-font: "Georgia", "Songti SC", "Noto Serif SC", "SimSun", serif;
+  --md-panel-bg: #f1eadc;
+  --md-panel-border: #dfd5c3;
+  --md-quote-bg: transparent;
+  --md-quote-border: #c28b5a;
+  --md-blockquote-fg: #665848;
+  --md-blockquote-style: italic;
+  --editor-quote-bar: 3.5px;
+  --md-list-marker-color: #a84b31;
+  --md-inline-code-bg: #efe7d8;
+  --md-inline-code-fg: #7e3622;
+  --md-inline-code-border: 0;
+  --md-inline-code-radius: 3px;
+  --md-code-bg: #f2ebdd;
+  --md-code-fg: #3b3127;
+  --md-code-keyword: #a84b31;
+  --md-code-string: #4d7041;
+  --md-code-number: #9c6615;
+  --md-code-comment: #8f806e;
+  --md-component-radius: 4px;
+  --md-hr-bg: linear-gradient(90deg, transparent, #d5c7b2 18%, #d5c7b2 82%, transparent);
+  --md-selection: rgba(168, 75, 49, 0.16);
+}
+
+html[data-theme="dark"][data-md-theme="sepia"] .editor-host {
+  --md-editor-bg: #221e1a;
+  --md-fg: #e5dcd0;
+  --md-heading-color: #f4ece0;
+  --md-muted: #a69989;
+  --md-accent: #d9915b;
+  --md-panel-bg: #2b2621;
+  --md-panel-border: #403830;
+  --md-quote-border: #b87c4b;
+  --md-blockquote-fg: #bdb0a0;
+  --md-list-marker-color: #d9915b;
+  --md-inline-code-bg: #302a24;
+  --md-inline-code-fg: #eab282;
+  --md-code-bg: #29241f;
+  --md-code-fg: #e5dcd0;
+  --md-code-keyword: #e68c6c;
+  --md-code-string: #9cc48a;
+  --md-code-number: #e0b065;
+  --md-code-comment: #8a7e70;
+  --md-hr-bg: linear-gradient(90deg, transparent, #4a4036 18%, #4a4036 82%, transparent);
+  --md-selection: rgba(217, 145, 91, 0.25);
+}
+
+html[data-md-theme="sepia"] .editor-host--preview .cm-content { padding: 40px 0 96px; }
+html[data-md-theme="sepia"] .editor-host .cm-line.md-heading-1::after {
+  content: "";
+  display: block;
+  height: 1px;
+  margin-top: 0.36em;
+  background: linear-gradient(90deg, var(--md-quote-border), var(--md-panel-border) 55%, transparent);
+}
+html[data-md-theme="sepia"] .editor-host .md-table-body { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+html[data-md-theme="sepia"] .editor-host .md-table-widget thead th { background: var(--md-panel-bg); border: 0; border-top: 1.5px solid var(--md-quote-border); border-bottom: 1.5px solid var(--md-quote-border); }
+html[data-md-theme="sepia"] .editor-host .md-table-widget tbody td { background: transparent; border: 0; border-bottom: 1px solid var(--md-panel-border); }
+
+/* ============================================================
+   8. Nord / 北欧极光 (Curated Elegant — Serene Arctic Palette)
+   ============================================================ */
+html[data-md-theme="nord"] .editor-host {
+  --md-editor-bg: #f6f8fb;
+  --md-fg: #2e3440;
+  --md-heading-color: #2e3440;
+  --md-muted: #616e88;
+  --md-accent: #5e81ac;
+  --md-body-font: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --md-heading-font: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --md-panel-bg: #eceff4;
+  --md-panel-border: #d8dee9;
+  --md-quote-bg: #edf1f7;
+  --md-quote-border: #81a1c1;
+  --md-blockquote-fg: #4c566a;
+  --editor-quote-bar: 3.5px;
+  --md-list-marker-color: #5e81ac;
+  --md-inline-code-bg: #e5e9f0;
+  --md-inline-code-fg: #434c5e;
+  --md-inline-code-border: 0;
+  --md-inline-code-radius: 4px;
+  --md-code-bg: #eceff4;
+  --md-code-fg: #2e3440;
+  --md-code-keyword: #5e81ac;
+  --md-code-string: #6c8e68;
+  --md-code-number: #b48ead;
+  --md-code-comment: #7b88a1;
+  --md-component-radius: 6px;
+  --md-hr-bg: #d8dee9;
+  --md-selection: rgba(94, 129, 172, 0.2);
+}
+
+html[data-theme="dark"][data-md-theme="nord"] .editor-host {
+  --md-editor-bg: #2e3440;
+  --md-fg: #eceff4;
+  --md-heading-color: #88c0d0;
+  --md-muted: #9aa7bd;
+  --md-accent: #88c0d0;
+  --md-panel-bg: #3b4252;
+  --md-panel-border: #434c5e;
+  --md-quote-bg: #353c4a;
+  --md-quote-border: #81a1c1;
+  --md-blockquote-fg: #c2cad8;
+  --md-list-marker-color: #88c0d0;
+  --md-inline-code-bg: #3b4252;
+  --md-inline-code-fg: #8fbcbb;
+  --md-code-bg: #272c36;
+  --md-code-fg: #e5e9f0;
+  --md-code-keyword: #81a1c1;
+  --md-code-string: #a3be8c;
+  --md-code-number: #b48ead;
+  --md-code-comment: #6c7a96;
+  --md-hr-bg: #434c5e;
+  --md-selection: rgba(136, 192, 208, 0.24);
+}
+
+html[data-md-theme="nord"] .editor-host--preview .cm-content { padding: 36px 0 96px; }
+html[data-md-theme="nord"] .editor-host .cm-line.md-blockquote {
+  background: linear-gradient(90deg, transparent var(--editor-padding-x), var(--md-quote-bg) var(--editor-padding-x), var(--md-quote-bg) calc(100% - var(--editor-padding-x)), transparent calc(100% - var(--editor-padding-x)));
+}
+html[data-md-theme="nord"] .editor-host .md-table-widget thead th { background: #e5e9f0; color: var(--md-heading-color); }
+html[data-theme="dark"][data-md-theme="nord"] .editor-host .md-table-widget thead th { background: #3b4252; }
+html[data-md-theme="nord"] .editor-host .md-table-widget tbody tr:nth-child(2n) td { background: #f3f6fa; }
+html[data-theme="dark"][data-md-theme="nord"] .editor-host .md-table-widget tbody tr:nth-child(2n) td { background: #333a47; }
+
+/* ============================================================
+   9. Academic / 学术三线 (Curated Elegant — LaTeX Booktabs Paper)
+   ============================================================ */
+html[data-md-theme="academic"] .editor-host {
+  --md-editor-bg: #ffffff;
+  --md-fg: #1a1a1a;
+  --md-heading-color: #111111;
+  --md-muted: #595959;
+  --md-accent: #1d4e89;
+  --md-body-font: "STIX Two Text", "Cambria", "Georgia", "Songti SC", "STSong", "Noto Serif SC", "SimSun", serif;
+  --md-heading-font: "STIX Two Text", "Cambria", "Georgia", "Songti SC", "STSong", "Noto Serif SC", "SimSun", serif;
+  --md-panel-bg: #f7f7f5;
+  --md-panel-border: #d9d9d5;
+  --md-quote-bg: transparent;
+  --md-quote-border: #333333;
+  --md-blockquote-fg: #444444;
+  --md-blockquote-style: italic;
+  --editor-quote-bar: 2.5px;
+  --md-list-marker-color: #222222;
+  --md-inline-code-bg: #f2f2ef;
+  --md-inline-code-fg: #1f1f1f;
+  --md-inline-code-border: 0;
+  --md-inline-code-radius: 2px;
+  --md-code-bg: #f8f8f6;
+  --md-code-fg: #1f1f1f;
+  --md-code-keyword: #1d4e89;
+  --md-code-string: #2c6e49;
+  --md-code-number: #7f2b2b;
+  --md-code-comment: #767676;
+  --md-component-radius: 0px;
+  --md-hr-bg: #444444;
+}
+
+html[data-theme="dark"][data-md-theme="academic"] .editor-host {
+  --md-editor-bg: #1a1b1d;
+  --md-fg: #e2e2df;
+  --md-heading-color: #f4f4f0;
+  --md-muted: #9e9e99;
+  --md-accent: #7aa7dc;
+  --md-panel-bg: #232427;
+  --md-panel-border: #3a3b40;
+  --md-quote-border: #9a9a95;
+  --md-blockquote-fg: #b5b5b0;
+  --md-list-marker-color: #cccccc;
+  --md-inline-code-bg: #27282c;
+  --md-inline-code-fg: #e8e8e4;
+  --md-code-bg: #222326;
+  --md-code-fg: #e2e2df;
+  --md-code-keyword: #7aa7dc;
+  --md-code-string: #8cc49f;
+  --md-code-number: #e08d8d;
+  --md-code-comment: #858580;
+  --md-hr-bg: #6a6a66;
+}
+
+html[data-md-theme="academic"] .editor-host--preview .cm-content { padding: 40px 0 96px; }
+html[data-md-theme="academic"] .editor-host .cm-md-h1 { font-size: 2.05em; font-weight: 700; letter-spacing: 0.01em; }
+html[data-md-theme="academic"] .editor-host .cm-line.md-heading-1 { text-align: center; padding-top: 1.25em; padding-bottom: 0.35em; }
+html[data-md-theme="academic"] .editor-host .cm-line.md-heading-1::after { content: ""; display: block; height: 1px; margin-top: 0.42em; background: var(--md-panel-border); }
+html[data-md-theme="academic"] .editor-host .md-table-body { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+html[data-md-theme="academic"] .editor-host .md-table-widget table { border-collapse: collapse; border-top: 2px solid var(--md-heading-color); border-bottom: 2px solid var(--md-heading-color); }
+html[data-md-theme="academic"] .editor-host .md-table-widget thead th { background: transparent; font-weight: 700; border: 0; border-bottom: 1px solid var(--md-heading-color); padding: 9px 14px; }
+html[data-md-theme="academic"] .editor-host .md-table-widget tbody td { background: transparent; border: 0; padding: 7px 14px; }
+html[data-md-theme="academic"] .editor-host .md-table-widget tbody tr:nth-child(2n) td { background: transparent; }
+
+/* ============================================================
+   Settings -> Markdown Theme Picker Grid & Mini Previews
+   ============================================================ */
+.settings-item--stacked {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+.settings-item--stacked .settings-item-control {
+  justify-content: flex-start;
+  width: 100%;
+}
+.settings-item--stacked .markdown-theme-picker {
+  width: 100%;
+  max-width: none;
+}
+.markdown-theme-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+.markdown-theme-group-title {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fg-muted);
+  letter-spacing: 0.02em;
+}
+.markdown-theme-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+  width: 100%;
+}
+.markdown-theme-picker .theme-picker-card {
+  gap: 6px;
+  padding: 7px;
+}
+.theme-picker-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.theme-picker-sub {
+  font-size: 10.5px;
+  color: var(--fg-faint);
+  line-height: 1.25;
+}
+
+.md-theme-preview-pane[data-md-preview="pixyll"] .md-theme-preview-title {
+  font-family: "Lato", "Segoe UI", "Microsoft YaHei", sans-serif;
+  font-weight: 800;
+}
+.md-theme-preview-pane[data-md-preview="pixyll"] .md-theme-preview-table {
+  border: 0;
+  border-radius: 0;
+  border-bottom: 1px solid var(--preview-muted);
+}
+.md-theme-preview-pane[data-md-preview="pixyll"] .md-theme-preview-table i {
+  border-right: 0;
+  background: transparent;
+}
+.md-theme-preview-pane[data-md-preview="academic"] .md-theme-preview-table {
+  border-left: 0;
+  border-right: 0;
+  border-radius: 0;
+  border-top: 1.5px solid var(--preview-fg);
+  border-bottom: 1.5px solid var(--preview-fg);
+}
+.md-theme-preview-pane[data-md-preview="academic"] .md-theme-preview-table i {
+  border-right: 0;
+  background: transparent;
+}
+.md-theme-preview-pane[data-md-preview="pixyll"][data-preview-mode="light"] {
+  --preview-bg: #ffffff; --preview-fg: #333333; --preview-muted: #7a7a7a;
+  --preview-accent: #463f5c; --preview-code: #ffffff;
+}
+.md-theme-preview-pane[data-md-preview="pixyll"][data-preview-mode="dark"] {
+  --preview-bg: #1e2024; --preview-fg: #f2f4f7; --preview-muted: #9aa1ad;
+  --preview-accent: #a6b8e0; --preview-code: #25282e;
+}
+
+.md-theme-preview-pane[data-md-preview="newsprint"] .md-theme-preview-title,
+.md-theme-preview-pane[data-md-preview="whitey"] .md-theme-preview-title,
+.md-theme-preview-pane[data-md-preview="sepia"] .md-theme-preview-title,
+.md-theme-preview-pane[data-md-preview="academic"] .md-theme-preview-title {
+  font-family: Georgia, "Songti SC", serif;
+}
+.md-theme-preview-pane[data-md-preview="whitey"] .md-theme-preview-title {
+  text-align: center;
+  font-weight: 400;
+}
+.md-theme-preview-pane[data-md-preview="newsprint"][data-preview-mode="light"] {
+  --preview-bg: #f3f2ee; --preview-fg: #1f0909; --preview-muted: #656565;
+  --preview-accent: #065588; --preview-code: #dadada;
+}
+.md-theme-preview-pane[data-md-preview="newsprint"][data-preview-mode="dark"] {
+  --preview-bg: #201e1c; --preview-fg: #f0eae0; --preview-muted: #a39b8e;
+  --preview-accent: #74b0d9; --preview-code: #322e2a;
+}
+
+.md-theme-preview-pane[data-md-preview="whitey"][data-preview-mode="light"] {
+  --preview-bg: #fefefe; --preview-fg: #333333; --preview-muted: #777777;
+  --preview-accent: #2484c1; --preview-code: #ffffff;
+}
+.md-theme-preview-pane[data-md-preview="whitey"][data-preview-mode="dark"] {
+  --preview-bg: #1c1d1f; --preview-fg: #eef0f3; --preview-muted: #9aa0a8;
+  --preview-accent: #5cb0e5; --preview-code: #242629;
+}
+
+.md-theme-preview-pane[data-md-preview="night"][data-preview-mode="light"] {
+  --preview-bg: #363b40; --preview-fg: #dedede; --preview-muted: #9da2a6;
+  --preview-accent: #e0e0e0; --preview-code: #333333;
+}
+.md-theme-preview-pane[data-md-preview="night"][data-preview-mode="dark"] {
+  --preview-bg: #2c3136; --preview-fg: #dedede; --preview-muted: #9da2a6;
+  --preview-accent: #e0e0e0; --preview-code: #25292d;
+}
+
+.md-theme-preview-pane[data-md-preview="lapis"][data-preview-mode="light"] {
+  --preview-bg: #ffffff; --preview-fg: #36598a; --preview-muted: #647182;
+  --preview-accent: #4870ac; --preview-code: #f3f6fa;
+}
+.md-theme-preview-pane[data-md-preview="lapis"][data-preview-mode="dark"] {
+  --preview-bg: #191e26; --preview-fg: #7ea8e6; --preview-muted: #8f9eb3;
+  --preview-accent: #7aa2f7; --preview-code: #212834;
+}
+
+.md-theme-preview-pane[data-md-preview="sepia"][data-preview-mode="light"] {
+  --preview-bg: #faf6ee; --preview-fg: #2b2118; --preview-muted: #7c6d5c;
+  --preview-accent: #a84b31; --preview-code: #f1eadc;
+}
+.md-theme-preview-pane[data-md-theme="sepia"][data-preview-mode="dark"],
+.md-theme-preview-pane[data-md-preview="sepia"][data-preview-mode="dark"] {
+  --preview-bg: #221e1a; --preview-fg: #f4ece0; --preview-muted: #a69989;
+  --preview-accent: #d9915b; --preview-code: #2b2621;
+}
+
+.md-theme-preview-pane[data-md-preview="nord"][data-preview-mode="light"] {
+  --preview-bg: #f6f8fb; --preview-fg: #2e3440; --preview-muted: #616e88;
+  --preview-accent: #5e81ac; --preview-code: #eceff4;
+}
+.md-theme-preview-pane[data-md-preview="nord"][data-preview-mode="dark"] {
+  --preview-bg: #2e3440; --preview-fg: #88c0d0; --preview-muted: #9aa7bd;
+  --preview-accent: #88c0d0; --preview-code: #3b4252;
+}
+
+.md-theme-preview-pane[data-md-preview="academic"][data-preview-mode="light"] {
+  --preview-bg: #ffffff; --preview-fg: #111111; --preview-muted: #595959;
+  --preview-accent: #1d4e89; --preview-code: #f7f7f5;
+}
+.md-theme-preview-pane[data-md-preview="academic"][data-preview-mode="dark"] {
+  --preview-bg: #1a1b1d; --preview-fg: #f4f4f0; --preview-muted: #9e9e99;
+  --preview-accent: #7aa7dc; --preview-code: #232427;
+}

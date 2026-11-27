@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import type { Locale } from "../lib/i18n";
 import { t } from "../lib/i18n";
@@ -217,11 +217,13 @@ export default function Sidebar({
                 {outline.map((h, i) => (
                   <li
                     key={i}
+                    data-level={h.level}
                     className={h.line === activeOutlineLine ? "outline-item active" : "outline-item"}
-                    style={{ paddingLeft: `${8 + (h.level - 1) * 12}px` }}
+                    style={{ "--outline-depth": Math.max(0, h.level - 1) } as CSSProperties}
+                    title={h.text}
                     onClick={() => onOutlineClick(h.line)}
                   >
-                    {h.text}
+                    <span className="outline-item-text">{h.text}</span>
                   </li>
                 ))}
               </ul>

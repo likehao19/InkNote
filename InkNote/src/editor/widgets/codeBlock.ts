@@ -8,87 +8,66 @@ import {
   makePlainTextEditable,
   setCaretOffset,
 } from "./editableSource";
-import hljs from "highlight.js/lib/core";
-import bash from "highlight.js/lib/languages/bash";
-import css from "highlight.js/lib/languages/css";
-import java from "highlight.js/lib/languages/java";
-import javascript from "highlight.js/lib/languages/javascript";
-import json from "highlight.js/lib/languages/json";
-import markdown from "highlight.js/lib/languages/markdown";
-import python from "highlight.js/lib/languages/python";
-import rust from "highlight.js/lib/languages/rust";
-import sql from "highlight.js/lib/languages/sql";
-import typescript from "highlight.js/lib/languages/typescript";
-import xml from "highlight.js/lib/languages/xml";
-import yaml from "highlight.js/lib/languages/yaml";
-import cpp from "highlight.js/lib/languages/cpp";
-import csharp from "highlight.js/lib/languages/csharp";
-import go from "highlight.js/lib/languages/go";
-import php from "highlight.js/lib/languages/php";
-import ruby from "highlight.js/lib/languages/ruby";
-import diff from "highlight.js/lib/languages/diff";
-import ini from "highlight.js/lib/languages/ini";
+import { hljs } from "../../lib/codeHighlight";
 import { getLocale, t } from "../../lib/i18n";
 
-for (const [lang, mod] of [
-  ["bash", bash],
-  ["sh", bash],
-  ["shell", bash],
-  ["c", cpp],
-  ["cpp", cpp],
-  ["csharp", csharp],
-  ["cs", csharp],
-  ["css", css],
-  ["diff", diff],
-  ["go", go],
-  ["html", xml],
-  ["ini", ini],
-  ["toml", ini],
-  ["xml", xml],
-  ["java", java],
-  ["js", javascript],
-  ["javascript", javascript],
-  ["json", json],
-  ["md", markdown],
-  ["markdown", markdown],
-  ["php", php],
-  ["py", python],
-  ["python", python],
-  ["rb", ruby],
-  ["ruby", ruby],
-  ["rs", rust],
-  ["rust", rust],
-  ["sql", sql],
-  ["ts", typescript],
-  ["typescript", typescript],
-  ["yaml", yaml],
-  ["yml", yaml],
-] as const) {
-  if (!hljs.getLanguage(lang)) hljs.registerLanguage(lang, mod);
-}
-
-/** 语言下拉里的候选项（都是能真正高亮的） */
+/** 语言下拉里的候选项（覆盖常用前后端、脚本与运维配置语言） */
 export const LANGUAGE_OPTIONS = [
-  "", "bash", "c", "cpp", "csharp", "css", "diff", "go", "html", "ini", "java",
-  "javascript", "json", "markdown", "mermaid", "php", "python", "ruby", "rust",
-  "sql", "toml", "typescript", "xml", "yaml",
+  "", "bash", "c", "cmake", "cpp", "csharp", "css", "dart", "diff", "dockerfile",
+  "dos", "go", "gradle", "graphql", "groovy", "html", "http", "ini", "java",
+  "javascript", "json", "kotlin", "latex", "less", "lua", "makefile", "markdown",
+  "mermaid", "nginx", "objectivec", "perl", "php", "powershell", "properties",
+  "protobuf", "python", "r", "ruby", "rust", "scala", "scss", "sql", "swift",
+  "toml", "typescript", "xml", "yaml",
 ];
 
 const LANGUAGE_LABELS: Record<string, string> = {
+  bash: "Bash",
+  c: "C",
+  cmake: "CMake",
   cpp: "C++",
   csharp: "C#",
-  javascript: "JavaScript",
-  typescript: "TypeScript",
-  json: "JSON",
-  html: "HTML",
   css: "CSS",
+  dart: "Dart",
+  diff: "Diff",
+  dockerfile: "Dockerfile",
+  dos: "Batch",
+  go: "Go",
+  gradle: "Gradle",
+  graphql: "GraphQL",
+  groovy: "Groovy",
+  html: "HTML",
+  http: "HTTP",
+  ini: "INI",
+  java: "Java",
+  javascript: "JavaScript",
+  json: "JSON",
+  kotlin: "Kotlin",
+  latex: "LaTeX",
+  less: "Less",
+  lua: "Lua",
+  makefile: "Makefile",
+  markdown: "Markdown",
+  mermaid: "Mermaid",
+  nginx: "Nginx",
+  objectivec: "Objective-C",
+  perl: "Perl",
+  php: "PHP",
+  powershell: "PowerShell",
+  properties: "Properties",
+  protobuf: "Protobuf",
+  python: "Python",
+  r: "R",
+  ruby: "Ruby",
+  rust: "Rust",
+  scala: "Scala",
+  scss: "SCSS",
   sql: "SQL",
+  swift: "Swift",
+  toml: "TOML",
+  typescript: "TypeScript",
   xml: "XML",
   yaml: "YAML",
-  toml: "TOML",
-  ini: "INI",
-  php: "PHP",
-  go: "Go",
 };
 
 function normalizeLang(info: string): string {

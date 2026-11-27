@@ -181,6 +181,7 @@ export interface SettingsHandlers {
 interface Props {
   values: SettingsValues;
   handlers: SettingsHandlers;
+  initialCategory?: SettingsCategory;
   onClose: () => void;
 }
 
@@ -266,9 +267,9 @@ function buildSearchIndex(): { category: SettingsCategory; keys: MessageKey[] }[
 
 const SEARCH_INDEX = buildSearchIndex();
 
-export default function Settings({ values, handlers, onClose }: Props) {
+export default function Settings({ values, handlers, initialCategory = "general", onClose }: Props) {
   const { locale, ...rest } = values;
-  const [category, setCategory] = useState<SettingsCategory>("general");
+  const [category, setCategory] = useState<SettingsCategory>(initialCategory);
   const [query, setQuery] = useState("");
   const [cssTick, setCssTick] = useState(0);
   const [recordingShortcut, setRecordingShortcut] = useState<AppShortcutAction | null>(null);
@@ -592,6 +593,7 @@ export default function Settings({ values, handlers, onClose }: Props) {
                     <SettingItem
                       label={tr("settings.markdownTheme")}
                       desc={tr("settings.markdownThemeDesc")}
+                      stacked
                     >
                       <MarkdownThemePicker
                         locale={locale}
@@ -863,14 +865,16 @@ function SettingsPage({ title, children }: { title: string; children: ReactNode 
 function SettingItem({
   label,
   desc,
+  stacked = false,
   children,
 }: {
   label: string;
   desc?: string;
+  stacked?: boolean;
   children: ReactNode;
 }) {
   return (
-    <div className="settings-item">
+    <div className={stacked ? "settings-item settings-item--stacked" : "settings-item"}>
       <div className="settings-item-info">
         <div className="settings-item-label">{label}</div>
         {desc && <div className="settings-item-desc">{desc}</div>}

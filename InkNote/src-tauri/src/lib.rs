@@ -20,7 +20,12 @@ use std::{
 #[cfg(any(windows, target_os = "macos"))]
 use tauri::{webview::PageLoadEvent, WebviewUrl, WebviewWindowBuilder};
 #[cfg(windows)]
-use webview2_com::{Microsoft::Web::WebView2::Win32::ICoreWebView2_7, PrintToPdfCompletedHandler};
+use webview2_com::{
+    Microsoft::Web::WebView2::Win32::{
+        ICoreWebView2Environment6, ICoreWebView2_2, ICoreWebView2_7,
+    },
+    PrintToPdfCompletedHandler,
+};
 #[cfg(windows)]
 use windows_core::{Interface, PCWSTR};
 
@@ -887,9 +892,24 @@ async fn export_pdf(app: tauri::AppHandle, path: String, html: String) -> PdfExp
                             webview
                                 .controller()
                                 .CoreWebView2()
-                                .and_then(|core| core.cast::<ICoreWebView2_7>())
                                 .and_then(|core| {
-                                    core.PrintToPdf(PCWSTR(output_path.as_ptr()), None, &handler)
+                                    let settings = core
+                                        .cast::<ICoreWebView2_2>()
+                                        .and_then(|core2| core2.Environment())
+                                        .and_then(|env| env.cast::<ICoreWebView2Environment6>())
+                                        .and_then(|env6| env6.CreatePrintSettings())
+                                        .ok();
+                                    if let Some(ref print_settings) = settings {
+                                        let _ = print_settings.SetShouldPrintBackgrounds(true);
+                                        let _ = print_settings.SetShouldPrintHeaderAndFooter(false);
+                                    }
+                                    core.cast::<ICoreWebView2_7>().and_then(|core7| {
+                                        core7.PrintToPdf(
+                                            PCWSTR(output_path.as_ptr()),
+                                            settings.as_ref(),
+                                            &handler,
+                                        )
+                                    })
                                 })
                         }
                         .map_err(|e| e.to_string());
