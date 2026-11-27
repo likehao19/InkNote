@@ -12,6 +12,7 @@ export type EditorBridgeHandlers = {
   pickImage: (defaultAlt: string, defaultPath?: string) => Promise<{ alt: string; path: string } | null>;
   requestSave: () => Promise<string | null>;
   requestSearch: (replace: boolean) => void;
+  openDocumentLink: (path: string, anchor: string) => void;
   showError: (e: unknown) => void;
   showMessage: (message: string) => void;
 };
@@ -62,6 +63,10 @@ export function editorRequestSearch(replace = false): void {
 
 export function editorShowError(e: unknown): void {
   if (handlers) handlers.showError(e);
+}
+
+export function editorOpenDocumentLink(path: string, anchor: string): void {
+  handlers?.openDocumentLink(path, anchor);
 }
 
 export function editorShowMessage(message: string): void {

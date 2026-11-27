@@ -9,9 +9,7 @@ import { getLocale, t } from "../../lib/i18n";
 import { getConfirmDelete } from "../../lib/preferences";
 import { bindBlockBoundaryCursor, currentBlockRange, stampBlockRange } from "./blockRange";
 import { clickedOnBlockPadding } from "./editableSource";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { writeText as writeClipboardText } from "@tauri-apps/plugin-clipboard-manager";
-import { extractMarkdownOutline } from "../../lib/markdownOutline";
 import { HTML_TAG_PATTERN, safeInlineHtmlTag } from "../htmlPreview";
 import { openPreviewLink } from "../previewLinks";
 
@@ -1196,7 +1194,7 @@ function appendEditableRow(
  * `eventBelongsToEditor` 里直接丢弃事件，`EditorView.domEventHandlers` 注册的
  * 处理器根本收不到单元格里的事件。
  */
-function attachCellEvents(wrap: HTMLElement) {
+function attachCellEvents(wrap: HTMLElement, filePath: string | null) {
   let composing = false;
   let dragAnchor: HTMLElement | null = null;
   let dragging = false;
@@ -1209,37 +1207,13 @@ function attachCellEvents(wrap: HTMLElement) {
 
   const openRenderedLink = (event: MouseEvent, view: EditorView) => {
     if (!(event.ctrlKey || event.metaKey)) return false;
-    const htmlLink = (event.target as HTMLElement | null)?.closest<HTMLElement>("[data-html-href]")?.dataset.htmlHref;
-    if (htmlLink) {
-      event.preventDefault();
-      event.stopPropagation();
-      openPreviewLink(view, htmlLink);
-      return true;
-    }
-    const link = (event.target as HTMLElement | null)?.closest<HTMLElement>(".md-table-link");
-    const target = link?.dataset.href;
+    const element = event.target as HTMLElement | null;
+    const link = element?.closest<HTMLElement>("[data-html-href], .md-table-link");
+    const target = link?.dataset.htmlHref ?? link?.dataset.href;
     if (!target) return false;
-
     event.preventDefault();
     event.stopPropagation();
-    if (target.startsWith("#")) {
-      let anchor = target.slice(1);
-      try {
-        anchor = decodeURIComponent(anchor);
-      } catch {
-        // Malformed fragments remain usable as literal anchors.
-      }
-      const heading = extractMarkdownOutline(view.state.doc.toString()).find(
-        (item) => item.anchor === anchor,
-      );
-      if (heading) {
-        const line = view.state.doc.line(heading.line);
-        view.dispatch({ selection: { anchor: line.from }, scrollIntoView: true });
-        view.focus();
-      }
-    } else {
-      void openUrl(target).catch(() => {});
-    }
+    openPreviewLink(view, target, filePath);
     return true;
   };
 
@@ -1692,7 +1666,7 @@ export class TableWidget extends WidgetType {
     bindBlockBoundaryCursor(wrap, body);
 
     attachToolbarEvents(wrap);
-    attachCellEvents(wrap);
+    attachCellEvents(wrap, this.filePath);
 
     restorePendingFocusOnWrap(wrap, this.from);
 

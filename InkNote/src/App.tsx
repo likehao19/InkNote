@@ -130,6 +130,7 @@ import {
 } from "./lib/pendingImages";
 import { removeTreeExpansion } from "./lib/treeState";
 import { extractMarkdownOutline } from "./lib/markdownOutline";
+import { findLinkedHeading } from "./editor/previewLinks";
 import { NATIVE_MENU_EVENT, setupMacNativeMenu } from "./lib/nativeMenu";
 import { invalidateWorkspaceFileCache } from "./lib/workspaceSearch";
 import { flushSettingsStore } from "./lib/settingsStore";
@@ -191,6 +192,7 @@ export default function App() {
   const saveChoiceRef = useRef<((choice: "save" | "discard" | "cancel") => void) | null>(null);
   const [saveChoiceName, setSaveChoiceName] = useState<string | null>(null);
   const scrollAfterLoadRef = useRef<number | null>(null);
+  const linkedHeadingRef = useRef<{ tabId: string; line: number } | null>(null);
   const closedDocRef = useRef<{
     fileIdentity?: string;
     path: string | null;
@@ -466,12 +468,27 @@ export default function App() {
     });
   }, []);
 
+  const scrollToLinkedHeading = useCallback((tabId: string, line: number) => {
+    requestAnimationFrame(() => {
+      if (useTabsStore.getState().activeId === tabId) editorRefs.current.get(tabId)?.scrollToLine(line);
+    });
+  }, []);
+
   const loadFile = useCallback(
-    async (path: string, options: { external?: boolean; restore?: boolean } = {}) => {
+    async (path: string, options: { external?: boolean; restore?: boolean; linkAnchor?: string } = {}) => {
       const request = ++fileLoadRequestRef.current;
+      linkedHeadingRef.current = null;
+      const jump = (id: string, content: string) => {
+        if (!options.linkAnchor || request !== fileLoadRequestRef.current) return;
+        const line = findLinkedHeading(content, options.linkAnchor);
+        if (!line) return;
+        if (editorRefs.current.has(id)) scrollToLinkedHeading(id, line);
+        else linkedHeadingRef.current = { tabId: id, line };
+      };
       const existing = useTabsStore.getState().tabs.find((tab) => tab.path && sameDocumentPath(tab.path, path));
       if (existing) {
         activateTab(existing.id);
+        jump(existing.id, existing.content);
         addRecentFile(path);
         setRecentFiles(getRecentFiles());
         return true;
@@ -492,6 +509,7 @@ export default function App() {
         addRecentFile(path);
         setRecentFiles(getRecentFiles());
         if (useTabsStore.getState().activeId === openedId) {
+          jump(openedId, useTabsStore.getState().getActive()?.content ?? file.content);
           setTitle(path);
           if (!external) setLastFile(path);
         }
@@ -501,11 +519,13 @@ export default function App() {
         removeRecentFile(path);
         if (!external && getLastFile() === path) clearLastFile();
         setRecentFiles(getRecentFiles());
-        showError(e);
+        showError(options.linkAnchor !== undefined && e instanceof api.MissingFileError
+          ? new Error(t(getLocale(), "error.linkedDocumentMissing", { path }))
+          : e);
         return false;
       }
     },
-    [openTab, activateTab, setDocumentOptions, setMode, setTitle, showError, externalOpenReadOnly, followRenamedTab, addDocumentFolderToWorkspace],
+    [openTab, activateTab, setDocumentOptions, setMode, setTitle, showError, externalOpenReadOnly, followRenamedTab, addDocumentFolderToWorkspace, scrollToLinkedHeading],
   );
 
   const openFileAtLine = useCallback(
@@ -1577,11 +1597,12 @@ export default function App() {
         }),
       requestSave: () => saveTab(),
       requestSearch: openDocumentSearch,
+      openDocumentLink: (path, anchor) => { void loadFile(path, { linkAnchor: anchor }); },
       showError,
       showMessage: (msg) => show(msg),
     });
     return () => setEditorBridge(null);
-  }, [askConfirm, saveTab, openDocumentSearch, showError, show]);
+  }, [askConfirm, saveTab, openDocumentSearch, loadFile, showError, show]);
 
   useEffect(() => {
     let disposed = false;
@@ -2165,6 +2186,11 @@ export default function App() {
                 ref={(value) => {
                   if (value) editorRefs.current.set(tab.id, value);
                   else editorRefs.current.delete(tab.id);
+                  const pending = linkedHeadingRef.current;
+                  if (value && pending?.tabId === tab.id) {
+                    linkedHeadingRef.current = null;
+                    scrollToLinkedHeading(tab.id, pending.line);
+                  }
                   if (useTabsStore.getState().activeId === tab.id) editorRef.current = value;
                 }}
                 documentId={tab.id}

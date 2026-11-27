@@ -161,7 +161,7 @@ export class HtmlBlockWidget extends WidgetType {
       if (link?.dataset.htmlHref && view && (event.ctrlKey || event.metaKey)) {
         event.preventDefault();
         event.stopPropagation();
-        openPreviewLink(view, link.dataset.htmlHref);
+        openPreviewLink(view, link.dataset.htmlHref, this.filePath);
         return;
       }
       if (!view || view.state.readOnly || target.closest("summary")) return;
@@ -173,7 +173,7 @@ export class HtmlBlockWidget extends WidgetType {
       const view = EditorView.findFromDOM(wrap);
       if (event.key === "Enter" && link?.dataset.htmlHref && view) {
         event.preventDefault();
-        openPreviewLink(view, link.dataset.htmlHref);
+        openPreviewLink(view, link.dataset.htmlHref, this.filePath);
       }
     });
     const measure = () => EditorView.findFromDOM(wrap)?.requestMeasure();

@@ -1214,7 +1214,7 @@ function urlAtPos(state: EditorState, pos: number): string | null {
   return null;
 }
 
-function mediaHandlers(onOpenMarkdown?: (content: string, path?: string) => void, documentId = ""): Extension {
+function mediaHandlers(assetContext: { filePath: string | null }, onOpenMarkdown?: (content: string, path?: string) => void, documentId = ""): Extension {
   return EditorView.domEventHandlers({
     paste(event, view) {
       // Ctrl/Cmd+Shift+V：粘贴为纯文本，跳过 HTML → Markdown 转换
@@ -1292,7 +1292,7 @@ function mediaHandlers(onOpenMarkdown?: (content: string, path?: string) => void
         const url = link.dataset.htmlHref ?? (pos == null ? null : urlAtPos(view.state, pos));
         if (url) {
           event.preventDefault();
-          openPreviewLink(view, url);
+          openPreviewLink(view, url, assetContext.filePath);
           return true;
         }
       }
@@ -1484,7 +1484,7 @@ export function createEditor(
       highlightSelectionMatches(),
       previewCompartment.of(previewExt(mode, assetContext)),
       typewriterCompartment.of(typewriterExt(typewriter)),
-      mediaHandlers(opts.onOpenMarkdown, opts.documentId),
+      mediaHandlers(assetContext, opts.onOpenMarkdown, opts.documentId),
       EditorView.updateListener.of((u) => {
         // Widget contents are rendered separately from CodeMirror text. Highlight
         // the component instead of removing its replacement and revealing source.

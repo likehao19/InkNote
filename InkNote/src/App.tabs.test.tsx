@@ -331,6 +331,38 @@ describe("external folder drops", () => {
 });
 
 describe("multi-document workflows", () => {
+  it("opens local Markdown and HTML links in tabs, jumps to headings and reports missing targets", async () => {
+    const body = 'See [next](../other/New%20file.md#target) or <a href="missing.md">missing</a>.\n\n| Link |\n| --- |\n| [same](../other/New%20file.md) |';
+    const destination = "/other/New file.md";
+    const target = "# Other\n\n## Target\nBody";
+    files.set("/notes/A.md", body);
+    files.set(destination, target);
+    await openFile("/notes/A.md");
+    const clickLink = async (link: HTMLElement) => {
+      await act(async () => link.dispatchEvent(new MouseEvent("mousedown", {
+        button: 0, ctrlKey: true, bubbles: true, cancelable: true,
+      })));
+    };
+    const source = activeView();
+    vi.spyOn(source, "posAtCoords").mockReturnValue(body.indexOf("next") + 1);
+    const next = Array.from(source.dom.querySelectorAll<HTMLElement>(".cm-md-link")).find((link) => link.textContent === "next")!;
+    await clickLink(next);
+    await waitForPath(destination);
+    const destinationId = useTabsStore.getState().activeId;
+    await vi.waitFor(() => expect(activeView().state.selection.main.head).toBe(target.indexOf("## Target")));
+
+    await clickButton("A.md");
+    await clickLink(activeView().dom.querySelector<HTMLElement>(".md-table-link")!);
+    await waitForPath(destination);
+    expect(useTabsStore.getState().activeId).toBe(destinationId);
+    expect(useTabsStore.getState().tabs.filter((tab) => tab.path === destination)).toHaveLength(1);
+
+    await clickButton("A.md");
+    await clickLink(activeView().dom.querySelector<HTMLElement>('[data-html-href="missing.md"]')!);
+    await vi.waitFor(() => expect(document.querySelector(".toast-error")?.textContent).toContain("找不到链接的文档：/notes/missing.md"));
+    expect(useTabsStore.getState().getActive()?.path).toBe("/notes/A.md");
+  });
+
   it("does not add an opened document's folder unless the preference is enabled", async () => {
     await openFile("/notes/A.md");
     expect(getWorkspaceFolders()).toEqual([]);
